@@ -1,0 +1,14 @@
+{
+  "name": "profile-sync",
+  "version": "1.0.0",
+  "description": "Appwrite function to sync profiles to Qdrant",
+  "main": "src/main.js",
+  "type": "module",
+  "dependencies": {
+    "@google/genai": "^1.47.0",
+    "@qdrant/js-client-rest": "^1.17.0",
+    "@sentry/node": "^10.48.0",
+    "node-appwrite": "^23.1.0",
+    "posthog-node": "^5.21.2"
+  }
+}

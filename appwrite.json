@@ -1,0 +1,260 @@
+{
+    "projectId": "69de7f335c0489352ff1",
+    "endpoint": "https://fra.cloud.appwrite.io/v1",
+    "functions": [
+        {
+            "$id": "profileSync",
+            "name": "profileSync",
+            "enabled": true,
+            "live": true,
+            "logging": true,
+            "runtime": "node-22",
+            "deployment": "dist",
+            "vars": [],
+            "events": [
+                "databases.supercharged.tables.profiles.rows.*.create",
+                "databases.supercharged.tables.profiles.rows.*.update",
+                "databases.supercharged.tables.profiles.rows.*.delete"
+            ],
+            "schedule": "",
+            "timeout": 15,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "version": "v3",
+            "path": "functions/profileSync"
+        },
+        {
+            "$id": "discoveryEngine",
+            "name": "discoveryEngine",
+            "enabled": true,
+            "live": true,
+            "logging": true,
+            "runtime": "node-22",
+            "deployment": "dist",
+            "vars": [],
+            "events": [],
+            "schedule": "",
+            "timeout": 30,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "version": "v3",
+            "path": "functions/discoveryEngine"
+        }
+    ],
+    "tablesDB": [
+        {
+            "$id": "supercharged",
+            "name": "Supercharged MVP",
+            "enabled": true
+        }
+    ],
+    "tables": [
+        {
+            "$id": "profiles",
+            "$permissions": [
+                "read(\"users\")",
+                "create(\"users\")",
+                "update(\"users\")",
+                "delete(\"users\")"
+            ],
+            "databaseId": "supercharged",
+            "name": "Profiles",
+            "enabled": true,
+            "rowSecurity": true,
+            "columns": [
+                {
+                    "key": "user_id",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 36,
+                    "array": false
+                },
+                {
+                    "key": "full_name",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "college",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": false
+                },
+                {
+                    "key": "course",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "stage",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 32,
+                    "array": false
+                },
+                {
+                    "key": "social_energy",
+                    "type": "integer",
+                    "required": false,
+                    "array": false
+                },
+                {
+                    "key": "primary_intent",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 32,
+                    "array": false
+                },
+                {
+                    "key": "free_text_responses",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 10000,
+                    "array": false
+                },
+                {
+                    "key": "is_indexed",
+                    "type": "boolean",
+                    "required": false,
+                    "default": false,
+                    "array": false
+                },
+                {
+                    "key": "last_scanned_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_user_auth",
+                    "type": "unique",
+                    "status": "available",
+                    "attributes": [
+                        "user_id"
+                    ]
+                },
+                {
+                    "key": "idx_intent",
+                    "type": "key",
+                    "status": "available",
+                    "attributes": [
+                        "primary_intent"
+                    ]
+                }
+            ]
+        },
+        {
+            "$id": "matches",
+            "$permissions": [
+                "read(\"users\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "supercharged",
+            "name": "Matches",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "user_a_id",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 36,
+                    "array": false
+                },
+                {
+                    "key": "user_b_id",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 36,
+                    "array": false
+                },
+                {
+                    "key": "compatibility_score",
+                    "type": "double",
+                    "required": true,
+                    "array": false
+                },
+                {
+                    "key": "narrative",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 5000,
+                    "array": false
+                },
+                {
+                    "key": "top_drivers",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 1024,
+                    "array": true
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_match_pair",
+                    "type": "unique",
+                    "status": "available",
+                    "attributes": [
+                        "user_a_id",
+                        "user_b_id"
+                    ]
+                }
+            ]
+        },
+        {
+            "$id": "match_logs",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"any\")"
+            ],
+            "databaseId": "supercharged",
+            "name": "Match Logs (Observability)",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "user_a_id",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 36,
+                    "array": false
+                },
+                {
+                    "key": "user_b_id",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 36,
+                    "array": false
+                },
+                {
+                    "key": "input_context",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 10000,
+                    "array": false
+                },
+                {
+                    "key": "model_output",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 10000,
+                    "array": false
+                },
+                {
+                    "key": "human_feedback",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false
+                }
+            ],
+            "indexes": []
+        }
+    ]
+}

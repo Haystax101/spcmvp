@@ -1,0 +1,38 @@
+[
+    {
+      "id": "match_gold_1",
+      "user_a": {
+        "full_name": "Alice",
+        "primary_intent": "Professional Networking",
+        "free_text_responses": "I am looking for a technical cofounder to build a React Native app. I have the business plan."
+      },
+      "user_b": {
+        "full_name": "Bob",
+        "primary_intent": "Professional Networking",
+        "free_text_responses": "I am a full-stack developer who loves React Native. I want to partner with a business person."
+      },
+      "model_output": {
+        "narrative": "Alice and Bob are a perfect match. Alice is looking for a technical co-founder for a React Native App, and Bob is a full-stack developer experienced in React Native seeking a business partner.",
+        "compatibility_score": 0.95
+      },
+      "expected_quality": "good"
+    },
+    {
+      "id": "match_bad_1",
+      "user_a": {
+        "full_name": "Charlie",
+        "primary_intent": "Romance",
+        "free_text_responses": "Looking for someone to go on cute dates with."
+      },
+      "user_b": {
+        "full_name": "David",
+        "primary_intent": "Professional Networking",
+        "free_text_responses": "Looking for someone to help me practice system design interviews."
+      },
+      "model_output": {
+        "narrative": "Charlie and David will make an excellent couple because they both want an interview buddy and love cute dates.",
+        "compatibility_score": 0.88
+      },
+      "expected_quality": "bad"
+    }
+  ]
