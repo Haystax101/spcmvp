@@ -28,6 +28,9 @@ function generateUuidFromId(id) {
 function buildIntentString(profile) {
   const parts = [];
 
+  if (profile.primary_intent) {
+    parts.push(`My primary intent is ${profile.primary_intent}.`);
+  }
   if (profile.goals?.length) {
     parts.push(`I am here to: ${profile.goals.join(', ')}.`);
   }
@@ -37,8 +40,14 @@ function buildIntentString(profile) {
   if (profile.career_field) {
     parts.push(`My career field is ${profile.career_field}.`);
   }
+  if (profile.career_subfield) {
+    parts.push(`Career subfield: ${profile.career_subfield}.`);
+  }
   if (profile.networking_style) {
     parts.push(`My networking style: ${profile.networking_style}.`);
+  }
+  if (profile.startup_connections?.length) {
+    parts.push(`Startup connections I want: ${profile.startup_connections.join(', ')}.`);
   }
   if (profile.work_style) {
     parts.push(`I work best: ${profile.work_style}.`);
@@ -49,6 +58,15 @@ function buildIntentString(profile) {
   if (profile.relationship_intent) {
     parts.push(`Relationship intent: ${profile.relationship_intent}.`);
   }
+  if (profile.relationship_status) {
+    parts.push(`Relationship status: ${profile.relationship_status}.`);
+  }
+  if (profile.study_subject) {
+    parts.push(`I study ${profile.study_subject}.`);
+  }
+  if (profile.year_of_study) {
+    parts.push(`Year of study: ${profile.year_of_study}.`);
+  }
 
   return parts.join(' ') || 'Looking to meet interesting people at Oxford.';
 }
@@ -57,6 +75,12 @@ function buildIntentString(profile) {
 function buildSemanticString(profile) {
   const parts = [];
 
+  if (profile.study_subject) {
+    parts.push(`Study subject: ${profile.study_subject}.`);
+  }
+  if (profile.year_of_study) {
+    parts.push(`Study year: ${profile.year_of_study}.`);
+  }
   if (profile.honest_thing) {
     parts.push(`The one thing most people don't realise about me is: ${profile.honest_thing}.`);
   }
@@ -65,6 +89,12 @@ function buildSemanticString(profile) {
   }
   if (profile.intellectual_identity) {
     parts.push(`Intellectually I am: ${profile.intellectual_identity}.`);
+  }
+  if (profile.intellectual_venue) {
+    parts.push(`My best intellectual conversations happen in: ${profile.intellectual_venue}.`);
+  }
+  if (profile.intellectual_ambition) {
+    parts.push(`My intellectual ambition: ${profile.intellectual_ambition}.`);
   }
   if (profile.friendship_values?.length) {
     parts.push(`I value in friends: ${profile.friendship_values.join(', ')}.`);
@@ -75,6 +105,27 @@ function buildSemanticString(profile) {
   if (profile.cv_parsed_text) {
     // Truncate CV to ~2000 chars to stay well within embedding token limits
     parts.push(profile.cv_parsed_text.substring(0, 2000));
+  }
+  if (profile.building_description) {
+    parts.push(`What I am building: ${profile.building_description.substring(0, 400)}.`);
+  }
+  if (profile.study_wish) {
+    parts.push(`I also wish I had studied: ${profile.study_wish}.`);
+  }
+  if (profile.hobby) {
+    parts.push(`Hobbies: ${profile.hobby}.`);
+  }
+  if (profile.music) {
+    parts.push(`Music taste: ${profile.music}.`);
+  }
+  if (profile.societies) {
+    parts.push(`Societies or groups: ${profile.societies}.`);
+  }
+  if (profile.dating_personality?.length) {
+    parts.push(`Dating personality preferences: ${profile.dating_personality.join(', ')}.`);
+  }
+  if (profile.dating_hobbies?.length) {
+    parts.push(`Dating activity preferences: ${profile.dating_hobbies.join(', ')}.`);
   }
   if (profile.first_name || profile.college) {
     const who = [profile.first_name, profile.college ? `at ${profile.college}` : ''].filter(Boolean).join(' ');
@@ -201,30 +252,52 @@ export default async ({ req, res, log, error }) => {
         payload: {
           // Core identity
           user_id:    profile.user_id,
+          full_name:  profile.full_name   || "",
           first_name: profile.first_name  || "",
           last_name:  profile.last_name   || "",
+          username:   profile.username    || "",
           college:    profile.college     || "",
           email:      profile.email       || "",
+          primary_intent: profile.primary_intent || "",
+          study_subject: profile.study_subject || "",
+          year_of_study: profile.year_of_study || "",
+          course:      profile.course || "",
+          stage:       profile.stage  || "",
 
           // Professional / goals
           goals:               profile.goals               || [],
           career_field:        profile.career_field        || "",
+          career_subfield:     profile.career_subfield     || "",
+          building_description: profile.building_description || "",
           desired_connections: profile.desired_connections || [],
+          startup_connections: profile.startup_connections || [],
           networking_style:    profile.networking_style    || "",
           work_style:          profile.work_style          || "",
           project_stage:       profile.project_stage       || "",
           relationship_intent: profile.relationship_intent || "",
+          relationship_status: profile.relationship_status || "",
+          sexuality:           profile.sexuality || "",
+          dating_appearance:   profile.dating_appearance || [],
+          dating_personality:  profile.dating_personality || [],
+          dating_hobbies:      profile.dating_hobbies || [],
 
           // Personality / social
           social_energy:          profile.social_energy          ?? 2,
           intellectual_identity:  profile.intellectual_identity  || "",
+          intellectual_venue:     profile.intellectual_venue     || "",
+          intellectual_ambition:  profile.intellectual_ambition  || "",
           social_circles:         profile.social_circles         || [],
           friendship_values:      profile.friendship_values      || [],
           wish_studied:           profile.wish_studied           || "",
+          study_wish:             profile.study_wish             || "",
           honest_thing:           profile.honest_thing           || "",
+          hobby:                  profile.hobby                  || "",
+          music:                  profile.music                  || "",
+          societies:              profile.societies              || "",
 
           // Derived / utility
           has_cv: !!profile.cv_file_id,
+          payload_version: 2,
         }
       }]
     });

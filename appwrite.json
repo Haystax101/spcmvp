@@ -29,6 +29,9 @@
             "enabled": true,
             "live": true,
             "logging": true,
+            "execute": [
+                "users"
+            ],
             "runtime": "node-22",
             "deployment": "dist",
             "vars": [],
@@ -89,6 +92,20 @@
                     "array": false
                 },
                 {
+                    "key": "full_name",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "primary_intent",
+                    "type": "varchar",
+                    "required": true,
+                    "size": 32,
+                    "array": false
+                },
+                {
                     "key": "email",
                     "type": "varchar",
                     "required": false,
@@ -110,10 +127,78 @@
                     "array": false
                 },
                 {
+                    "key": "birthday_day",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 2,
+                    "array": false
+                },
+                {
+                    "key": "birthday_month",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 2,
+                    "array": false
+                },
+                {
+                    "key": "birthday_year",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 4,
+                    "array": false
+                },
+                {
+                    "key": "birthday_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false
+                },
+                {
+                    "key": "username",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 20,
+                    "array": false
+                },
+                {
                     "key": "college",
                     "type": "varchar",
                     "required": false,
                     "size": 64,
+                    "array": false
+                },
+                {
+                    "key": "course",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "stage",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 32,
+                    "array": false
+                },
+                {
+                    "key": "study_subject",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "year_of_study",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 32,
+                    "array": false
+                },
+                {
+                    "key": "free_text_responses",
+                    "type": "text",
+                    "required": false,
                     "array": false
                 },
                 {
@@ -125,9 +210,8 @@
                 },
                 {
                     "key": "cv_parsed_text",
-                    "type": "varchar",
+                    "type": "mediumtext",
                     "required": false,
-                    "size": 50000,
                     "array": false
                 },
                 {
@@ -152,7 +236,27 @@
                     "array": false
                 },
                 {
+                    "key": "career_subfield",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "building_description",
+                    "type": "text",
+                    "required": false,
+                    "array": false
+                },
+                {
                     "key": "desired_connections",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 128,
+                    "array": true
+                },
+                {
+                    "key": "startup_connections",
                     "type": "varchar",
                     "required": false,
                     "size": 128,
@@ -187,10 +291,29 @@
                     "array": false
                 },
                 {
-                    "key": "wish_studied",
+                    "key": "intellectual_venue",
                     "type": "varchar",
                     "required": false,
-                    "size": 1024,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "intellectual_ambition",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 256,
+                    "array": false
+                },
+                {
+                    "key": "wish_studied",
+                    "type": "text",
+                    "required": false,
+                    "array": false
+                },
+                {
+                    "key": "study_wish",
+                    "type": "text",
+                    "required": false,
                     "array": false
                 },
                 {
@@ -215,6 +338,41 @@
                     "array": false
                 },
                 {
+                    "key": "relationship_status",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": false
+                },
+                {
+                    "key": "sexuality",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": false
+                },
+                {
+                    "key": "dating_appearance",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": true
+                },
+                {
+                    "key": "dating_personality",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": true
+                },
+                {
+                    "key": "dating_hobbies",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 128,
+                    "array": true
+                },
+                {
                     "key": "social_energy",
                     "type": "integer",
                     "required": false,
@@ -222,9 +380,26 @@
                 },
                 {
                     "key": "honest_thing",
-                    "type": "varchar",
+                    "type": "text",
                     "required": false,
-                    "size": 1024,
+                    "array": false
+                },
+                {
+                    "key": "hobby",
+                    "type": "text",
+                    "required": false,
+                    "array": false
+                },
+                {
+                    "key": "music",
+                    "type": "text",
+                    "required": false,
+                    "array": false
+                },
+                {
+                    "key": "societies",
+                    "type": "text",
+                    "required": false,
                     "array": false
                 },
                 {
@@ -278,6 +453,14 @@
                     "status": "available",
                     "attributes": [
                         "college"
+                    ]
+                },
+                {
+                    "key": "idx_intent",
+                    "type": "key",
+                    "status": "available",
+                    "attributes": [
+                        "primary_intent"
                     ]
                 }
             ]

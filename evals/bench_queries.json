@@ -1,0 +1,172 @@
+[
+  {
+    "id": "q01",
+    "query": "First year students at Balliol interested in AI startups",
+    "expected_filters": {
+      "college": "Balliol",
+      "year_of_study": "First year"
+    }
+  },
+  {
+    "id": "q02",
+    "query": "People at Trinity who want co-founders in climate tech",
+    "expected_filters": {
+      "college": "Trinity"
+    }
+  },
+  {
+    "id": "q03",
+    "query": "Postgraduate researchers in biotech looking for collaborators",
+    "expected_filters": {
+      "year_of_study": "Postgraduate"
+    }
+  },
+  {
+    "id": "q04",
+    "query": "Oxford students interested in venture capital and fintech",
+    "expected_filters": {}
+  },
+  {
+    "id": "q05",
+    "query": "People at St John's with strong intellectual curiosity",
+    "expected_filters": {
+      "college": "St John's"
+    }
+  },
+  {
+    "id": "q06",
+    "query": "Second year computer science students who want startup teammates",
+    "expected_filters": {
+      "year_of_study": "Second year"
+    }
+  },
+  {
+    "id": "q07",
+    "query": "Students focused on social impact and policy reform",
+    "expected_filters": {}
+  },
+  {
+    "id": "q08",
+    "query": "Academic-intent users who enjoy deep intellectual conversations",
+    "expected_filters": {
+      "primary_intent": "academic"
+    }
+  },
+  {
+    "id": "q09",
+    "query": "People in finance at Christ Church looking for mentors",
+    "expected_filters": {
+      "college": "Christ Church",
+      "career_field": "Finance"
+    }
+  },
+  {
+    "id": "q10",
+    "query": "Third year law students into public policy",
+    "expected_filters": {
+      "year_of_study": "Third year"
+    }
+  },
+  {
+    "id": "q11",
+    "query": "Romantic-intent users who like long conversations and coffee",
+    "expected_filters": {
+      "primary_intent": "romantic"
+    }
+  },
+  {
+    "id": "q12",
+    "query": "Students in medicine interested in healthcare AI",
+    "expected_filters": {
+      "career_field": "Medicine"
+    }
+  },
+  {
+    "id": "q13",
+    "query": "People at Wadham active in societies and events",
+    "expected_filters": {
+      "college": "Wadham"
+    }
+  },
+  {
+    "id": "q14",
+    "query": "Professional-intent users with MVP-stage startup projects",
+    "expected_filters": {
+      "primary_intent": "professional"
+    }
+  },
+  {
+    "id": "q15",
+    "query": "Students seeking study buddies in STEM",
+    "expected_filters": {}
+  },
+  {
+    "id": "q16",
+    "query": "Social-intent users who value loyalty and humour",
+    "expected_filters": {
+      "primary_intent": "social"
+    }
+  },
+  {
+    "id": "q17",
+    "query": "People at Exeter with networking style of warm introductions",
+    "expected_filters": {
+      "college": "Exeter"
+    }
+  },
+  {
+    "id": "q18",
+    "query": "Postgraduate founders in deep tech at Oxford",
+    "expected_filters": {
+      "year_of_study": "Postgraduate"
+    }
+  },
+  {
+    "id": "q19",
+    "query": "Students from Magdalen interested in consulting and strategy",
+    "expected_filters": {
+      "college": "Magdalen"
+    }
+  },
+  {
+    "id": "q20",
+    "query": "Users with CV uploaded and strong career ambition",
+    "expected_filters": {
+      "has_cv": true
+    }
+  },
+  {
+    "id": "q21",
+    "query": "First year social users who want genuine friendships",
+    "expected_filters": {
+      "year_of_study": "First year",
+      "primary_intent": "social"
+    }
+  },
+  {
+    "id": "q22",
+    "query": "Academic users who like tutorials and seminars",
+    "expected_filters": {
+      "primary_intent": "academic"
+    }
+  },
+  {
+    "id": "q23",
+    "query": "People at Pembroke interested in creative projects",
+    "expected_filters": {
+      "college": "Pembroke"
+    }
+  },
+  {
+    "id": "q24",
+    "query": "Tech and AI students open to cofounder matching",
+    "expected_filters": {}
+  },
+  {
+    "id": "q25",
+    "query": "Students at Somerville with startup and venture goals",
+    "expected_filters": {
+      "college": "Somerville"
+    }
+  }
+]
