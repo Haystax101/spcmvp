@@ -1,0 +1,14 @@
+{
+  "name": "cv-parser",
+  "version": "1.0.0",
+  "description": "Background Appwrite function: parses uploaded CVs and re-triggers profileSync via Appwrite DB update",
+  "main": "src/main.js",
+  "type": "module",
+  "dependencies": {
+    "@google/genai": "^1.47.0",
+    "node-appwrite": "^23.1.0",
+    "@sentry/node": "^10.48.0",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.8.0"
+  }
+}

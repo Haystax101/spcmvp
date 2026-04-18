@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supercharged ⚡</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#FFFEFD;
+  --text:#1A1A1A;
+  --text2:#6B6B6B;
+  --text3:#AFAFAF;
+  --border:#1A1A1A;
+  --border-light:#DDDBD8;
+  --border2:#DDDBD8;
+  --accent:#F5C842;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --radius-pill:999px;
+  --error:#D84040;
+  --success:#22A85A;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow:hidden}
+
+/* ── CANVAS ── */
+#topo{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;opacity:0.04;pointer-events:none !important}
+
+/* ── PROGRESS DOTS ── */
+#progress-dots{
+  position:fixed;top:32px;left:0;right:0;z-index:200;
+  display:flex;justify-content:center;align-items:center;gap:8px;
+  pointer-events:none;transition:opacity 0.3s;
+}
+.pdot{width:7px;height:7px;border-radius:999px;background:var(--border-light);transition:all 0.4s var(--ease)}
+.pdot.active{width:24px;background:var(--text)}
+.pdot.done{background:var(--text)}
+
+/* ── OVERLAY ── */
+#ob-overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:40px;transition:opacity 0.8s ease}
+
+/* ── STEP CARDS ── */
+.ob-step{
+  position:absolute;
+  width:580px;max-width:92vw;
+  padding:64px 68px 56px;
+  background:var(--bg);
+  display:none;
+  flex-direction:column;
+  opacity:0;pointer-events:none;
+  transform:translateX(32px);
+  transition:opacity 0.42s var(--ease),transform 0.42s var(--ease);
+}
+.ob-step.visible{display:flex}
+.ob-step.active{opacity:1;pointer-events:all;transform:translateX(0)}
+
+/* ── COVER ── */
+#step-cover{width:560px;max-width:92vw;padding:0;flex-direction:column;align-items:center;text-align:center}
+
+/* ── INTERSTITIAL ── */
+.ob-step.interstitial{width:620px;max-width:94vw;padding:72px 68px}
+
+/* ── TYPOGRAPHY ── */
+.ob-heading{font-family:'Playfair Display',serif;font-weight:300;font-size:56px;line-height:1.06;color:var(--text);margin-bottom:16px}
+.ob-heading.sm{font-size:46px}
+.ob-heading.em{font-style:italic}
+.ob-subtext{font-size:16px;color:var(--text2);margin-bottom:16px;line-height:1.6}
+.ob-whisper{font-size:13px;color:var(--text3);font-style:italic;line-height:1.55;margin-bottom:28px}
+.ob-spacer{flex-grow:1;min-height:28px}
+.ob-footnote{font-size:12px;color:var(--text3);margin-top:14px;text-align:center}
+
+/* ── INPUTS ── */
+.underline-input{
+  width:100%;background:transparent;
+  border:none;border-bottom:1.5px solid var(--border-light);border-radius:0;
+  font-family:'Playfair Display',serif;font-weight:300;font-size:34px;
+  color:var(--text);padding:12px 0;outline:none;transition:border-color 0.2s;margin-bottom:4px;
+}
+.underline-input::placeholder{color:var(--text3)}
+.underline-input:focus{border-bottom-color:var(--text)}
+.input-error{font-size:13px;color:var(--error);margin-top:6px;min-height:20px}
+
+/* ── BUTTONS ── */
+.btn-primary{
+  background:var(--text);color:#FFFEFD;
+  font-family:'DM Sans',sans-serif;font-weight:600;font-size:15px;
+  border:none;border-radius:var(--radius-pill);padding:16px 32px;
+  cursor:pointer;transition:opacity 0.18s,transform 0.18s;width:100%;
+}
+.btn-primary:hover:not(:disabled){opacity:0.82;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:0.22;cursor:not-allowed}
+.btn-accent{background:var(--accent);color:#1A1A1A;font-family:'DM Sans',sans-serif;font-weight:600;font-size:15px;border:none;border-radius:var(--radius-pill);padding:16px 32px;cursor:pointer;transition:opacity 0.18s,transform 0.18s;width:100%}
+.btn-accent:hover{opacity:0.88;transform:translateY(-1px)}
+.btn-outline{background:transparent;border:1.5px solid var(--text);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:600;font-size:15px;border-radius:var(--radius-pill);padding:15px 32px;cursor:pointer;transition:opacity 0.18s,transform 0.18s;width:100%}
+.btn-outline:hover{opacity:0.7;transform:translateY(-1px)}
+
+/* ── CHIPS ── */
+.chip-grid{display:flex;flex-wrap:wrap;gap:10px}
+.chip{background:#fff;border:1.5px solid var(--border-light);color:var(--text2);border-radius:var(--radius-pill);padding:10px 22px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer;transition:all 0.18s}
+.chip:hover{border-color:var(--text);color:var(--text)}
+.chip.selected{background:var(--text);border-color:var(--text);color:#FFFEFD;font-weight:500}
+
+/* ── COLLEGE SEARCH ── */
+.college-search{width:100%;background:transparent;border:none;border-bottom:1.5px solid var(--border-light);border-radius:0;font-family:'DM Sans',sans-serif;font-size:16px;color:var(--text);padding:10px 0;outline:none;transition:border-color 0.2s;margin-bottom:20px}
+.college-search::placeholder{color:var(--text3)}
+.college-search:focus{border-bottom-color:var(--text)}
+
+/* ── CHIP SCROLL ── */
+.chip-scroll{max-height:260px;overflow-y:auto;padding-bottom:4px}
+.chip-scroll::-webkit-scrollbar{width:3px}
+.chip-scroll::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:4px}
+
+/* ── CODE BOXES ── */
+.code-boxes{display:flex;gap:12px;justify-content:center;margin-bottom:28px}
+.code-box{width:58px;height:70px;border:1.5px solid var(--border-light);border-radius:12px;font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:500;color:var(--text);text-align:center;background:transparent;outline:none;transition:border-color 0.2s;-webkit-appearance:none}
+.code-box:focus{border-color:var(--text)}
+.code-box.filled{border-color:var(--text)}
+
+/* ── FLOW DIAGRAM ── */
+.flow-diagram{display:flex;align-items:center;gap:0;margin-top:40px}
+.flow-node{display:flex;flex-direction:column;align-items:center;gap:10px;flex:1}
+.flow-circle{width:52px;height:52px;border-radius:50%;border:1.5px solid var(--border-light);display:flex;align-items:center;justify-content:center;font-size:20px}
+.flow-label{font-size:13px;color:var(--text2);font-weight:500;text-align:center}
+.flow-arrow{font-size:18px;color:var(--border-light);margin-bottom:20px;flex-shrink:0}
+
+/* ── PASSWORD WRAP ── */
+.pw-wrap{position:relative;width:100%;margin-bottom:4px}
+.pw-wrap .underline-input{margin-bottom:0;padding-right:36px}
+.pw-toggle{position:absolute;right:2px;bottom:14px;background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;line-height:1}
+.pw-toggle svg{transition:stroke 0.2s}
+.pw-toggle:hover svg{stroke:var(--text)}
+.pw-spacer{height:24px}
+
+/* ── RESEND ── */
+.resend-link{font-size:13px;color:var(--text3);text-align:center;margin-top:16px}
+.resend-link span{color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+/* ── SKIP LINK ── */
+.skip-link{font-size:13px;color:var(--text3);text-align:center;margin-top:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;transition:color 0.2s}
+.skip-link:hover{color:var(--text2)}
+
+/* ── BACK BUTTON ── */
+#back-btn{position:fixed;top:28px;left:36px;z-index:210;background:none;border:none;cursor:pointer;font-size:13px;color:var(--text2);font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;padding:6px;opacity:0;pointer-events:none;transition:opacity 0.3s,color 0.2s}
+#back-btn:hover{color:var(--text)}
+#back-btn.visible{opacity:1;pointer-events:all}
+
+/* ── LARGE TAP CARDS ── */
+.tap-cards{display:flex;flex-direction:column;gap:10px}
+.tap-card{padding:17px 22px;border:1.5px solid var(--border2);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:var(--text);cursor:pointer;transition:all 0.18s;background:var(--bg)}
+.tap-card:hover{background:#FAFAF8}
+.tap-card.selected{border-color:var(--text);background:#F5F3F0}
+
+/* ── RANK LIST ── */
+.rank-instruction{font-size:12px;font-style:italic;color:var(--text3);margin-bottom:12px}
+.rank-cards{display:flex;flex-direction:column;gap:8px}
+.rank-card{padding:15px 22px;border:1.5px solid var(--border2);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:var(--text);cursor:pointer;transition:all 0.18s;background:var(--bg);display:flex;align-items:center;gap:12px}
+.rank-card:hover{background:#FAFAF8}
+.rank-card.selected{border-color:var(--text);background:#F5F3F0}
+.rank-badge{width:22px;height:22px;border-radius:50%;background:var(--text);color:#FFFEFD;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:0;transition:opacity 0.2s}
+.rank-card.selected .rank-badge{opacity:1}
+
+/* ── DATING CARDS ── */
+.dating-cards{display:flex;gap:12px}
+.dating-card{flex:1;padding:22px 18px;border:1.5px solid var(--border2);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:var(--text);cursor:pointer;transition:all 0.18s;background:var(--bg);text-align:center}
+.dating-card:hover{background:#FAFAF8}
+.dating-card.selected{border-color:var(--text);background:#F5F3F0}
+
+/* ── ENERGY SLIDER ── */
+.slider-wrap{margin:8px 0 20px}
+.slider-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:24px}
+.energy-slider{width:100%;-webkit-appearance:none;appearance:none;height:3px;background:var(--border-light);outline:none;border-radius:2px;cursor:pointer}
+.energy-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--text);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.15);transition:transform 0.15s}
+.energy-slider::-webkit-slider-thumb:hover{transform:scale(1.1)}
+.energy-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--text);cursor:pointer;border:none;box-shadow:0 1px 4px rgba(0,0,0,0.15)}
+.slider-value-label{text-align:center;margin-top:16px;font-size:14px;font-weight:500;color:var(--text);font-family:'DM Sans',sans-serif;min-height:22px}
+
+/* ── CV UPLOAD ZONE ── */
+.upload-zone{border:1.5px dashed var(--border2);border-radius:14px;padding:44px 32px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--text);background:#FAFAF8}
+.upload-zone-inner{display:flex;flex-direction:column;align-items:center;gap:0;pointer-events:none}
+.upload-filename{font-size:14px;color:var(--text);margin-top:12px;font-weight:500;word-break:break-all}
+.upload-remove{font-size:12px;color:var(--text3);text-decoration:underline;text-underline-offset:2px;cursor:pointer;margin-top:8px;pointer-events:all}
+
+/* ── FRIEND ROWS ── */
+.friend-rows{display:flex;flex-direction:column;gap:0}
+.friend-row{display:flex;align-items:flex-start;gap:14px;padding:16px 0;border-bottom:1px solid var(--border-light)}
+.friend-avatar{width:38px;height:38px;border-radius:50%;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--text3);flex-shrink:0;margin-top:6px}
+.friend-field{flex:1;display:flex;flex-direction:column;gap:4px}
+.friend-input{width:100%;background:transparent;border:none;border-bottom:1.5px solid var(--border-light);font-family:'DM Sans',sans-serif;font-size:15px;color:var(--text);padding:6px 0;outline:none;transition:border-color 0.2s}
+.friend-input::placeholder{color:var(--text3)}
+.friend-input:focus{border-bottom-color:var(--text)}
+.friend-status{display:flex;align-items:center;gap:6px;font-size:12px;margin-top:4px;min-height:18px}
+.friend-status-found{color:var(--success)}
+.friend-status-notfound{color:var(--text3)}
+.friend-sub{font-size:12px;font-style:italic;color:var(--text3);margin-top:2px}
+.friend-dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0}
+.btn-invite{background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:var(--radius-pill);padding:6px 14px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:border-color 0.2s,color 0.2s;margin-top:4px;display:inline-block}
+.btn-invite:hover{border-color:var(--text);color:var(--text)}
+
+/* ── CSS SPINNER ── */
+.spinner{width:16px;height:16px;border:1.5px solid var(--border-light);border-top-color:var(--text3);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── COVER SVG ── */
+.cover-svg-wrap{width:200px;height:134px;margin:0 auto 36px}
+
+/* ── MOBILE fallback ── */
+@media(max-width:700px){
+  .ob-step{width:92vw;padding:40px 28px 36px}
+  .ob-heading{font-size:38px}
+  .ob-heading.sm{font-size:30px}
+  .underline-input{font-size:26px}
+  .code-boxes{gap:8px}
+  .code-box{width:42px;height:54px;font-size:22px}
+  .dating-cards{flex-direction:column}
+  #back-btn{left:16px}
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<canvas id="topo"></canvas>
+<div id="progress-dots"></div>
+<button id="back-btn" onclick="goBack()">← Back</button>
+
+<div id="ob-overlay">
+
+  <!-- COVER -->
+  <div class="ob-step" id="step-cover" style="text-align:center;align-items:center">
+    <div class="cover-svg-wrap">
+      <svg viewBox="0 0 180 120" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+        <line x1="90" y1="60" x2="40"  y2="30"  stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="90" y1="60" x2="150" y2="28"  stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="90" y1="60" x2="155" y2="80"  stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="90" y1="60" x2="32"  y2="85"  stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="90" y1="60" x2="100" y2="100" stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="40"  y1="30"  x2="150" y2="28"  stroke="#DDDBD8" stroke-width="0.8"/>
+        <line x1="155" y1="80"  x2="100" y2="100" stroke="#DDDBD8" stroke-width="0.8"/>
+        <circle cx="40"  cy="30"  r="4"   fill="#DDDBD8"/>
+        <circle cx="150" cy="28"  r="4"   fill="#DDDBD8"/>
+        <circle cx="155" cy="80"  r="4"   fill="#DDDBD8"/>
+        <circle cx="32"  cy="85"  r="4"   fill="#DDDBD8"/>
+        <circle cx="100" cy="100" r="3.5" fill="#DDDBD8"/>
+        <circle cx="90"  cy="60"  r="7"   fill="#F5C842"/>
+      </svg>
+    </div>
+    <h1 style="font-family:'Playfair Display',serif;font-weight:300;font-size:40px;line-height:1.1;color:var(--text);margin-bottom:12px">The network that works<br>for you.</h1>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:36px;line-height:1.5">Oxford University students only · Verified by email</p>
+    <button class="btn-accent" style="margin-bottom:12px" onclick="goNext()">Sign up</button>
+    <button class="btn-outline" onclick="goNext()">Log in</button>
+  </div>
+
+  <!-- STEP 1: FIRST NAME -->
+  <div class="ob-step" id="step-1">
+    <h1 class="ob-heading">What's your first name?</h1>
+    <p class="ob-whisper">So your matches know who they're talking to.</p>
+    <input class="underline-input" id="firstName-input" type="text" placeholder="First name" autocomplete="given-name" spellcheck="false">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step1-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 2: LAST NAME -->
+  <div class="ob-step" id="step-2">
+    <h1 class="ob-heading" id="s2-heading">And your last name?</h1>
+    <p class="ob-whisper">Only revealed after a match is made — never shown publicly.</p>
+    <input class="underline-input" id="lastName-input" type="text" placeholder="Last name" autocomplete="family-name" spellcheck="false">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step2-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 3: EMAIL -->
+  <div class="ob-step" id="step-3">
+    <h1 class="ob-heading sm">Your Oxford email.</h1>
+    <p class="ob-subtext">We'll send a code to verify you're a current student.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">We verify your student status once. We won't email you anything else without permission.</p>
+    <input class="underline-input" id="email-input" type="email" placeholder="you@ox.ac.uk" autocomplete="email" spellcheck="false">
+    <div class="input-error" id="email-error"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step3-btn" disabled onclick="submitEmail()">Send verification code</button>
+  </div>
+
+  <!-- STEP 5: EMAIL VERIFICATION -->
+  <div class="ob-step" id="step-5">
+    <h1 class="ob-heading sm">Check your inbox.</h1>
+    <p class="ob-subtext" id="verify-subtext">We sent a code to your email.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">This confirms you're a current Oxford student, not just someone with the domain.</p>
+    <div class="code-boxes">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+    </div>
+    <div class="input-error" id="code-error" style="text-align:center"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step5-btn" disabled onclick="verifyCode()">Verify</button>
+    <p class="resend-link">Didn't get it? <span onclick="resendCode()">Resend</span></p>
+  </div>
+
+  <!-- STEP 5pw: PASSWORD -->
+  <div class="ob-step" id="step-5pw">
+    <h1 class="ob-heading sm">Create a password.</h1>
+    <p class="ob-subtext">At least 8 characters.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">We use standard encryption. We never store your password in plain text.</p>
+    <div class="pw-wrap">
+      <input class="underline-input" id="pw-input" type="password" placeholder="Password" autocomplete="new-password" spellcheck="false" oninput="checkPasswords()">
+      <button class="pw-toggle" type="button" onclick="togglePw('pw-input',this)" tabindex="-1">
+        <svg id="eye-pw-input" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="9" cy="9" rx="7" ry="4.5"/>
+          <circle cx="9" cy="9" r="2"/>
+        </svg>
+      </button>
+    </div>
+    <div class="pw-spacer"></div>
+    <div class="pw-wrap">
+      <input class="underline-input" id="pw-confirm" type="password" placeholder="Confirm password" autocomplete="new-password" spellcheck="false" oninput="checkPasswords()">
+      <button class="pw-toggle" type="button" onclick="togglePw('pw-confirm',this)" tabindex="-1">
+        <svg id="eye-pw-confirm" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="9" cy="9" rx="7" ry="4.5"/>
+          <circle cx="9" cy="9" r="2"/>
+        </svg>
+      </button>
+    </div>
+    <div class="input-error" id="pw-error"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step5pw-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 5cv: CV UPLOAD -->
+  <div class="ob-step" id="step-5cv">
+    <h1 class="ob-heading" style="font-size:44px">Show us your trajectory.</h1>
+    <p class="ob-subtext">Upload your CV or personal statement if you have one.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Your CV is chunked and embedded by our matching engine — it's how we understand your actual experience, not just the labels you pick. The more detail it contains, the stronger your matches.</p>
+
+    <!-- Upload zone -->
+    <div class="upload-zone" id="cv-zone" onclick="document.getElementById('cv-file-input').click()" ondragover="cvDragOver(event)" ondragleave="cvDragLeave(event)" ondrop="cvDrop(event)">
+      <input type="file" id="cv-file-input" accept=".pdf,.doc,.docx,.txt" style="display:none" onchange="cvSelected(this)">
+      <div class="upload-zone-inner" id="cv-zone-inner">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 20V10"/>
+          <path d="M9 15l5-5 5 5"/>
+          <path d="M6 22h16"/>
+        </svg>
+        <p style="font-size:14px;color:var(--text2);margin-top:12px">Drag a file here or tap to browse</p>
+        <p style="font-size:12px;color:var(--text3);margin-top:6px">PDF, Word, or plain text · Max 5MB</p>
+      </div>
+    </div>
+
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNext()">Continue</button>
+    <p class="skip-link" onclick="goNext()">Skip for now</p>
+  </div>
+
+  <!-- STEP 6: COLLEGE -->
+  <div class="ob-step" id="step-6">
+    <h1 class="ob-heading sm">Which college are you at?</h1>
+    <p class="ob-whisper" style="margin-bottom:12px">Helps us surface connections across colleges, not just your own bubble.</p>
+    <input class="college-search" id="college-search" type="text" placeholder="Search colleges…" oninput="filterCollegesDebounced()">
+    <div class="chip-grid chip-scroll" id="college-chips" style="gap:8px"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step6-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 7: INTERSTITIAL -->
+  <div class="ob-step interstitial" id="step-7">
+    <h1 class="ob-heading em" style="font-size:44px">"Your profile runs<br>in the background."</h1>
+    <p class="ob-subtext" style="margin-bottom:0">While you're in lectures, Supercharged is computing simulations. By the time you open the app, your best matches are already waiting.</p>
+    <div class="flow-diagram">
+      <div class="flow-node"><div class="flow-circle">👤</div><div class="flow-label">Your<br>profile</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="flow-circle" style="border-color:var(--accent);background:rgba(245,200,66,0.08)">⚡</div><div class="flow-label">Simulate</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="flow-circle">🤝</div><div class="flow-label">Top<br>matches</div></div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 8: GOALS -->
+  <div class="ob-step" id="step-8">
+    <h1 class="ob-heading sm">What are you here for?</h1>
+    <p class="ob-subtext" style="margin-bottom:8px">Pick everything that applies.</p>
+    <p class="ob-whisper" style="margin-bottom:16px">This shapes your entire match feed — you can update it any time from your profile.</p>
+    <div class="chip-grid" id="goal-chips">
+      <div class="chip" data-goal="find co-founders" onclick="toggleGoal(this)">Find co-founders</div>
+      <div class="chip" data-goal="find investors" onclick="toggleGoal(this)">Find investors</div>
+      <div class="chip" data-goal="find a mentor" onclick="toggleGoal(this)">Find a mentor</div>
+      <div class="chip" data-goal="find collaborators" onclick="toggleGoal(this)">Find collaborators</div>
+      <div class="chip" data-goal="find talent" onclick="toggleGoal(this)">Find talent</div>
+      <div class="chip" data-goal="build my network" onclick="toggleGoal(this)">Build my network</div>
+      <div class="chip" data-goal="break into consulting" onclick="toggleGoal(this)">Break into consulting</div>
+      <div class="chip" data-goal="land a job or internship" onclick="toggleGoal(this)">Land a job or internship</div>
+      <div class="chip" data-goal="date someone" onclick="toggleGoal(this)">Date someone</div>
+      <div class="chip" data-goal="make new friends" onclick="toggleGoal(this)">Make new friends</div>
+      <div class="chip" data-goal="find a study partner" onclick="toggleGoal(this)">Find a study partner</div>
+      <div class="chip" data-goal="explore research" onclick="toggleGoal(this)">Explore research</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step8-btn" onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-career: Field -->
+  <div class="ob-step" id="step-q-career">
+    <h1 class="ob-heading sm">What field are you heading into?</h1>
+    <p class="ob-subtext" style="margin-bottom:8px">Pick the one that fits best right now.</p>
+    <p class="ob-whisper" style="margin-bottom:16px">Used to weight your matches toward people in or adjacent to your world.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Finance &amp; investing</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Consulting</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Technology &amp; startups</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Law</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Medicine &amp; healthcare</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Academia &amp; research</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Policy &amp; government</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Creative &amp; media</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Social impact</div>
+      <div class="chip" data-q="career" onclick="selectSingle(this,'career')">Undecided</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-career" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-conntype: Kind of connection — RANKED TAP LIST -->
+  <div class="ob-step" id="step-q-conntype">
+    <h1 class="ob-heading sm">What kind of connection are you after?</h1>
+    <p class="ob-whisper" style="margin-bottom:8px">This is the single biggest driver of who we surface for you.</p>
+    <p class="rank-instruction">Tap to select in order of priority. Max 3.</p>
+    <div class="rank-cards" id="conntype-cards">
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>Someone to build something with</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>A sounding board</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>A door-opener</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>Someone further along than me</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>Someone at my level</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>A long-term collaborator</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>Someone to keep me accountable</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-conntype" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-style: Networking style — TAP CARDS -->
+  <div class="ob-step" id="step-q-style">
+    <h1 class="ob-heading sm">How would you describe your networking style?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px">Used to weight your matches toward people in or adjacent to your world.</p>
+    <div class="tap-cards">
+      <div class="tap-card" data-q="style" onclick="selectTapCard(this,'style')">I reach out to everyone</div>
+      <div class="tap-card" data-q="style" onclick="selectTapCard(this,'style')">I'm selective but consistent</div>
+      <div class="tap-card" data-q="style" onclick="selectTapCard(this,'style')">I wait to be introduced</div>
+      <div class="tap-card" data-q="style" onclick="selectTapCard(this,'style')">I prefer things to happen organically</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-style" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-social: Oxford social life — chips -->
+  <div class="ob-step" id="step-q-social">
+    <h1 class="ob-heading sm">What does your Oxford social life look like?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px">We use this to find people who move in overlapping circles — or usefully different ones.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">College events &amp; bops</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Café culture &amp; one-on-ones</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Sports &amp; fitness</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Society dinners</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">House parties</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Museum and arts events</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Mostly off-campus</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-social" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-friendship: Friendship values — chips -->
+  <div class="ob-step" id="step-q-friendship">
+    <h1 class="ob-heading sm">What do you value most in a friend?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px">Helps us find you people worth keeping, not just people worth meeting.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="friendship" onclick="toggleMulti(this,'friendship','btn-q-friendship')">Honesty</div>
+      <div class="chip" data-q="friendship" onclick="toggleMulti(this,'friendship','btn-q-friendship')">Ambition</div>
+      <div class="chip" data-q="friendship" onclick="toggleMulti(this,'friendship','btn-q-friendship')">Humour</div>
+      <div class="chip" data-q="friendship" onclick="toggleMulti(this,'friendship','btn-q-friendship')">Loyalty</div>
+      <div class="chip" data-q="friendship" onclick="toggleMulti(this,'friendship','btn-q-friendship')">Curiosity</div>
+      <div class="chip" data-q="friendship" onclick="toggleMulti(this,'friendship','btn-q-friendship')">Warmth</div>
+      <div class="chip" data-q="friendship" onclick="toggleMulti(this,'friendship','btn-q-friendship')">Shared interests</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-friendship" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-intellect: Intellectual identity — TAP CARDS -->
+  <div class="ob-step" id="step-q-intellect">
+    <h1 class="ob-heading sm">How would you describe your intellectual personality?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px">One of the strongest predictors of long-term connection quality.</p>
+    <div class="tap-cards">
+      <div class="tap-card" data-q="intellect" onclick="selectTapCard(this,'intellect')">Deep specialist — I go very far in one thing</div>
+      <div class="tap-card" data-q="intellect" onclick="selectTapCard(this,'intellect')">Generalist — I connect ideas across fields</div>
+      <div class="tap-card" data-q="intellect" onclick="selectTapCard(this,'intellect')">Contrarian — I question received wisdom</div>
+      <div class="tap-card" data-q="intellect" onclick="selectTapCard(this,'intellect')">Practitioner — I care about what works</div>
+      <div class="tap-card" data-q="intellect" onclick="selectTapCard(this,'intellect')">Explorer — I follow curiosity wherever it leads</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-intellect" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-study: What you wish you'd studied — text input -->
+  <div class="ob-step" id="step-q-study">
+    <h1 class="ob-heading sm">If you could study anything else, what would it be?</h1>
+    <p class="ob-whisper" style="margin-bottom:20px">Free-text answers are embedded and matched semantically — honest answers work better.</p>
+    <input class="underline-input" id="study-input" type="text" placeholder="Anything — be honest" autocomplete="off" spellcheck="false">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-study" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-workstyle: Working style — chips -->
+  <div class="ob-step" id="step-q-workstyle">
+    <h1 class="ob-heading sm">How do you work best?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px">Helps us pair you with complementary collaborators, not just similar ones.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="workstyle" onclick="selectSingle(this,'workstyle')">Async and deep — I need uninterrupted focus</div>
+      <div class="chip" data-q="workstyle" onclick="selectSingle(this,'workstyle')">In-person and collaborative</div>
+      <div class="chip" data-q="workstyle" onclick="selectSingle(this,'workstyle')">A mix depending on the task</div>
+      <div class="chip" data-q="workstyle" onclick="selectSingle(this,'workstyle')">I adapt to whoever I'm working with</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-workstyle" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-project: Project stage — chips -->
+  <div class="ob-step" id="step-q-project">
+    <h1 class="ob-heading sm">Where are you in your project?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px">Matches you with people at a compatible stage — not just anyone building something.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Just an idea</div>
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Early exploration</div>
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Building an MVP</div>
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Launched and growing</div>
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Not working on anything yet</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-project" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-dating: Relationship intent — SIDE-BY-SIDE CARDS -->
+  <div class="ob-step" id="step-q-dating">
+    <h1 class="ob-heading sm">What are you looking for?</h1>
+    <p class="ob-whisper" style="margin-bottom:20px">We only show you to people who want the same thing.</p>
+    <div class="dating-cards">
+      <div class="dating-card" data-q="dating" onclick="selectDatingCard(this,'dating')">Something serious</div>
+      <div class="dating-card" data-q="dating" onclick="selectDatingCard(this,'dating')">Keeping it casual</div>
+      <div class="dating-card" data-q="dating" onclick="selectDatingCard(this,'dating')">Not sure yet — open to seeing</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-dating" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-energy: Social energy — SLIDER -->
+  <div class="ob-step" id="step-q-energy">
+    <h1 class="ob-heading sm">How would you describe your social energy?</h1>
+    <p class="ob-whisper" style="margin-bottom:24px">We match on compatibility, not similarity — an introvert and a balanced-social person often pair better than two extroverts.</p>
+    <div class="slider-wrap">
+      <div class="slider-labels">
+        <span>Very introverted</span>
+        <span>Very social</span>
+      </div>
+      <input class="energy-slider" id="energy-slider" type="range" min="0" max="4" value="2" step="1" oninput="updateEnergySlider(this.value)">
+      <div class="slider-value-label" id="energy-label">Balanced — I need both</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-energy" onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-honest: One honest thing — text input -->
+  <div class="ob-step" id="step-q-honest">
+    <h1 class="ob-heading sm">Finish this sentence honestly.</h1>
+    <p class="ob-subtext">The one thing most people don't realise about me is…</p>
+    <p class="ob-whisper" style="margin-bottom:20px">This is the field our matching weights most heavily. The more specific, the better your matches.</p>
+    <input class="underline-input" id="honest-input" type="text" placeholder="Be honest — this improves your matches" autocomplete="off" spellcheck="false">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-friends: Friends on Supercharged -->
+  <div class="ob-step" id="step-q-friends">
+    <h1 class="ob-heading" style="font-size:44px">Who are your people at Oxford?</h1>
+    <p class="ob-subtext">Add up to three friends. We'll connect you automatically if they're already here — and give you a link to invite them if not.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Your existing relationships help us understand your social graph. It also means your friends get a curated experience from day one rather than starting cold.</p>
+
+    <div class="friend-rows">
+      <div class="friend-row" id="friend-row-0">
+        <div class="friend-avatar">?</div>
+        <div class="friend-field">
+          <input class="friend-input" type="text" placeholder="Friend's name or email" autocomplete="off" spellcheck="false" onblur="checkFriend(0,this.value)">
+          <div class="friend-status" id="friend-status-0"></div>
+          <div class="friend-sub" id="friend-sub-0"></div>
+        </div>
+      </div>
+      <div class="friend-row" id="friend-row-1">
+        <div class="friend-avatar">?</div>
+        <div class="friend-field">
+          <input class="friend-input" type="text" placeholder="Friend's name or email" autocomplete="off" spellcheck="false" onblur="checkFriend(1,this.value)">
+          <div class="friend-status" id="friend-status-1"></div>
+          <div class="friend-sub" id="friend-sub-1"></div>
+        </div>
+      </div>
+      <div class="friend-row" id="friend-row-2">
+        <div class="friend-avatar">?</div>
+        <div class="friend-field">
+          <input class="friend-input" type="text" placeholder="Friend's name or email" autocomplete="off" spellcheck="false" onblur="checkFriend(2,this.value)">
+          <div class="friend-status" id="friend-status-2"></div>
+          <div class="friend-sub" id="friend-sub-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip — I'll do this later</p>
+  </div>
+
+  <!-- CONFIRMATION -->
+  <div class="ob-step" id="step-confirm" style="text-align:center;align-items:center">
+    <div style="width:56px;height:56px;border-radius:50%;background:rgba(245,200,66,0.12);border:1.5px solid rgba(245,200,66,0.3);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 32px">⚡</div>
+    <h1 class="ob-heading em" id="confirm-heading" style="font-size:48px;text-align:center">You're in.</h1>
+    <p class="ob-subtext" style="text-align:center">Your profile is now live. Supercharged is already running simulations and finding who you need to meet. Expect your first matches within the hour.</p>
+    <div class="ob-spacer"></div>
+    <button class="btn-accent" onclick="enterApp()">Enter Supercharged ⚡</button>
+  </div>
+
+</div><!-- /ob-overlay -->
+
+<!-- END SCREEN -->
+<div id="end-screen" style="position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;background:var(--bg);pointer-events:all">
+  <div style="text-align:center;max-width:340px;padding:24px">
+    <div style="font-size:32px;margin-bottom:20px">⚡</div>
+    <h1 style="font-family:'Playfair Display',serif;font-weight:300;font-size:44px;line-height:1.1;margin-bottom:16px" id="end-heading">You're in.</h1>
+    <p style="font-size:15px;color:var(--text2);line-height:1.6;margin-bottom:32px">Your profile is live. Supercharged is finding who you need to meet.</p>
+    <button class="btn-outline" style="width:auto;padding:12px 32px" onclick="location.reload()">↩ Start over</button>
+  </div>
+</div>
+
+<script>
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ══════════════════════════
+   STATE
+══════════════════════════ */
+let firstName='', lastName='', userEmail='', userCollege='', userGoals=[];
+let answers={};
+let currentStep='cover';
+let interstitialTimer=null;
+
+const FIXED_PRE  = ['cover','1','2','3','5','5pw','5cv','6','7','8'];
+const FIXED_POST = ['q-conntype','q-style','q-social','q-intellect','q-study','q-energy','q-honest','q-friends','confirm'];
+const INTERSTITIALS = ['7'];
+const CONDITIONALS = {
+  'q-career':     ()=>hasAnyGoal(['find co-founders','find investors','find a mentor','find collaborators','find talent','build my network','break into consulting','land a job or internship','explore research']),
+  'q-friendship': ()=>hasGoal('make new friends'),
+  'q-workstyle':  ()=>hasAnyGoal(['find co-founders','find collaborators','find investors','break into consulting','land a job or internship','explore research']),
+  'q-project':    ()=>hasAnyGoal(['find co-founders','find collaborators']),
+  'q-dating':     ()=>hasGoal('date someone'),
+};
+const COND_ORDER = ['q-career','q-friendship','q-workstyle','q-project','q-dating'];
+
+function hasGoal(g){ return userGoals.includes(g); }
+function hasAnyGoal(arr){ return arr.some(g=>userGoals.includes(g)); }
+
+function buildStepOrder(){
+  const conditionals = COND_ORDER.filter(id=>(CONDITIONALS[id]||(_=>false))());
+  return [...FIXED_PRE,...conditionals,...FIXED_POST];
+}
+let STEP_ORDER = buildStepOrder();
+
+function rebuildStepOrder(){
+  STEP_ORDER = buildStepOrder();
+  buildDots();
+  updateDots(currentStep);
+}
+function getProgressSteps(){
+  return STEP_ORDER.filter(s=>s!=='cover'&&!INTERSTITIALS.includes(s));
+}
+
+/* ══════════════════════════
+   CANVAS — 30fps cap
+══════════════════════════ */
+const canvas = document.getElementById('topo');
+const ctx = canvas.getContext('2d');
+let lines=[], globalPhase=0, lastDraw=0;
+
+function resize(){
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+  buildLines();
+}
+function buildLines(){
+  lines=[];
+  for(let i=0;i<80;i++){
+    lines.push({
+      y:(i/80)*canvas.height,
+      amp:6+Math.random()*8,
+      freq:0.004+Math.random()*0.003,
+      phase:Math.random()*Math.PI*2,
+    });
+  }
+}
+function drawCanvas(ts){
+  requestAnimationFrame(drawCanvas);
+  if(ts-lastDraw<33) return; // ~30fps
+  lastDraw=ts;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  globalPhase+=0.0003;
+  ctx.strokeStyle='rgba(26,26,26,1)';
+  ctx.lineWidth=0.6;
+  lines.forEach(l=>{
+    ctx.beginPath();
+    for(let x=0;x<=canvas.width;x+=4){
+      const y=l.y+Math.sin(x*l.freq+globalPhase+l.phase)*l.amp;
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  });
+}
+window.addEventListener('resize',resize);
+resize();
+requestAnimationFrame(drawCanvas);
+
+/* ══════════════════════════
+   PROGRESS DOTS
+══════════════════════════ */
+function buildDots(){
+  const c=document.getElementById('progress-dots');
+  c.innerHTML='';
+  getProgressSteps().forEach(s=>{
+    const d=document.createElement('div');
+    d.className='pdot';d.id='pdot-'+s;
+    c.appendChild(d);
+  });
+}
+function updateDots(stepId){
+  const ps=getProgressSteps();
+  const hidden=(stepId==='cover'||INTERSTITIALS.includes(String(stepId)));
+  document.getElementById('progress-dots').style.opacity=hidden?'0':'1';
+  const sIdx=ps.indexOf(String(stepId));
+  ps.forEach((s,i)=>{
+    const d=document.getElementById('pdot-'+s);
+    if(!d) return;
+    d.classList.remove('active','done');
+    if(s===String(stepId)) d.classList.add('active');
+    else if(i<sIdx) d.classList.add('done');
+  });
+}
+buildDots();
+
+/* ══════════════════════════
+   BACK BUTTON
+══════════════════════════ */
+function updateBackBtn(){
+  const btn=document.getElementById('back-btn');
+  btn.classList.toggle('visible',currentStep!=='cover'&&currentStep!=='confirm');
+}
+function goBack(){
+  const idx=STEP_ORDER.indexOf(String(currentStep));
+  if(idx>0) navigateTo(STEP_ORDER[idx-1],'back');
+}
+
+/* ══════════════════════════
+   NAVIGATION — CORE BUG FIX
+   Non-active steps get display:none after transition
+══════════════════════════ */
+function getEl(id){ return document.getElementById('step-'+id); }
+
+function navigateTo(targetId, direction='forward'){
+  if(interstitialTimer){ clearTimeout(interstitialTimer); interstitialTimer=null; }
+
+  if(String(targetId)==='confirm'){
+    const h=document.getElementById('confirm-heading');
+    if(h) h.textContent=firstName?`You're in, ${firstName}.`:`You're in.`;
+  }
+
+  const fromEl=getEl(currentStep);
+  const toEl=getEl(targetId);
+  if(!toEl) return;
+
+  // Hide incoming setup
+  toEl.style.transition='none';
+  toEl.style.opacity='0';
+  toEl.style.transform=direction==='back'?'translateX(-20px)':'translateX(24px)';
+  toEl.style.pointerEvents='none';
+  toEl.classList.add('visible');
+  toEl.classList.remove('active');
+
+  // Exit outgoing
+  if(fromEl){
+    fromEl.classList.remove('active');
+    fromEl.style.pointerEvents='none';
+    if(direction==='back'){
+      fromEl.style.transition='opacity 0.35s var(--ease),transform 0.35s var(--ease)';
+      fromEl.style.transform='translateX(24px)';
+      fromEl.style.opacity='0';
+    } else {
+      fromEl.style.transition='opacity 0.35s var(--ease),transform 0.35s var(--ease)';
+      fromEl.style.transform='translateX(-20px)';
+      fromEl.style.opacity='0';
+    }
+    // After transition finishes, truly hide it so it cannot intercept events
+    const onEnd = ()=>{
+      fromEl.classList.remove('visible');
+      fromEl.style.transform='';
+      fromEl.style.opacity='';
+      fromEl.style.transition='';
+      fromEl.removeEventListener('transitionend', onEnd);
+    };
+    fromEl.addEventListener('transitionend', onEnd);
+    // Fallback in case transitionend doesn't fire
+    setTimeout(()=>{ fromEl.classList.remove('visible'); fromEl.style.transform=''; fromEl.style.opacity=''; fromEl.style.transition=''; }, 500);
+  }
+
+  // Enter incoming
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    toEl.style.transition='opacity 0.4s var(--ease),transform 0.4s var(--ease)';
+    toEl.style.opacity='1';
+    toEl.style.transform='translateX(0)';
+    toEl.style.pointerEvents='all';
+    toEl.classList.add('active');
+  }));
+
+  currentStep=targetId;
+  updateDots(targetId);
+  updateBackBtn();
+
+  if(INTERSTITIALS.includes(String(targetId))){
+    interstitialTimer=setTimeout(()=>goNext(),3500);
+  }
+
+  const focusMap={'1':'firstName-input','2':'lastName-input','3':'email-input','5pw':'pw-input','6':'college-search','q-study':'study-input','q-honest':'honest-input'};
+  if(focusMap[targetId]) setTimeout(()=>document.getElementById(focusMap[targetId])?.focus(),500);
+  if(targetId==='5') setTimeout(()=>document.querySelector('.code-box')?.focus(),500);
+}
+
+// Show cover on init
+(()=>{
+  const c=getEl('cover');
+  if(c){ c.classList.add('visible','active'); }
+})();
+
+function goNext(){
+  const idx=STEP_ORDER.indexOf(String(currentStep));
+  if(idx<STEP_ORDER.length-1) navigateTo(STEP_ORDER[idx+1]);
+}
+function goNextConditional(){
+  rebuildStepOrder();
+  goNext();
+}
+
+/* ══════════════════════════
+   STEP 1: FIRST NAME
+══════════════════════════ */
+document.getElementById('firstName-input').addEventListener('input',function(){
+  firstName=this.value.trim();
+  document.getElementById('step1-btn').disabled=!firstName;
+});
+document.getElementById('firstName-input').addEventListener('keydown',e=>{ if(e.key==='Enter'&&firstName) goNext(); });
+
+/* ══════════════════════════
+   STEP 2: LAST NAME
+══════════════════════════ */
+document.getElementById('lastName-input').addEventListener('input',function(){
+  lastName=this.value.trim();
+  document.getElementById('step2-btn').disabled=!lastName;
+  if(firstName) document.getElementById('s2-heading').textContent=`And your last name, ${firstName}?`;
+});
+document.getElementById('lastName-input').addEventListener('keydown',e=>{ if(e.key==='Enter'&&lastName) goNext(); });
+
+/* ══════════════════════════
+   STEP 3: EMAIL
+══════════════════════════ */
+const emailInput=document.getElementById('email-input');
+emailInput.addEventListener('input',function(){
+  const val=this.value.trim();
+  const err=document.getElementById('email-error');
+  const btn=document.getElementById('step3-btn');
+  if(!val){ err.textContent=''; btn.disabled=true; return; }
+  const valid=/(@ox\.ac\.uk|@oxford\.ac\.uk)$/i.test(val);
+  err.textContent=val.includes('@')&&!valid?'Please use your @ox.ac.uk or @oxford.ac.uk email.':'';
+  btn.disabled=!valid;
+});
+emailInput.addEventListener('keydown',e=>{ if(e.key==='Enter') submitEmail(); });
+function submitEmail(){
+  if(!document.getElementById('step3-btn').disabled){
+    userEmail=emailInput.value.trim();
+    document.getElementById('verify-subtext').innerHTML=`We sent a code to <strong>${userEmail}</strong>`;
+    goNext();
+  }
+}
+
+/* ══════════════════════════
+   STEP 5: CODE VERIFICATION
+══════════════════════════ */
+(function(){
+  const boxes=document.querySelectorAll('.code-box');
+  function checkCode(){
+    const code=Array.from(boxes).map(b=>b.value).join('');
+    document.getElementById('step5-btn').disabled=code.length<6;
+    document.getElementById('code-error').textContent='';
+  }
+  boxes.forEach((box,i)=>{
+    box.addEventListener('input',function(){
+      const val=this.value.replace(/\D/g,'');
+      this.value=val?val[0]:'';
+      if(val&&i<boxes.length-1) boxes[i+1].focus();
+      this.classList.toggle('filled',!!val);
+      checkCode();
+    });
+    box.addEventListener('keydown',function(e){
+      if(e.key==='Backspace'&&!this.value&&i>0){ boxes[i-1].focus(); boxes[i-1].value=''; boxes[i-1].classList.remove('filled'); checkCode(); }
+    });
+    box.addEventListener('paste',function(e){
+      e.preventDefault();
+      const pasted=(e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');
+      pasted.split('').forEach((ch,j)=>{ if(boxes[i+j]){ boxes[i+j].value=ch; boxes[i+j].classList.add('filled'); } });
+      boxes[Math.min(i+pasted.length,boxes.length-1)].focus();
+      checkCode();
+    });
+  });
+})();
+
+function verifyCode(){
+  const boxes=document.querySelectorAll('.code-box');
+  const code=Array.from(boxes).map(b=>b.value).join('');
+  if(code==='123456'||code.length===6){ goNext(); }
+  else {
+    document.getElementById('code-error').textContent='Incorrect code. Try 123456 for this demo.';
+    boxes.forEach(b=>b.style.borderColor='#D84040');
+    setTimeout(()=>boxes.forEach(b=>b.style.borderColor=''),1500);
+  }
+}
+function resendCode(){
+  const boxes=document.querySelectorAll('.code-box');
+  boxes.forEach(b=>{ b.value=''; b.classList.remove('filled'); });
+  document.getElementById('step5-btn').disabled=true;
+  document.getElementById('code-error').textContent='';
+  const lnk=document.querySelector('.resend-link span');
+  lnk.textContent='Sent!';
+  setTimeout(()=>lnk.textContent='Resend',2000);
+  boxes[0].focus();
+}
+
+/* ══════════════════════════
+   STEP 5pw: PASSWORD — SVG eye toggle
+══════════════════════════ */
+const EYE_OPEN  = `<ellipse cx="9" cy="9" rx="7" ry="4.5"/><circle cx="9" cy="9" r="2"/>`;
+const EYE_SHUT  = `<line x1="2" y1="9" x2="16" y2="9"/><line x1="4" y1="6" x2="3" y2="4"/><line x1="9" y1="5" x2="9" y2="3"/><line x1="14" y1="6" x2="15" y2="4"/>`;
+
+function togglePw(inputId, btn){
+  const inp=document.getElementById(inputId);
+  const showing=inp.type==='text';
+  inp.type=showing?'password':'text';
+  const svgId='eye-'+inputId;
+  const svg=document.getElementById(svgId);
+  if(svg) svg.innerHTML=showing?EYE_OPEN:EYE_SHUT;
+}
+function checkPasswords(){
+  const pw=document.getElementById('pw-input').value;
+  const pw2=document.getElementById('pw-confirm').value;
+  const err=document.getElementById('pw-error');
+  const btn=document.getElementById('step5pw-btn');
+  if(pw.length>0&&pw2.length>0&&pw!==pw2){
+    err.textContent="Passwords don't match.";
+    btn.disabled=true;
+  } else {
+    err.textContent='';
+    btn.disabled=!(pw.length>=8&&pw===pw2);
+  }
+}
+document.getElementById('pw-input').addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('pw-confirm').focus(); });
+document.getElementById('pw-confirm').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!document.getElementById('step5pw-btn').disabled) goNext(); });
+
+/* ══════════════════════════
+   STEP 6: COLLEGES — debounced
+══════════════════════════ */
+const OXFORD_COLLEGES=['All Souls','Balliol','Brasenose','Christ Church','Corpus Christi','Exeter','Green Templeton','Harris Manchester','Hertford','Jesus','Keble','Kellogg','Lady Margaret Hall','Linacre','Lincoln','Magdalen','Mansfield','Merton','New College','Nuffield','Oriel','Pembroke',"Queen's",'Reuben',"Regent's Park",'Somerville',"St Anne's","St Antony's","St Catherine's",'St Cross','St Edmund Hall',"St Hilda's","St Hugh's","St John's","St Peter's",'Trinity','University','Wadham','Wolfson','Worcester','Wycliffe Hall'];
+
+function buildCollegeChips(filter=''){
+  const c=document.getElementById('college-chips');
+  c.innerHTML='';
+  OXFORD_COLLEGES.filter(x=>!filter||x.toLowerCase().includes(filter.toLowerCase())).forEach(college=>{
+    const chip=document.createElement('div');
+    chip.className='chip'+(userCollege===college?' selected':'');
+    chip.textContent=college;
+    chip.onclick=()=>selectCollege(chip,college);
+    c.appendChild(chip);
+  });
+}
+function selectCollege(el,college){
+  userCollege=college;
+  document.querySelectorAll('#college-chips .chip').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('step6-btn').disabled=false;
+}
+let collegeDebounceTimer;
+function filterCollegesDebounced(){
+  clearTimeout(collegeDebounceTimer);
+  collegeDebounceTimer=setTimeout(()=>buildCollegeChips(document.getElementById('college-search').value),120);
+}
+buildCollegeChips();
+
+/* ══════════════════════════
+   STEP 8: GOALS
+══════════════════════════ */
+function toggleGoal(el){
+  el.classList.toggle('selected');
+  userGoals=Array.from(document.querySelectorAll('#goal-chips .chip.selected')).map(c=>c.dataset.goal);
+}
+
+/* ══════════════════════════
+   CHIP / CARD HELPERS
+══════════════════════════ */
+function selectSingle(el,qid){
+  el.closest('.ob-step').querySelectorAll(`[data-q="${qid}"]`).forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  answers[qid]=el.textContent.trim();
+  const btn=document.getElementById('btn-q-'+qid);
+  if(btn) btn.disabled=false;
+}
+function toggleMulti(el,qid,btnId){
+  el.classList.toggle('selected');
+  const sel=el.closest('.ob-step').querySelectorAll(`[data-q="${qid}"].selected`);
+  answers[qid]=Array.from(sel).map(c=>c.textContent.trim());
+  const btn=document.getElementById(btnId);
+  if(btn) btn.disabled=sel.length===0;
+}
+
+// TAP CARD (single-select, same as selectSingle but for .tap-card)
+function selectTapCard(el,qid){
+  el.closest('.ob-step').querySelectorAll('.tap-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  answers[qid]=el.textContent.trim();
+  const btn=document.getElementById('btn-q-'+qid);
+  if(btn) btn.disabled=false;
+}
+
+// DATING CARD
+function selectDatingCard(el,qid){
+  el.closest('.ob-step').querySelectorAll('.dating-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  answers[qid]=el.textContent.trim();
+  const btn=document.getElementById('btn-q-'+qid);
+  if(btn) btn.disabled=false;
+}
+
+// RANK TAP (max N selections, circular dequeue)
+const rankQueues={};
+function rankTap(el,qid,btnId,maxN){
+  if(!rankQueues[qid]) rankQueues[qid]=[];
+  const q=rankQueues[qid];
+  if(el.classList.contains('selected')){
+    // Deselect — remove from queue and renumber
+    const idx=q.indexOf(el);
+    if(idx>-1) q.splice(idx,1);
+    el.classList.remove('selected');
+  } else {
+    if(q.length>=maxN){
+      // Evict oldest
+      const oldest=q.shift();
+      oldest.classList.remove('selected');
+    }
+    q.push(el);
+    el.classList.add('selected');
+  }
+  // Update rank badges
+  el.closest('.ob-step').querySelectorAll('.rank-card').forEach(c=>{ c.querySelector('.rank-badge').textContent=''; });
+  q.forEach((card,i)=>{ card.querySelector('.rank-badge').textContent=i+1; });
+  answers[qid]=q.map(c=>c.textContent.replace(/^\d+/,'').trim());
+  const btn=document.getElementById(btnId);
+  if(btn) btn.disabled=q.length===0;
+}
+
+// ENERGY SLIDER
+const ENERGY_LABELS=['Quite introverted','Selective — quality over quantity','Balanced — I need both','Very social — I thrive around people','Extroverted — I need people to recharge'];
+function updateEnergySlider(val){
+  const v=parseInt(val);
+  document.getElementById('energy-label').textContent=ENERGY_LABELS[v];
+  answers['energy']=ENERGY_LABELS[v];
+}
+// Init slider
+updateEnergySlider(2);
+
+// Study / honest inputs
+document.getElementById('study-input').addEventListener('input',function(){
+  document.getElementById('btn-q-study').disabled=!this.value.trim();
+});
+document.getElementById('study-input').addEventListener('keydown',e=>{ if(e.key==='Enter'&&document.getElementById('study-input').value.trim()) goNextConditional(); });
+document.getElementById('honest-input').addEventListener('keydown',e=>{ if(e.key==='Enter') goNextConditional(); });
+
+/* ══════════════════════════
+   STEP 5cv: CV UPLOAD
+══════════════════════════ */
+let cvFilename = null;
+
+function cvSelected(input){
+  const file = input.files[0];
+  if(!file) return;
+  if(file.size > 5*1024*1024){ alert('File must be under 5MB.'); return; }
+  cvFilename = file.name;
+  renderCvSuccess();
+}
+function cvDragOver(e){
+  e.preventDefault();
+  document.getElementById('cv-zone').classList.add('drag-over');
+}
+function cvDragLeave(e){
+  document.getElementById('cv-zone').classList.remove('drag-over');
+}
+function cvDrop(e){
+  e.preventDefault();
+  document.getElementById('cv-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if(!file) return;
+  if(file.size > 5*1024*1024){ alert('File must be under 5MB.'); return; }
+  cvFilename = file.name;
+  renderCvSuccess();
+}
+function renderCvSuccess(){
+  const inner = document.getElementById('cv-zone-inner');
+  inner.innerHTML = `
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="var(--success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 14l6 6L22 8"/>
+    </svg>
+    <p class="upload-filename">${cvFilename}</p>
+    <span class="upload-remove" onclick="removeCv(event)">Remove</span>`;
+  document.getElementById('cv-zone').style.borderStyle = 'solid';
+  document.getElementById('cv-zone').style.borderColor = 'var(--success)';
+}
+function removeCv(e){
+  e.stopPropagation();
+  cvFilename = null;
+  document.getElementById('cv-file-input').value = '';
+  document.getElementById('cv-zone').style.borderStyle = 'dashed';
+  document.getElementById('cv-zone').style.borderColor = 'var(--border2)';
+  document.getElementById('cv-zone-inner').innerHTML = `
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 20V10"/><path d="M9 15l5-5 5 5"/><path d="M6 22h16"/>
+    </svg>
+    <p style="font-size:14px;color:var(--text2);margin-top:12px">Drag a file here or tap to browse</p>
+    <p style="font-size:12px;color:var(--text3);margin-top:6px">PDF, Word, or plain text · Max 5MB</p>`;
+}
+
+/* ══════════════════════════
+   STEP q-friends: FRIEND CHECK
+══════════════════════════ */
+const friendCheckTimers = [null,null,null];
+function checkFriend(idx, val){
+  val = val.trim();
+  clearTimeout(friendCheckTimers[idx]);
+  const statusEl = document.getElementById('friend-status-'+idx);
+  const subEl    = document.getElementById('friend-sub-'+idx);
+  if(!val){ statusEl.innerHTML=''; subEl.innerHTML=''; return; }
+
+  // Show spinner
+  statusEl.innerHTML = '<div class="spinner"></div>';
+  subEl.innerHTML = '';
+
+  friendCheckTimers[idx] = setTimeout(()=>{
+    const isOxford = /(@ox\.ac\.uk|@oxford\.ac\.uk)$/i.test(val);
+    if(isOxford){
+      statusEl.innerHTML = '<div class="friend-dot"></div><span class="friend-status-found">✓ On Supercharged</span>';
+      subEl.innerHTML = '<span style="font-size:12px;font-style:italic;color:var(--text3)">We\'ll add them to your network when you join.</span>';
+    } else {
+      statusEl.innerHTML = '<span class="friend-status-notfound">Not on Supercharged yet</span>';
+      subEl.innerHTML = `<button class="btn-invite" onclick="copyInvite(this)">Copy invite link</button>`;
+    }
+  }, 1200);
+}
+function copyInvite(btn){
+  btn.textContent = 'Link copied ✓';
+  btn.style.color = 'var(--success)';
+  setTimeout(()=>{ btn.textContent='Copy invite link'; btn.style.color=''; }, 2000);
+}
+
+/* ══════════════════════════
+   ENTER APP
+══════════════════════════ */
+function enterApp(){
+  const overlay=document.getElementById('ob-overlay');
+  overlay.style.opacity='0';
+  overlay.style.pointerEvents='none';
+  setTimeout(()=>{
+    overlay.style.display='none';
+    const endH=document.getElementById('end-heading');
+    if(endH) endH.textContent=firstName?`You're in, ${firstName}.`:`You're in.`;
+    const end=document.getElementById('end-screen');
+    end.style.display='flex';
+    end.querySelector('div').style.animation='fadeUp 0.8s var(--ease) both';
+  },800);
+  document.getElementById('back-btn').classList.remove('visible');
+  document.getElementById('progress-dots').style.opacity='0';
+}
+
+/* Init */
+updateBackBtn();
+updateDots('cover');
+</script>
+</body>
+</html>

@@ -39,6 +39,25 @@
             "commands": "npm install",
             "version": "v3",
             "path": "functions/discoveryEngine"
+        },
+        {
+            "$id": "cvParser",
+            "name": "cvParser",
+            "enabled": true,
+            "live": true,
+            "logging": true,
+            "runtime": "node-22",
+            "deployment": "dist",
+            "vars": [],
+            "events": [
+                "buckets.cvs.files.*.create"
+            ],
+            "schedule": "",
+            "timeout": 60,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "version": "v1",
+            "path": "functions/cvParser"
         }
     ],
     "tablesDB": [
@@ -70,9 +89,23 @@
                     "array": false
                 },
                 {
-                    "key": "full_name",
+                    "key": "email",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 256,
+                    "array": false
+                },
+                {
+                    "key": "first_name",
                     "type": "varchar",
                     "required": true,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "last_name",
+                    "type": "varchar",
+                    "required": false,
                     "size": 128,
                     "array": false
                 },
@@ -84,17 +117,101 @@
                     "array": false
                 },
                 {
-                    "key": "course",
+                    "key": "cv_file_id",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 36,
+                    "array": false
+                },
+                {
+                    "key": "cv_parsed_text",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 50000,
+                    "array": false
+                },
+                {
+                    "key": "cv_indexed",
+                    "type": "boolean",
+                    "required": false,
+                    "default": false,
+                    "array": false
+                },
+                {
+                    "key": "goals",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": true
+                },
+                {
+                    "key": "career_field",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": false
+                },
+                {
+                    "key": "desired_connections",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 128,
+                    "array": true
+                },
+                {
+                    "key": "networking_style",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": false
+                },
+                {
+                    "key": "social_circles",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": true
+                },
+                {
+                    "key": "friendship_values",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": true
+                },
+                {
+                    "key": "intellectual_identity",
                     "type": "varchar",
                     "required": false,
                     "size": 128,
                     "array": false
                 },
                 {
-                    "key": "stage",
+                    "key": "wish_studied",
                     "type": "varchar",
                     "required": false,
-                    "size": 32,
+                    "size": 1024,
+                    "array": false
+                },
+                {
+                    "key": "work_style",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 128,
+                    "array": false
+                },
+                {
+                    "key": "project_stage",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
+                    "array": false
+                },
+                {
+                    "key": "relationship_intent",
+                    "type": "varchar",
+                    "required": false,
+                    "size": 64,
                     "array": false
                 },
                 {
@@ -104,17 +221,24 @@
                     "array": false
                 },
                 {
-                    "key": "primary_intent",
+                    "key": "honest_thing",
                     "type": "varchar",
-                    "required": true,
-                    "size": 32,
+                    "required": false,
+                    "size": 1024,
                     "array": false
                 },
                 {
-                    "key": "free_text_responses",
+                    "key": "friend_references",
                     "type": "varchar",
                     "required": false,
-                    "size": 10000,
+                    "size": 256,
+                    "array": true
+                },
+                {
+                    "key": "is_onboarding_complete",
+                    "type": "boolean",
+                    "required": false,
+                    "default": false,
                     "array": false
                 },
                 {
@@ -141,11 +265,19 @@
                     ]
                 },
                 {
-                    "key": "idx_intent",
+                    "key": "idx_email",
                     "type": "key",
                     "status": "available",
                     "attributes": [
-                        "primary_intent"
+                        "email"
+                    ]
+                },
+                {
+                    "key": "idx_college",
+                    "type": "key",
+                    "status": "available",
+                    "attributes": [
+                        "college"
                     ]
                 }
             ]

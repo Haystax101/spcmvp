@@ -1,6 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
+:root {
+  --bg: #FFFEFD;
+  --text: #1A1A1A;
+  --text2: #6B6B6B;
+  --text3: #AFAFAF;
+  --border: #1A1A1A;
+  --border-light: #DDDBD8;
+  --border2: #DDDBD8;
+  --accent: #F5C842;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius-pill: 999px;
+  --error: #D84040;
+  --success: #22A85A;
+}
+
+@theme {
+  --color-bg: var(--bg);
+  --color-accent: var(--accent);
+  --color-border-light: var(--border-light);
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "DM Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
 body {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  background-color: #f9fafb;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Custom Utilities ── */
+
+.font-playfair { font-family: 'Playfair Display', serif; }
+.font-dm-sans { font-family: 'DM Sans', sans-serif; }
+.font-jetbrains { font-family: 'JetBrains Mono', monospace; }
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 10px;
+}
+
+/* ── Canvas Background ── */
+#topo-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  opacity: 0.04;
+  pointer-events: none;
 }
