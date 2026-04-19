@@ -1,0 +1,80 @@
+{
+  "startedAt": "2026-04-19T14:53:27.935Z",
+  "dryRun": true,
+  "model": "gemma4:e2b-it-q4_K_M",
+  "minKeepConfidence": 0.7,
+  "deleteAfterFailedPasses": 2,
+  "total": 2,
+  "keep": 0,
+  "needsReview": 0,
+  "deleteCandidates": 2,
+  "deleted": 0,
+  "errors": 0,
+  "records": [
+    {
+      "person_id": "69e3c664002408ad90d0",
+      "full_name": "Hope Ableton Pahlavi",
+      "action": "marked_delete_candidate",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Hope Ableton Pahlavi"
+      },
+      "query": "site:linkedin.com Hope Ableton Pahlavi Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Hope Ableton Pahlavi\"",
+          "count": 0
+        },
+        {
+          "query": "\"Hope Ableton Pahlavi\" linkedin",
+          "count": 5
+        }
+      ],
+      "signals": [],
+      "confidence": 0,
+      "identity_match_score": 0.1,
+      "oxford_affiliation_score": 0,
+      "linkedin_url": "",
+      "identity_evidence": [],
+      "oxford_evidence": [],
+      "rationale": "",
+      "fail_count": 1
+    },
+    {
+      "person_id": "69e3c6640038ff4d9797",
+      "full_name": "Samwel",
+      "action": "marked_delete_candidate",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Samwel"
+      },
+      "query": "site:linkedin.com Samwel Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Samwel\"",
+          "count": 0
+        },
+        {
+          "query": "\"Samwel\" linkedin",
+          "count": 5
+        }
+      ],
+      "signals": [],
+      "confidence": 0,
+      "identity_match_score": 0.1,
+      "oxford_affiliation_score": 0,
+      "linkedin_url": "",
+      "identity_evidence": [],
+      "oxford_evidence": [],
+      "rationale": "",
+      "fail_count": 1
+    }
+  ],
+  "finishedAt": "2026-04-19T14:53:43.928Z"
+}

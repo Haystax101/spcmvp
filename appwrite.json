@@ -61,6 +61,26 @@
             "commands": "npm install",
             "version": "v1",
             "path": "functions/cvParser"
+        },
+        {
+            "$id": "biosContext",
+            "name": "biosContext",
+            "enabled": true,
+            "live": true,
+            "logging": true,
+            "execute": [
+                "users"
+            ],
+            "runtime": "node-22",
+            "deployment": "dist",
+            "vars": [],
+            "events": [],
+            "schedule": "",
+            "timeout": 15,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "version": "v1",
+            "path": "functions/biosContext"
         }
     ],
     "tablesDB": [
@@ -71,6 +91,94 @@
         }
     ],
     "tables": [
+        {
+            "$id": "matches",
+            "$permissions": [
+                "read(\"users\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "supercharged",
+            "name": "Matches",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "user_a_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "user_b_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "compatibility_score",
+                    "type": "double",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "min": -1.7976931348623157e+308,
+                    "max": 1.7976931348623157e+308
+                },
+                {
+                    "key": "narrative",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 5000,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "top_drivers",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 1024,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_user_a",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "user_a_id"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_user_b",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "user_b_id"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_match_pair",
+                    "type": "unique",
+                    "status": "available",
+                    "columns": [
+                        "user_a_id",
+                        "user_b_id"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
         {
             "$id": "profiles",
             "$permissions": [
@@ -88,346 +196,443 @@
                     "key": "user_id",
                     "type": "varchar",
                     "required": true,
+                    "array": false,
                     "size": 36,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "full_name",
                     "type": "varchar",
                     "required": true,
+                    "array": false,
                     "size": 128,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "primary_intent",
                     "type": "varchar",
                     "required": true,
+                    "array": false,
                     "size": 32,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "email",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 256,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "first_name",
                     "type": "varchar",
                     "required": true,
+                    "array": false,
                     "size": 128,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "last_name",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 128,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "birthday_day",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 2,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "birthday_month",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 2,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "birthday_year",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 4,
-                    "array": false
-                },
-                {
-                    "key": "birthday_at",
-                    "type": "datetime",
-                    "required": false,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "username",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 20,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "college",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 64,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "course",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 128,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "stage",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 32,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "study_subject",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 128,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "year_of_study",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 32,
-                    "array": false
-                },
-                {
-                    "key": "free_text_responses",
-                    "type": "text",
-                    "required": false,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "cv_file_id",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 36,
-                    "array": false
-                },
-                {
-                    "key": "cv_parsed_text",
-                    "type": "mediumtext",
-                    "required": false,
-                    "array": false
-                },
-                {
-                    "key": "cv_indexed",
-                    "type": "boolean",
-                    "required": false,
-                    "default": false,
-                    "array": false
-                },
-                {
-                    "key": "goals",
-                    "type": "varchar",
-                    "required": false,
-                    "size": 64,
-                    "array": true
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "career_field",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 64,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "career_subfield",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 128,
-                    "array": false
-                },
-                {
-                    "key": "building_description",
-                    "type": "text",
-                    "required": false,
-                    "array": false
-                },
-                {
-                    "key": "desired_connections",
-                    "type": "varchar",
-                    "required": false,
-                    "size": 128,
-                    "array": true
-                },
-                {
-                    "key": "startup_connections",
-                    "type": "varchar",
-                    "required": false,
-                    "size": 128,
-                    "array": true
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "networking_style",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 64,
-                    "array": false
-                },
-                {
-                    "key": "social_circles",
-                    "type": "varchar",
-                    "required": false,
-                    "size": 64,
-                    "array": true
-                },
-                {
-                    "key": "friendship_values",
-                    "type": "varchar",
-                    "required": false,
-                    "size": 64,
-                    "array": true
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "intellectual_identity",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 128,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "intellectual_venue",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 128,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "intellectual_ambition",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 256,
-                    "array": false
-                },
-                {
-                    "key": "wish_studied",
-                    "type": "text",
-                    "required": false,
-                    "array": false
-                },
-                {
-                    "key": "study_wish",
-                    "type": "text",
-                    "required": false,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "work_style",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 128,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "project_stage",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 64,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "relationship_intent",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 64,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "relationship_status",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 64,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "sexuality",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
                     "size": 64,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
-                    "key": "dating_appearance",
-                    "type": "varchar",
-                    "required": false,
-                    "size": 64,
-                    "array": true
-                },
-                {
-                    "key": "dating_personality",
-                    "type": "varchar",
-                    "required": false,
-                    "size": 64,
-                    "array": true
-                },
-                {
-                    "key": "dating_hobbies",
-                    "type": "varchar",
-                    "required": false,
-                    "size": 128,
-                    "array": true
-                },
-                {
-                    "key": "social_energy",
-                    "type": "integer",
-                    "required": false,
-                    "array": false
-                },
-                {
-                    "key": "honest_thing",
+                    "key": "free_text_responses",
                     "type": "text",
                     "required": false,
-                    "array": false
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "building_description",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "wish_studied",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "study_wish",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "hobby",
                     "type": "text",
                     "required": false,
-                    "array": false
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "music",
                     "type": "text",
                     "required": false,
-                    "array": false
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "societies",
                     "type": "text",
                     "required": false,
-                    "array": false
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "honest_thing",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "goals",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "desired_connections",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "startup_connections",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "social_circles",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "friendship_values",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "dating_appearance",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "dating_personality",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "dating_hobbies",
+                    "type": "varchar",
+                    "required": false,
+                    "array": true,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
                 },
                 {
                     "key": "friend_references",
                     "type": "varchar",
                     "required": false,
+                    "array": true,
                     "size": 256,
-                    "array": true
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "cv_indexed",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
                 },
                 {
                     "key": "is_onboarding_complete",
                     "type": "boolean",
                     "required": false,
-                    "default": false,
-                    "array": false
+                    "array": false,
+                    "default": false
                 },
                 {
                     "key": "is_indexed",
                     "type": "boolean",
                     "required": false,
-                    "default": false,
-                    "array": false
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "social_energy",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
                 },
                 {
                     "key": "last_scanned_at",
                     "type": "datetime",
                     "required": false,
-                    "array": false
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "cv_parsed_text",
+                    "type": "mediumtext",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "birthday_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
                 }
             ],
             "indexes": [
@@ -435,141 +640,702 @@
                     "key": "idx_user_auth",
                     "type": "unique",
                     "status": "available",
-                    "attributes": [
+                    "columns": [
                         "user_id"
-                    ]
+                    ],
+                    "orders": []
                 },
                 {
                     "key": "idx_email",
                     "type": "key",
                     "status": "available",
-                    "attributes": [
+                    "columns": [
                         "email"
-                    ]
+                    ],
+                    "orders": []
                 },
                 {
                     "key": "idx_college",
                     "type": "key",
                     "status": "available",
-                    "attributes": [
+                    "columns": [
                         "college"
-                    ]
+                    ],
+                    "orders": []
                 },
                 {
                     "key": "idx_intent",
                     "type": "key",
                     "status": "available",
-                    "attributes": [
+                    "columns": [
                         "primary_intent"
-                    ]
+                    ],
+                    "orders": []
                 }
             ]
         },
         {
-            "$id": "matches",
-            "$permissions": [
-                "read(\"users\")",
-                "create(\"users\")"
-            ],
+            "$id": "societies",
+            "$permissions": [],
             "databaseId": "supercharged",
-            "name": "Matches",
+            "name": "Societies",
             "enabled": true,
             "rowSecurity": false,
             "columns": [
                 {
-                    "key": "user_a_id",
+                    "key": "name",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "sports",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Sports",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "name",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "people",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "People",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "full_name",
                     "type": "varchar",
                     "required": true,
-                    "size": 36,
-                    "array": false
+                    "array": false,
+                    "size": 200,
+                    "default": null,
+                    "encrypt": false
                 },
                 {
-                    "key": "user_b_id",
+                    "key": "normalized_name",
                     "type": "varchar",
                     "required": true,
-                    "size": 36,
-                    "array": false
+                    "array": false,
+                    "size": 200,
+                    "default": null,
+                    "encrypt": false
                 },
                 {
-                    "key": "compatibility_score",
-                    "type": "double",
-                    "required": true,
-                    "array": false
-                },
-                {
-                    "key": "narrative",
-                    "type": "varchar",
-                    "required": true,
-                    "size": 5000,
-                    "array": false
-                },
-                {
-                    "key": "top_drivers",
+                    "key": "username",
                     "type": "varchar",
                     "required": false,
+                    "array": false,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "normalized_username",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "profile_url",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
                     "size": 1024,
-                    "array": true
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "linkedin_url",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 1024,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "description",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "source",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "is_enriched",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "last_enriched_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
                 }
             ],
             "indexes": [
                 {
-                    "key": "idx_match_pair",
-                    "type": "unique",
+                    "key": "idx_people_name",
+                    "type": "key",
                     "status": "available",
-                    "attributes": [
-                        "user_a_id",
-                        "user_b_id"
-                    ]
+                    "columns": [
+                        "normalized_name"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_people_username",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "normalized_username"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_people_enrich_queue",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "is_enriched",
+                        "last_enriched_at"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_people_description",
+                    "type": "fulltext",
+                    "status": "available",
+                    "columns": [
+                        "description"
+                    ],
+                    "orders": []
                 }
             ]
         },
         {
-            "$id": "match_logs",
-            "$permissions": [
-                "read(\"any\")",
-                "create(\"any\")"
-            ],
+            "$id": "people_societies",
+            "$permissions": [],
             "databaseId": "supercharged",
-            "name": "Match Logs (Observability)",
+            "name": "People Societies",
             "enabled": true,
             "rowSecurity": false,
             "columns": [
                 {
-                    "key": "user_a_id",
+                    "key": "person_id",
                     "type": "varchar",
                     "required": true,
+                    "array": false,
                     "size": 36,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
-                    "key": "user_b_id",
+                    "key": "society_id",
                     "type": "varchar",
                     "required": true,
+                    "array": false,
                     "size": 36,
-                    "array": false
+                    "default": null,
+                    "encrypt": false
                 },
                 {
-                    "key": "input_context",
+                    "key": "source_csv",
                     "type": "varchar",
-                    "required": true,
-                    "size": 10000,
-                    "array": false
-                },
-                {
-                    "key": "model_output",
-                    "type": "varchar",
-                    "required": true,
-                    "size": 10000,
-                    "array": false
-                },
-                {
-                    "key": "human_feedback",
-                    "type": "boolean",
                     "required": false,
-                    "array": false
+                    "array": false,
+                    "size": 255,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "role",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "first_seen_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "last_seen_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
                 }
             ],
-            "indexes": []
+            "indexes": [
+                {
+                    "key": "idx_people_societies_pair",
+                    "type": "unique",
+                    "status": "available",
+                    "columns": [
+                        "person_id",
+                        "society_id"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_people_societies_society",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "society_id",
+                        "person_id"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_people_societies_person",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "person_id"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "people_sports",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "People Sports",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "person_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "sport_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "source_csv",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 255,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "role",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "first_seen_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "last_seen_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_people_sports_pair",
+                    "type": "unique",
+                    "status": "available",
+                    "columns": [
+                        "person_id",
+                        "sport_id"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_people_sports_sport",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "sport_id",
+                        "person_id"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_people_sports_person",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "person_id"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "conversations",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Conversations",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "conversation_type",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "default": "direct",
+                    "format": "enum",
+                    "elements": [
+                        "direct",
+                        "group"
+                    ]
+                },
+                {
+                    "key": "title",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 200,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "is_archived",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "last_message_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "creator",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "profiles",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "conversations",
+                    "onDelete": "setNull",
+                    "side": "parent"
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_conv_type",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "conversation_type"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_conv_last_msg",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "last_message_at"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "conversation_members",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Conversation Members",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "conversation",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "conversations",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "conversation_members",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "profile",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "profiles",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "conversation_members",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "role",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "default": "member",
+                    "format": "enum",
+                    "elements": [
+                        "member",
+                        "admin"
+                    ]
+                },
+                {
+                    "key": "muted",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "last_read_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_cm_role",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "role"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_cm_last_read",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "last_read_at"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "messages",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Messages",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "conversation",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "conversations",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "messages",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "sender",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "profiles",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "messages",
+                    "onDelete": "setNull",
+                    "side": "parent"
+                },
+                {
+                    "key": "body",
+                    "type": "text",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "message_type",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "default": "text",
+                    "format": "enum",
+                    "elements": [
+                        "text",
+                        "system"
+                    ]
+                },
+                {
+                    "key": "delivery_status",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "default": "sent",
+                    "format": "enum",
+                    "elements": [
+                        "sent",
+                        "delivered",
+                        "read"
+                    ]
+                },
+                {
+                    "key": "is_edited",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "is_deleted",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "sent_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "reply_to_message_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_msg_sent_at",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "sent_at"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_msg_type",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "message_type"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_msg_status",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "delivery_status"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_msg_body_ft",
+                    "type": "fulltext",
+                    "status": "available",
+                    "columns": [
+                        "body"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_msg_reply_to",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "reply_to_message_id"
+                    ],
+                    "orders": []
+                }
+            ]
         }
     ]
 }

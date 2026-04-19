@@ -1,0 +1,13 @@
+{
+  "name": "verification-local-audit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "audit": "node src/run_audit.js",
+    "audit:dry": "node src/run_audit.js --dry-run --limit 25"
+  },
+  "dependencies": {
+    "node-appwrite": "^24.0.0"
+  }
+}

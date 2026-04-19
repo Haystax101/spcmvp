@@ -1,0 +1,56 @@
+{
+  "startedAt": "2026-04-19T14:48:30.719Z",
+  "dryRun": true,
+  "model": "gemma4:e2b-it-q4_K_M",
+  "minKeepConfidence": 0.7,
+  "deleteAfterFailedPasses": 2,
+  "total": 3,
+  "keep": 0,
+  "needsReview": 0,
+  "deleteCandidates": 1,
+  "deleted": 0,
+  "errors": 2,
+  "records": [
+    {
+      "person_id": "69e3c664002408ad90d0",
+      "full_name": "Hope Ableton Pahlavi",
+      "action": "error",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Hope Ableton Pahlavi"
+      },
+      "error": "Main model returned non-JSON output"
+    },
+    {
+      "person_id": "69e3c6640038ff4d9797",
+      "full_name": "Samwel",
+      "action": "error",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Samwel"
+      },
+      "error": "Main model returned non-JSON output"
+    },
+    {
+      "person_id": "69e3c66500072d73aa4a",
+      "full_name": "Horizons: OxWEST’s 2026 Conference",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 1,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Horizons: OxWEST’s 2026 Conference"
+      },
+      "fail_count": 1,
+      "error": null
+    }
+  ],
+  "finishedAt": "2026-04-19T14:48:48.249Z"
+}

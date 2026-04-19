@@ -1,0 +1,23 @@
+{
+  "69e3c66500072d73aa4a": {
+    "failCount": 1,
+    "lastSeenAt": "2026-04-19T14:48:48.249Z",
+    "lastReason": "non-person entity (Classifier result)",
+    "lastConfidence": 1,
+    "lastQuery": "skipped_non_person"
+  },
+  "69e3c664002408ad90d0": {
+    "failCount": 1,
+    "lastSeenAt": "2026-04-19T14:53:36.329Z",
+    "lastReason": "weak identity and oxford evidence",
+    "lastConfidence": 0,
+    "lastQuery": "site:linkedin.com Hope Ableton Pahlavi Chemistry and Biochemistry Society society Oxford University"
+  },
+  "69e3c6640038ff4d9797": {
+    "failCount": 1,
+    "lastSeenAt": "2026-04-19T14:53:43.928Z",
+    "lastReason": "weak identity and oxford evidence",
+    "lastConfidence": 0,
+    "lastQuery": "site:linkedin.com Samwel Chemistry and Biochemistry Society society Oxford University"
+  }
+}

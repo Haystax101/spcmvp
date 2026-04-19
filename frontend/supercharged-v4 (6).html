@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supercharged</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;0,400;1,300;1,400&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#FFFEFD;--text:#1A1A1A;--text2:#6B6B6B;--text3:#AFAFAF;
+  --border:#1A1A1A;--border-light:#DDDBD8;--border2:#DDDBD8;
+  --accent:#F5C842;--ease:cubic-bezier(0.16,1,0.3,1);
+  --radius-pill:999px;--error:#D84040;--success:#22A85A;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow:hidden}
+#topo{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;opacity:0.04;pointer-events:none !important}
+#logo{position:fixed;top:20px;right:24px;z-index:1000;display:flex;align-items:center;gap:6px;pointer-events:none}
+#progress-dots{position:fixed;top:32px;left:0;right:0;z-index:200;display:flex;justify-content:center;align-items:center;gap:8px;pointer-events:none;transition:opacity 0.3s}
+.pdot{width:7px;height:7px;border-radius:999px;background:var(--border-light);transition:all 0.4s var(--ease)}
+.pdot.active{width:24px;background:var(--text)}
+.pdot.done{background:var(--text)}
+#ob-overlay{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:40px;transition:opacity 0.8s ease}
+.ob-step{position:absolute;width:580px;max-width:92vw;padding:64px 68px 56px;background:var(--bg);display:none;flex-direction:column;opacity:0;pointer-events:none;transform:translateX(32px);transition:opacity 0.42s var(--ease),transform 0.42s var(--ease)}
+.ob-step.visible{display:flex}
+.ob-step.active{opacity:1;pointer-events:all;transform:translateX(0)}
+#step-cover{width:560px;max-width:92vw;padding:0;flex-direction:column;align-items:center;text-align:center}
+.ob-step.interstitial{width:620px;max-width:94vw;padding:72px 68px}
+.ob-heading{font-family:'Playfair Display',serif;font-weight:300;font-size:56px;line-height:1.06;color:var(--text);margin-bottom:16px}
+.ob-heading.sm{font-size:46px}
+.ob-heading.em{font-style:italic}
+.ob-subtext{font-size:16px;color:var(--text2);margin-bottom:16px;line-height:1.6}
+.ob-whisper{font-size:13px;color:var(--text3);font-style:italic;line-height:1.55;margin-bottom:28px}
+.ob-spacer{flex-grow:1;min-height:28px}
+.underline-input{width:100%;background:transparent;border:none;border-bottom:1.5px solid var(--border-light);border-radius:0;font-family:'Playfair Display',serif;font-weight:300;font-size:34px;color:var(--text);padding:12px 0;outline:none;transition:border-color 0.2s;margin-bottom:4px}
+.underline-input::placeholder{color:var(--text3)}
+.underline-input:focus{border-bottom-color:var(--text)}
+.input-error{font-size:13px;color:var(--error);margin-top:6px;min-height:20px}
+.btn-primary{background:var(--text);color:#FFFEFD;font-family:'DM Sans',sans-serif;font-weight:600;font-size:15px;border:none;border-radius:var(--radius-pill);padding:16px 32px;cursor:pointer;transition:opacity 0.18s,transform 0.18s;width:100%}
+.btn-primary:hover:not(:disabled){opacity:0.82;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:0.22;cursor:not-allowed}
+.btn-accent{background:var(--accent);color:#1A1A1A;font-family:'DM Sans',sans-serif;font-weight:600;font-size:15px;border:none;border-radius:var(--radius-pill);padding:16px 32px;cursor:pointer;transition:opacity 0.18s,transform 0.18s;width:100%}
+.btn-accent:hover{opacity:0.88;transform:translateY(-1px)}
+.btn-outline{background:transparent;border:1.5px solid var(--text);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:600;font-size:15px;border-radius:var(--radius-pill);padding:15px 32px;cursor:pointer;transition:opacity 0.18s,transform 0.18s;width:100%}
+.btn-outline:hover{opacity:0.7;transform:translateY(-1px)}
+.chip-grid{display:flex;flex-wrap:wrap;gap:10px}
+.chip{background:#fff;border:1.5px solid var(--border-light);color:var(--text2);border-radius:var(--radius-pill);padding:10px 22px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer;transition:all 0.18s}
+.chip:hover{border-color:var(--text);color:var(--text)}
+.chip.selected{background:var(--text);border-color:var(--text);color:#FFFEFD;font-weight:500}
+.college-search{width:100%;background:transparent;border:none;border-bottom:1.5px solid var(--border-light);border-radius:0;font-family:'DM Sans',sans-serif;font-size:16px;color:var(--text);padding:10px 0;outline:none;transition:border-color 0.2s;margin-bottom:20px}
+.college-search::placeholder{color:var(--text3)}
+.college-search:focus{border-bottom-color:var(--text)}
+.chip-scroll{max-height:260px;overflow-y:auto;padding-bottom:4px}
+.chip-scroll::-webkit-scrollbar{width:3px}
+.chip-scroll::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:4px}
+.code-boxes{display:flex;gap:12px;justify-content:center;margin-bottom:28px}
+.code-box{width:58px;height:70px;border:1.5px solid var(--border-light);border-radius:12px;font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:500;color:var(--text);text-align:center;background:transparent;outline:none;transition:border-color 0.2s;-webkit-appearance:none}
+.code-box:focus{border-color:var(--text)}
+.code-box.filled{border-color:var(--text)}
+.flow-diagram{display:flex;align-items:center;gap:0;margin-top:40px}
+.flow-node{display:flex;flex-direction:column;align-items:center;gap:10px;flex:1}
+.flow-circle{width:52px;height:52px;border-radius:50%;border:1.5px solid var(--border-light);display:flex;align-items:center;justify-content:center;font-size:20px}
+.flow-label{font-size:13px;color:var(--text2);font-weight:500;text-align:center}
+.flow-arrow{font-size:18px;color:var(--border-light);margin-bottom:20px;flex-shrink:0}
+.pw-wrap{position:relative;width:100%;margin-bottom:4px}
+.pw-wrap .underline-input{margin-bottom:0;padding-right:36px}
+.pw-toggle{position:absolute;right:2px;bottom:14px;background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center}
+.pw-toggle:hover svg{stroke:var(--text) !important}
+.pw-spacer{height:24px}
+.resend-link{font-size:13px;color:var(--text3);text-align:center;margin-top:16px}
+.resend-link span{color:var(--text2);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.skip-link{font-size:13px;color:var(--text3);text-align:center;margin-top:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;transition:color 0.2s}
+.skip-link:hover{color:var(--text2)}
+#back-btn{position:fixed;top:28px;left:36px;z-index:210;background:none;border:none;cursor:pointer;font-size:13px;color:var(--text2);font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;padding:6px;opacity:0;pointer-events:none;transition:opacity 0.3s,color 0.2s}
+#back-btn:hover{color:var(--text)}
+#back-btn.visible{opacity:1;pointer-events:all}
+.tap-cards{display:flex;flex-direction:column;gap:10px}
+.tap-card{padding:17px 22px;border:1.5px solid var(--border2);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:var(--text);cursor:pointer;transition:all 0.18s;background:var(--bg)}
+.tap-card:hover{background:#FAFAF8}
+.tap-card.selected{border-color:var(--text);background:#F5F3F0}
+.tap-card-sub{font-size:13px;font-weight:400;color:var(--text3);margin-top:3px}
+.rank-cards{display:flex;flex-direction:column;gap:8px}
+.rank-card{padding:15px 22px;border:1.5px solid var(--border2);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;color:var(--text);cursor:pointer;transition:all 0.18s;background:var(--bg);display:flex;align-items:center;gap:12px}
+.rank-card:hover{background:#FAFAF8}
+.rank-card.selected{border-color:var(--text);background:#F5F3F0}
+.rank-badge{width:22px;height:22px;border-radius:50%;background:var(--text);color:#FFFEFD;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:0;transition:opacity 0.2s}
+.rank-card.selected .rank-badge{opacity:1}
+.upload-zone{border:1.5px dashed var(--border2);border-radius:14px;padding:44px 32px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--text);background:#FAFAF8}
+.upload-zone-inner{display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.upload-filename{font-size:14px;color:var(--text);margin-top:12px;font-weight:500;word-break:break-all}
+.upload-remove{font-size:12px;color:var(--text3);text-decoration:underline;text-underline-offset:2px;cursor:pointer;margin-top:8px;pointer-events:all}
+.slider-wrap{margin:8px 0 20px}
+.slider-active-label{text-align:center;font-size:12px;font-weight:500;color:var(--text);min-height:18px;margin-bottom:16px}
+.slider-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-top:10px}
+.energy-slider{width:100%;-webkit-appearance:none;appearance:none;height:3px;background:var(--border-light);outline:none;border-radius:2px;cursor:pointer}
+.energy-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:var(--text);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.15);transition:transform 0.15s}
+.energy-slider::-webkit-slider-thumb:hover{transform:scale(1.1)}
+.energy-slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--text);cursor:pointer;border:none}
+.spinner{width:16px;height:16px;border:1.5px solid var(--border-light);border-top-color:var(--text3);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cover-svg-wrap{width:200px;height:134px;margin:0 auto 36px}
+.goals-slide{overflow:hidden;max-height:0;opacity:0;transition:max-height 0.45s var(--ease),opacity 0.35s var(--ease)}
+.goals-slide.open{max-height:700px;opacity:1}
+.goals-cat-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);margin:16px 0 8px}
+.goals-cat-label:first-child{margin-top:0}
+@media(max-width:700px){
+  .ob-step{width:92vw;padding:40px 28px 36px}
+  .ob-heading{font-size:38px}
+  .ob-heading.sm{font-size:30px}
+  .underline-input{font-size:26px}
+  .code-boxes{gap:8px}
+  .code-box{width:42px;height:54px;font-size:22px}
+  #back-btn{left:16px}
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<canvas id="topo"></canvas>
+
+<div id="logo">
+  <svg width="14" height="18" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842"/></svg>
+  <span style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:14px;color:#1A1A1A;letter-spacing:-0.01em">supercharged</span>
+</div>
+
+<div id="progress-dots"></div>
+<button id="back-btn" onclick="goBack()">&#8592; Back</button>
+
+<div id="ob-overlay">
+
+  <!-- COVER -->
+  <div class="ob-step" id="step-cover" style="text-align:center;align-items:center">
+    <div class="cover-svg-wrap">
+      <svg viewBox="0 0 180 120" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+        <line x1="90" y1="60" x2="40" y2="30" stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="90" y1="60" x2="150" y2="28" stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="90" y1="60" x2="155" y2="80" stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="90" y1="60" x2="32" y2="85" stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="90" y1="60" x2="100" y2="100" stroke="#DDDBD8" stroke-width="1.2"/>
+        <line x1="40" y1="30" x2="150" y2="28" stroke="#DDDBD8" stroke-width="0.8"/>
+        <line x1="155" y1="80" x2="100" y2="100" stroke="#DDDBD8" stroke-width="0.8"/>
+        <circle cx="40" cy="30" r="4" fill="#DDDBD8"/>
+        <circle cx="150" cy="28" r="4" fill="#DDDBD8"/>
+        <circle cx="155" cy="80" r="4" fill="#DDDBD8"/>
+        <circle cx="32" cy="85" r="4" fill="#DDDBD8"/>
+        <circle cx="100" cy="100" r="3.5" fill="#DDDBD8"/>
+        <circle cx="90" cy="60" r="7" fill="#F5C842"/>
+      </svg>
+    </div>
+    <h1 style="font-family:'Playfair Display',serif;font-weight:300;font-size:40px;line-height:1.1;color:var(--text);margin-bottom:12px">The network that works<br>for you.</h1>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:36px;line-height:1.5">Oxford University students <span style="font-weight:600">only</span> &middot; Verified by email</p>
+    <button class="btn-accent" style="margin-bottom:12px" onclick="goNext()">Sign up</button>
+    <button class="btn-outline" onclick="goNext()">Log in</button>
+  </div>
+
+  <!-- STEP 1: NAME -->
+  <div class="ob-step" id="step-1">
+    <h1 class="ob-heading">What's your name?</h1>
+    <p class="ob-whisper">So your matches know who they're talking to.</p>
+    <input class="underline-input" id="firstName-input" type="text" placeholder="First name" autocomplete="given-name" spellcheck="false" oninput="checkName()" style="margin-bottom:20px">
+    <input class="underline-input" id="lastName-input" type="text" placeholder="Last name" autocomplete="family-name" spellcheck="false" oninput="checkName()">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step1-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 2bday: BIRTHDAY -->
+  <div class="ob-step" id="step-2bday">
+    <h1 class="ob-heading sm">When's your birthday?</h1>
+    <p class="ob-whisper" style="margin-bottom:24px">Used to verify you are 18 or over and to surface age-appropriate matches.</p>
+    <div style="display:flex;gap:12px;align-items:flex-end">
+      <div style="flex:1">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px">Day</div>
+        <input class="underline-input" id="bday-day" type="text" inputmode="numeric" maxlength="2" placeholder="DD" style="font-size:28px;text-align:center" oninput="checkBday()">
+      </div>
+      <div style="flex:1.4">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px">Month</div>
+        <input class="underline-input" id="bday-month" type="text" inputmode="numeric" maxlength="2" placeholder="MM" style="font-size:28px;text-align:center" oninput="checkBday()">
+      </div>
+      <div style="flex:1.6">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px">Year</div>
+        <input class="underline-input" id="bday-year" type="text" inputmode="numeric" maxlength="4" placeholder="YYYY" style="font-size:28px;text-align:center" oninput="checkBday()">
+      </div>
+    </div>
+    <div class="input-error" id="bday-error"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step2bday-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 2u: USERNAME -->
+  <div class="ob-step" id="step-2u">
+    <h1 class="ob-heading sm">Choose your username.</h1>
+    <p class="ob-subtext">This is your handle on Supercharged. You can change it later.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Your username is how people find and reference you before a match is made.</p>
+    <div style="display:flex;align-items:flex-end;width:100%">
+      <span style="font-family:'DM Sans',sans-serif;font-size:18px;color:var(--text3);padding-bottom:14px;flex-shrink:0">@</span>
+      <input class="underline-input" id="username-input" type="text" placeholder="username" autocomplete="off" spellcheck="false" style="flex:1;font-size:28px" oninput="checkUsername()">
+    </div>
+    <div style="font-size:12px;color:var(--text3);text-align:right;margin-top:4px" id="username-count">0/20</div>
+    <div class="input-error" id="username-error"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step2u-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 3: EMAIL -->
+  <div class="ob-step" id="step-3">
+    <h1 class="ob-heading sm">Your Oxford email.</h1>
+    <p class="ob-subtext">We'll send a code to verify you're a current student.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">We verify your student status once. We won't email you anything else without permission.</p>
+    <input class="underline-input" id="email-input" type="email" placeholder="you@college.ox.ac.uk" autocomplete="email" spellcheck="false">
+    <div class="input-error" id="email-error"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step3-btn" disabled onclick="submitEmail()">Send verification code</button>
+  </div>
+
+  <!-- STEP 5: VERIFY -->
+  <div class="ob-step" id="step-5">
+    <h1 class="ob-heading sm">Check your inbox.</h1>
+    <p class="ob-subtext" id="verify-subtext">We sent a code to your email.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">This confirms you're a current Oxford student, not just someone with the domain.</p>
+    <div class="code-boxes">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+      <input class="code-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]*">
+    </div>
+    <div class="input-error" id="code-error" style="text-align:center"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step5-btn" disabled onclick="verifyCode()">Verify</button>
+    <p class="resend-link">Didn't get it? <span onclick="resendCode()">Resend</span></p>
+  </div>
+
+  <!-- STEP 5pw: PASSWORD -->
+  <div class="ob-step" id="step-5pw">
+    <h1 class="ob-heading sm">Create a password.</h1>
+    <p class="ob-subtext">At least 8 characters.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">We use standard encryption. We never store your password in plain text.</p>
+    <div class="pw-wrap">
+      <input class="underline-input" id="pw-input" type="password" placeholder="Password" autocomplete="new-password" spellcheck="false" oninput="checkPasswords()">
+      <button class="pw-toggle" type="button" onclick="togglePw('pw-input','eye-pw-input')" tabindex="-1">
+        <svg id="eye-pw-input" width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round"><path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z"/><circle cx="10" cy="7" r="3"/></svg>
+      </button>
+    </div>
+    <div class="pw-spacer"></div>
+    <div class="pw-wrap">
+      <input class="underline-input" id="pw-confirm" type="password" placeholder="Confirm password" autocomplete="new-password" spellcheck="false" oninput="checkPasswords()">
+      <button class="pw-toggle" type="button" onclick="togglePw('pw-confirm','eye-pw-confirm')" tabindex="-1">
+        <svg id="eye-pw-confirm" width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round"><path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z"/><circle cx="10" cy="7" r="3"/></svg>
+      </button>
+    </div>
+    <div class="input-error" id="pw-error"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step5pw-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 6: COLLEGE -->
+  <div class="ob-step" id="step-6">
+    <h1 class="ob-heading sm">Which college are you at?</h1>
+    <p class="ob-whisper" style="margin-bottom:12px">Helps us surface connections across colleges, not just your own bubble.</p>
+    <input class="college-search" id="college-search" type="text" placeholder="Search colleges..." oninput="filterCollegesDebounced()">
+    <div class="chip-grid chip-scroll" id="college-chips" style="gap:8px"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step6-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+
+  <!-- STEP 6study: WHAT DO YOU STUDY -->
+  <div class="ob-step" id="step-6study">
+    <h1 class="ob-heading sm">What do you study?</h1>
+    <p class="ob-whisper" style="margin-bottom:20px">Helps us match you with people in adjacent or complementary fields.</p>
+    <input class="underline-input" id="study-subject-input" type="text" placeholder="e.g. PPE, Computer Science, Law" style="font-size:26px" autocomplete="off" spellcheck="false" oninput="checkStudy()">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step6study-btn" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 6year: WHICH YEAR -->
+  <div class="ob-step" id="step-6year">
+    <h1 class="ob-heading sm">Which year are you in?</h1>
+    <p class="ob-whisper" style="margin-bottom:20px">Helps us calibrate the kind of connections that make sense for where you are right now.</p>
+    <div class="tap-cards" id="year-cards">
+      <div class="tap-card" data-q="year" onclick="selectTapCard(this,'year')">First year</div>
+      <div class="tap-card" data-q="year" onclick="selectTapCard(this,'year')">Second year</div>
+      <div class="tap-card" data-q="year" onclick="selectTapCard(this,'year')">Third year</div>
+      <div class="tap-card" data-q="year" onclick="selectTapCard(this,'year')">Fourth year or above</div>
+      <div class="tap-card" data-q="year" onclick="selectTapCard(this,'year')">Postgraduate</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-year" disabled onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 7: INTERSTITIAL -->
+  <div class="ob-step interstitial" id="step-7">
+    <h1 class="ob-heading em" style="font-size:44px">"Your profile runs<br>in the background."</h1>
+    <p class="ob-subtext" style="margin-bottom:0">While you're in lectures, Supercharged is computing simulations. By the time you open the app, your best matches are already waiting.</p>
+    <div class="flow-diagram">
+      <div class="flow-node"><div class="flow-circle">&#128100;</div><div class="flow-label">Your profile</div></div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node"><div class="flow-circle" style="border-color:var(--accent);background:rgba(245,200,66,0.08)">&#9889;</div><div class="flow-label">Simulate</div></div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-node"><div class="flow-circle">&#129306;</div><div class="flow-label">Top matches</div></div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNext()">Continue</button>
+  </div>
+
+  <!-- STEP 8: GOALS -->
+  <div class="ob-step" id="step-8">
+    <h1 class="ob-heading sm">What are you here for?</h1>
+    <p class="ob-subtext" style="margin-bottom:8px">Rank your priorities. Tap in order.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Your top priority determines who we surface first. You can select up to four.</p>
+    <div class="rank-cards" id="goal-rank-cards">
+      <div class="rank-card" data-goal="professional" onclick="rankGoal(this)">
+        <div class="rank-badge"></div>
+        <div>Professional<div style="font-size:13px;font-weight:400;color:var(--text3);margin-top:2px">Career, startups, investing, consulting, research</div></div>
+      </div>
+      <div class="rank-card" data-goal="social" onclick="rankGoal(this)">
+        <div class="rank-badge"></div>
+        <div>Social<div style="font-size:13px;font-weight:400;color:var(--text3);margin-top:2px">Friendships, events, new people, community</div></div>
+      </div>
+      <div class="rank-card" data-goal="romantic" onclick="rankGoal(this)">
+        <div class="rank-badge"></div>
+        <div>Romantic<div style="font-size:13px;font-weight:400;color:var(--text3);margin-top:2px">Dating and relationships</div></div>
+      </div>
+      <div class="rank-card" data-goal="academic" onclick="rankGoal(this)">
+        <div class="rank-badge"></div>
+        <div>Academic<div style="font-size:13px;font-weight:400;color:var(--text3);margin-top:2px">Study partners, intellectual exchange, research</div></div>
+      </div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="step8-btn" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-career -->
+  <div class="ob-step" id="step-q-career">
+    <h1 class="ob-heading sm">What field are you heading into?</h1>
+    <p class="ob-subtext" style="margin-bottom:8px">Pick the one that fits best right now.</p>
+    <p class="ob-whisper" style="margin-bottom:16px">Used to weight your matches toward people in or adjacent to your world.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Finance and investing')">Finance and investing</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Consulting and strategy')">Consulting and strategy</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Technology and engineering')">Technology and engineering</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Startups and entrepreneurship')">Startups and entrepreneurship</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Law')">Law</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Medicine and healthcare')">Medicine and healthcare</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Academia and research')">Academia and research</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Policy and public sector')">Policy and public sector</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Creative industries and media')">Creative industries and media</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Social impact and NGOs')">Social impact and NGOs</div>
+      <div class="chip" data-q="career" onclick="selectCareer(this,'Other')">Other</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-career" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+
+  <!-- q-career-other: free text when Other selected -->
+  <div class="ob-step" id="step-q-career-other">
+    <h1 class="ob-heading sm">What field are you heading into?</h1>
+    <p class="ob-subtext">Tell us in your own words.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Free-text, matched semantically. Be as specific as you like.</p>
+    <input class="underline-input" id="career-other-input" type="text" placeholder="e.g. Science policy, Quantitative ecology, Independent research..." style="font-size:22px" autocomplete="off" spellcheck="false" oninput="document.getElementById('btn-q-career-other').disabled=this.value.trim().length<3">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-career-other" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-career-sub: Industry drill-down (conditional on career selection) -->
+  <div class="ob-step" id="step-q-career-sub" style="overflow-y:auto;max-height:92vh">
+    <h1 class="ob-heading sm" id="career-sub-heading">Where specifically?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px" id="career-sub-whisper">Narrows your matches to people in the exact corner of the field you're heading into.</p>
+    <div class="chip-grid" id="career-sub-chips"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-career-sub" disabled onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-intellectual-venue: Where do best conversations happen -->
+  <div class="ob-step" id="step-q-intellectual-venue">
+    <h1 class="ob-heading sm">Where do your best intellectual conversations happen at Oxford?</h1>
+    <p class="ob-whisper" style="margin-bottom:20px">Helps us understand how you connect and where you are most yourself.</p>
+    <div class="tap-cards">
+      <div class="tap-card" data-q="venue" onclick="selectTapCard(this,'venue')">At tutorials or seminars</div>
+      <div class="tap-card" data-q="venue" onclick="selectTapCard(this,'venue')">At dinner</div>
+      <div class="tap-card" data-q="venue" onclick="selectTapCard(this,'venue')">At society talks or panels</div>
+      <div class="tap-card" data-q="venue" onclick="selectTapCard(this,'venue')">One on one, on a walk or over coffee</div>
+      <div class="tap-card" data-q="venue" onclick="selectTapCard(this,'venue')">Honestly, I'm still looking for those conversations</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-venue" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-career-sub-other: free text when Other selected within career sub -->
+  <div class="ob-step" id="step-q-career-sub-other">
+    <h1 class="ob-heading sm" id="career-sub-other-heading">Tell us more.</h1>
+    <p class="ob-subtext">Describe it in your own words.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Free-text answers are matched semantically. Be as specific as you like.</p>
+    <input class="underline-input" id="career-sub-other-input" type="text" style="font-size:22px" autocomplete="off" spellcheck="false">
+    <div class="input-error" id="career-sub-other-error"></div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-career-sub-other" onclick="submitCareerSubOther()">Continue</button>
+    <p class="skip-link" onclick="goNext()">Skip for now</p>
+  </div>
+
+  <!-- q-building-desc: What are you building (conditional) -->
+  <div class="ob-step" id="step-q-building-desc">
+    <h1 class="ob-heading sm">What are you building?</h1>
+    <p class="ob-whisper" style="margin-bottom:20px">A sentence or two is fine. We use this to match you with people who can actually help.</p>
+    <input class="underline-input" id="building-desc-input" type="text" placeholder="e.g. An AI tool for legal research, a sustainable fashion brand..." style="font-size:20px" autocomplete="off" spellcheck="false" oninput="document.getElementById('btn-q-building-desc').disabled=this.value.trim().length<5">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-building-desc" disabled onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-conntype -->
+  <div class="ob-step" id="step-q-conntype">
+    <h1 class="ob-heading sm">What kind of connection are you after?</h1>
+    <p class="ob-whisper" style="margin-bottom:8px">This is the single biggest driver of who we surface for you.</p>
+    <p style="font-size:12px;font-style:italic;color:var(--text3);margin-bottom:12px">Tap to select in order of priority. Max 3.</p>
+    <div class="rank-cards">
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>Someone 2-5 years ahead of me on this exact path</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>A peer who is as driven as I am to push me</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>Someone already inside who can give me honest, unfiltered advice</div>
+      <div class="rank-card" data-q="conntype" onclick="rankTap(this,'conntype','btn-q-conntype',3)"><div class="rank-badge"></div>Someone from a completely different background who can open unexpected doors</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-conntype" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-startup-conntype: Startup-specific connection type -->
+  <div class="ob-step" id="step-q-startup-conntype">
+    <h1 class="ob-heading sm">What kind of co-builder are you looking for?</h1>
+    <p class="ob-whisper" style="margin-bottom:8px">The most important decision a founder makes. Be specific.</p>
+    <p style="font-size:12px;font-style:italic;color:var(--text3);margin-bottom:12px">Tap in order of priority. Max 3.</p>
+    <div class="rank-cards">
+      <div class="rank-card" data-q="startup-conntype" onclick="rankTap(this,'startup-conntype','btn-q-startup-conntype',3)"><div class="rank-badge"></div>A technical co-founder who can build what I can't</div>
+      <div class="rank-card" data-q="startup-conntype" onclick="rankTap(this,'startup-conntype','btn-q-startup-conntype',3)"><div class="rank-badge"></div>A commercial brain to own growth and revenue</div>
+      <div class="rank-card" data-q="startup-conntype" onclick="rankTap(this,'startup-conntype','btn-q-startup-conntype',3)"><div class="rank-badge"></div>A creative partner for product and brand</div>
+      <div class="rank-card" data-q="startup-conntype" onclick="rankTap(this,'startup-conntype','btn-q-startup-conntype',3)"><div class="rank-badge"></div>A domain expert who knows the space deeply</div>
+      <div class="rank-card" data-q="startup-conntype" onclick="rankTap(this,'startup-conntype','btn-q-startup-conntype',3)"><div class="rank-badge"></div>An accountability partner to keep me honest</div>
+      <div class="rank-card" data-q="startup-conntype" onclick="rankTap(this,'startup-conntype','btn-q-startup-conntype',3)"><div class="rank-badge"></div>An investor or someone who can open funding doors</div>
+      <div class="rank-card" data-q="startup-conntype" onclick="rankTap(this,'startup-conntype','btn-q-startup-conntype',3)"><div class="rank-badge"></div>A first customer or design partner</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-startup-conntype" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-project -->
+  <div class="ob-step" id="step-q-project">
+    <h1 class="ob-heading sm">Where are you in your project?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px">Matches you with people at a compatible stage, not just anyone building something.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Just an idea</div>
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Early exploration</div>
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Building an MVP</div>
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Launched and growing</div>
+      <div class="chip" data-q="project" onclick="selectSingle(this,'project')">Not working on anything yet</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-project" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-social -->
+  <div class="ob-step" id="step-q-social">
+    <h1 class="ob-heading sm">What does your Oxford social life look like?</h1>
+    <p class="ob-whisper" style="margin-bottom:16px">We use this to find people who move in overlapping circles, or usefully different ones.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">College events and bops</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Cafe culture and one-on-ones</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Sports and fitness</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Society dinners and formals</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">House parties</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Arts and cultural events</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Nights out in town</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Mostly off-campus</div>
+      <div class="chip" data-q="social" onclick="toggleMulti(this,'social','btn-q-social')">Quiet and low-key</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-social" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-friendship -->
+  <div class="ob-step" id="step-q-friendship">
+    <h1 class="ob-heading sm">What do you value most in a friend?</h1>
+    <p class="ob-whisper" style="margin-bottom:8px">Helps us find you people worth keeping, not just people worth meeting.</p>
+    <p style="font-size:12px;font-style:italic;color:var(--text3);margin-bottom:14px">Pick up to five.</p>
+    <div class="chip-grid" id="friendship-chips">
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Honesty</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Ambition</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Humour</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Loyalty</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Curiosity</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Warmth</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Reliability</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Playfulness</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Depth</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Directness</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Openness</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Shared values</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Spontaneity</div>
+      <div class="chip" data-q="friendship" onclick="toggleFriendship(this)">Emotional intelligence</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-friendship" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-intellect -->
+  <div class="ob-step" id="step-q-intellect">
+    <h1 class="ob-heading sm">What is your favourite niche intellectual topic?</h1>
+    <p class="ob-subtext">The thing you could talk about for hours that most people have not heard of.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Free-text answers are embedded and matched semantically. The more specific and honest, the better your matches.</p>
+    <input class="underline-input" id="intellect-input" type="text" placeholder="e.g. mechanism design, Ottoman history, the semiotics of architecture" style="font-size:20px" autocomplete="off" spellcheck="false">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+
+  <!-- q-romantic-sexuality: Sexuality -->
+  <div class="ob-step" id="step-q-romantic-sexuality">
+    <h1 class="ob-heading sm">How do you identify?</h1>
+    <p class="ob-subtext" style="margin-bottom:8px">This helps us show you to the right people.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Completely private. Never shown publicly without your permission.</p>
+    <div class="tap-cards">
+      <div class="tap-card" data-q="sexuality" onclick="selectTapCard(this,'sexuality')">Straight</div>
+      <div class="tap-card" data-q="sexuality" onclick="selectTapCard(this,'sexuality')">Gay or lesbian</div>
+      <div class="tap-card" data-q="sexuality" onclick="selectTapCard(this,'sexuality')">Bisexual</div>
+      <div class="tap-card" data-q="sexuality" onclick="selectTapCard(this,'sexuality')">Pansexual</div>
+      <div class="tap-card" data-q="sexuality" onclick="selectTapCard(this,'sexuality')">Prefer not to say</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-sexuality" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-romantic-status: Relationship status -->
+  <div class="ob-step" id="step-q-romantic-status">
+    <h1 class="ob-heading sm">Where are you right now?</h1>
+    <p class="ob-subtext" style="margin-bottom:8px">Helps us set the right expectations.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Completely private. Never shown publicly without your permission.</p>
+    <div class="tap-cards">
+      <div class="tap-card" data-q="relstatus" onclick="selectTapCard(this,'relstatus')">Single</div>
+      <div class="tap-card" data-q="relstatus" onclick="selectTapCard(this,'relstatus')">In a relationship</div>
+      <div class="tap-card" data-q="relstatus" onclick="selectTapCard(this,'relstatus')">It's complicated</div>
+      <div class="tap-card" data-q="relstatus" onclick="selectTapCard(this,'relstatus')">Prefer not to say</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-relstatus" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-dating -->
+  <div class="ob-step" id="step-q-dating">
+    <h1 class="ob-heading sm">What are you looking for?</h1>
+    <p class="ob-whisper" style="margin-bottom:20px">We only show you to people who want the same thing.</p>
+    <div class="tap-cards">
+      <div class="tap-card" data-q="dating" onclick="selectTapCard(this,'dating')">Something serious</div>
+      <div class="tap-card" data-q="dating" onclick="selectTapCard(this,'dating')">Keeping it casual</div>
+      <div class="tap-card" data-q="dating" onclick="selectTapCard(this,'dating')">Friendship first, maybe something later</div>
+      <div class="tap-card" data-q="dating" onclick="selectTapCard(this,'dating')">Not sure yet, open to seeing</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-dating" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+
+  <!-- q-dating-appearance: What you find attractive -->
+  <div class="ob-step" id="step-q-dating-appearance">
+    <h1 class="ob-heading sm">What draws you in physically?</h1>
+    <p class="ob-subtext">Pick what resonates. You can select multiple.</p>
+    <p class="ob-whisper" style="margin-bottom:16px">Used to surface people you're more likely to find genuinely attractive. The more honest, the better your matches.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Tall</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Petite</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Athletic build</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Slim</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Curvy</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Well-dressed</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Natural look</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Put-together</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Edgy or alternative</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">Preppy</div>
+      <div class="chip" data-q="dapp" onclick="toggleMulti(this,'dapp','btn-q-dating-appearance')">No strong preference</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-dating-appearance" disabled onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-dating-personality: What you value in a partner -->
+  <div class="ob-step" id="step-q-dating-personality">
+    <h1 class="ob-heading sm">What do you value most in a partner?</h1>
+    <p class="ob-subtext">Pick up to five.</p>
+    <p class="ob-whisper" style="margin-bottom:16px">This shapes who we think you'd genuinely connect with, not just get along with on a first date.</p>
+    <div class="chip-grid" id="dating-personality-chips">
+      <div class="chip" onclick="toggleDatingPersonality(this)">Ambition</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Wit and humour</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Emotional depth</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Confidence</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Kindness</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Curiosity</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Independence</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Warmth</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Playfulness</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Directness</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Creativity</div>
+      <div class="chip" onclick="toggleDatingPersonality(this)">Drive</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-dating-personality" disabled onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-dating-hobbies: Shared interests -->
+  <div class="ob-step" id="step-q-dating-hobbies">
+    <h1 class="ob-heading sm">What would you want to do together?</h1>
+    <p class="ob-subtext">The kind of person who would actually fit into your life.</p>
+    <p class="ob-whisper" style="margin-bottom:16px">Compatibility on how you spend time matters as much as chemistry.</p>
+    <div class="chip-grid">
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Go to exhibitions or galleries</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Cook or eat out</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Hike or be outdoors</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Go to gigs or festivals</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Travel spontaneously</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Stay in and watch films</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Work out together</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Talk for hours over coffee</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Go out and socialise</div>
+      <div class="chip" data-q="dhob" onclick="toggleMulti(this,'dhob','btn-q-dating-hobbies')">Do creative things together</div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-dating-hobbies" disabled onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-study-wish: What field you wish you'd studied -->
+  <div class="ob-step" id="step-q-study-wish">
+    <h1 class="ob-heading sm">What field do you wish you'd studied instead?</h1>
+    <p class="ob-subtext">Or alongside your current subject.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Free-text, matched semantically. The more specific the better.</p>
+    <input class="underline-input" id="study-wish-input" type="text" placeholder="e.g. Neuroscience, Philosophy of mind, Pure mathematics" style="font-size:20px" autocomplete="off" spellcheck="false">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-intellectual-ambition: What do you want to do with your intellectual life -->
+  <div class="ob-step" id="step-q-intellectual-ambition">
+    <h1 class="ob-heading sm">What do you want to do with your intellectual life?</h1>
+    <p class="ob-whisper" style="margin-bottom:20px">Helps us find people who are trying to do something meaningful with what they know, not just collect knowledge.</p>
+    <div class="tap-cards">
+      <div class="tap-card" data-q="intambition" onclick="selectTapCard(this,'intambition')">
+        Apply it
+        <div style="font-size:13px;font-weight:400;color:var(--text3);margin-top:2px">Turn ideas into things that actually work in the world</div>
+      </div>
+      <div class="tap-card" data-q="intambition" onclick="selectTapCard(this,'intambition')">
+        Create with it
+        <div style="font-size:13px;font-weight:400;color:var(--text3);margin-top:2px">Make something new, whether that's writing, research, or building</div>
+      </div>
+      <div class="tap-card" data-q="intambition" onclick="selectTapCard(this,'intambition')">
+        Change something with it
+        <div style="font-size:13px;font-weight:400;color:var(--text3);margin-top:2px">Use knowledge to shift how people think or how systems work</div>
+      </div>
+      <div class="tap-card" data-q="intambition" onclick="selectTapCard(this,'intambition')">
+        Still figuring it out
+        <div style="font-size:13px;font-weight:400;color:var(--text3);margin-top:2px">The interest is real, the direction is not yet</div>
+      </div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-intambition" disabled onclick="goNextConditional()">Continue</button>
+  </div>
+
+  <!-- q-hobby -->
+  <div class="ob-step" id="step-q-hobby">
+    <h1 class="ob-heading sm">What are your hobbies?</h1>
+    <p class="ob-subtext">The things you actually do outside of work and study.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Shared interests outside of work are one of the strongest predictors of genuine connection.</p>
+    <input class="underline-input" id="hobby-input" type="text" placeholder="e.g. climbing, producing music, reading history, pottery, running..." style="font-size:22px" autocomplete="off" spellcheck="false">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" id="btn-q-hobby" disabled onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-societies: Societies -->
+  <div class="ob-step" id="step-q-societies">
+    <h1 class="ob-heading sm">Are you in any societies?</h1>
+    <p class="ob-subtext">Clubs, sports teams, or groups at Oxford.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Shared societies are one of the strongest signals for real connection. We use this to find people already in your world, and worth pulling into it.</p>
+    <input class="underline-input" id="societies-input" type="text" placeholder="e.g. Oxford Union, rowing, Debating Society, Target..." style="font-size:20px" autocomplete="off" spellcheck="false">
+    <p style="font-size:12px;font-style:italic;color:var(--text3);margin-top:6px">Separate with a comma.</p>
+    <div id="societies-none-card" onclick="toggleSocietiesNone()" style="padding:14px 20px;border:1.5px solid var(--border2);border-radius:14px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:var(--text);cursor:pointer;transition:all 0.18s;background:var(--bg);margin-top:12px;text-align:center">I'm not in any</div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- q-music -->
+  <div class="ob-step" id="step-q-music">
+    <h1 class="ob-heading sm">What have you been listening to lately?</h1>
+    <p class="ob-subtext">An artist, a genre, or a specific album.</p>
+    <p class="ob-whisper" style="margin-bottom:20px">Music taste is embedded and matched semantically. It is a surprisingly strong signal for personality and social compatibility.</p>
+    <input class="underline-input" id="music-input" type="text" placeholder="e.g. Kendrick Lamar, ambient techno, Radiohead" style="font-size:22px" autocomplete="off" spellcheck="false">
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+
+  <!-- q-friends -->
+  <div class="ob-step" id="step-q-friends">
+    <h1 class="ob-heading sm">Add your best friends.</h1>
+    <p class="ob-subtext">The people you'd actually want on here with you.</p>
+    <p class="ob-whisper" style="margin-bottom:24px">We'll connect you automatically if they're already here, and give you a link to invite them if not.</p>
+    <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin-bottom:8px" id="friend-bubbles">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;position:relative">
+        <div id="fb-0" onclick="openFriendPopover(0)" style="width:100px;height:100px;border-radius:50%;border:1.5px dashed var(--border2);cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;transition:border-color 0.2s">
+          <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:var(--text);color:#FFFEFD;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:2">1</div>
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="11" r="5"/><path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12"/></svg>
+          <span style="font-size:10px;color:var(--text3);font-family:'DM Sans',sans-serif">Add</span>
+        </div>
+        <div id="fp-0" style="position:absolute;top:110px;left:50%;transform:translateX(-50%);width:200px;background:var(--bg);border:1px solid var(--border2);border-radius:14px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,0.08);z-index:300;display:none">
+          <input style="width:100%;background:transparent;border:none;border-bottom:1.5px solid var(--border-light);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);padding:4px 0;outline:none" placeholder="Name or Oxford email" autocomplete="off" onblur="friendPopBlur(0,this.value)">
+        </div>
+        <div id="fb-invite-0"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;position:relative">
+        <div id="fb-1" onclick="openFriendPopover(1)" style="width:100px;height:100px;border-radius:50%;border:1.5px dashed var(--border2);cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;transition:border-color 0.2s">
+          <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:var(--text);color:#FFFEFD;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:2">2</div>
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="11" r="5"/><path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12"/></svg>
+          <span style="font-size:10px;color:var(--text3);font-family:'DM Sans',sans-serif">Add</span>
+        </div>
+        <div id="fp-1" style="position:absolute;top:110px;left:50%;transform:translateX(-50%);width:200px;background:var(--bg);border:1px solid var(--border2);border-radius:14px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,0.08);z-index:300;display:none">
+          <input style="width:100%;background:transparent;border:none;border-bottom:1.5px solid var(--border-light);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);padding:4px 0;outline:none" placeholder="Name or Oxford email" autocomplete="off" onblur="friendPopBlur(1,this.value)">
+        </div>
+        <div id="fb-invite-1"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;position:relative">
+        <div id="fb-2" onclick="openFriendPopover(2)" style="width:100px;height:100px;border-radius:50%;border:1.5px dashed var(--border2);cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;transition:border-color 0.2s">
+          <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:var(--text);color:#FFFEFD;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:2">3</div>
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" stroke="var(--text3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="11" r="5"/><path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12"/></svg>
+          <span style="font-size:10px;color:var(--text3);font-family:'DM Sans',sans-serif">Add</span>
+        </div>
+        <div id="fp-2" style="position:absolute;top:110px;left:50%;transform:translateX(-50%);width:200px;background:var(--bg);border:1px solid var(--border2);border-radius:14px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,0.08);z-index:300;display:none">
+          <input style="width:100%;background:transparent;border:none;border-bottom:1.5px solid var(--border-light);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);padding:4px 0;outline:none" placeholder="Name or Oxford email" autocomplete="off" onblur="friendPopBlur(2,this.value)">
+        </div>
+        <div id="fb-invite-2"></div>
+      </div>
+    </div>
+    <div class="ob-spacer"></div>
+    <button class="btn-primary" onclick="goNextConditional()">Continue</button>
+    <p class="skip-link" onclick="goNextConditional()">Skip for now</p>
+  </div>
+
+  <!-- CONFIRM -->
+  <div class="ob-step" id="step-confirm" style="text-align:center;align-items:center">
+    <div style="width:56px;height:56px;border-radius:50%;background:rgba(245,200,66,0.12);border:1.5px solid rgba(245,200,66,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 32px">
+      <svg width="14" height="18" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842"/></svg>
+    </div>
+    <h1 class="ob-heading em" id="confirm-heading" style="font-size:52px;text-align:center">You're in.</h1>
+    <p class="ob-subtext" style="text-align:center">Your profile is now live. Supercharged is already running simulations and finding who you need to meet. Expect your first matches within the hour.</p>
+    <div class="ob-spacer"></div>
+    <button class="btn-accent" onclick="enterApp()">Enter Supercharged &#9889;</button>
+  </div>
+
+</div>
+
+<div id="end-screen" style="position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;background:var(--bg);pointer-events:all">
+  <div style="text-align:center;max-width:340px;padding:24px;animation:fadeUp 0.8s var(--ease) both">
+    <div style="margin-bottom:20px"><svg width="14" height="18" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842"/></svg></div>
+    <h1 style="font-family:'Playfair Display',serif;font-weight:300;font-size:44px;line-height:1.1;margin-bottom:16px" id="end-heading">You're in.</h1>
+    <p style="font-size:15px;color:var(--text2);line-height:1.6;margin-bottom:32px">Your profile is live. Supercharged is finding who you need to meet.</p>
+    <button class="btn-outline" style="width:auto;padding:12px 32px" onclick="location.reload()">Start over</button>
+  </div>
+</div>
+
+<script>
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* STATE */
+let firstName='',lastName='',userEmail='',userCollege='';
+let userGoals=[],rank1Cat='',cvSkipped=false,answers={},currentStep='cover';
+
+/* STEP ORDER */
+const FIXED_PRE=['cover','1','2bday','2u','3','5','5pw','6year','6study','6','7','8'];
+const ALWAYS_POST=['q-hobby','q-societies','q-music','q-friends','confirm'];
+const INTERSTITIALS=['7'];
+
+function buildStepOrder(){
+  const pre=[...FIXED_PRE];
+
+  let cond=[];
+  if(rank1Cat==='professional'){
+    cond=['q-career'];
+    if(answers['career']==='Other') cond.push('q-career-other');
+    else{ cond.push('q-career-sub'); if(answers['career-sub']==='Other') cond.push('q-career-sub-other'); }
+    if(answers['career']==='Startups and entrepreneurship'&&answers['career-sub']==='I am already building something') cond.push('q-building-desc');
+    if(answers['career']==='Startups and entrepreneurship') cond.push('q-startup-conntype');
+    else cond.push('q-conntype');
+    
+    if(userGoals.some(g=>g==='find co-founders'||g==='find collaborators'))cond.push('q-project');
+    cond.push('q-social');
+  }else if(rank1Cat==='social'){cond=['q-social','q-friendship'];}
+  else if(rank1Cat==='romantic'){cond=['q-romantic-sexuality','q-romantic-status','q-dating','q-dating-appearance','q-dating-personality','q-dating-hobbies'];}
+  else if(rank1Cat==='academic'){cond=['q-intellect','q-study-wish','q-intellectual-ambition','q-intellectual-venue','q-conntype'];}
+  return [...pre,...cond,...ALWAYS_POST];
+}
+let STEP_ORDER=buildStepOrder();
+function rebuildStepOrder(){STEP_ORDER=buildStepOrder();buildDots();updateDots(currentStep);}
+function getProgressSteps(){return STEP_ORDER.filter(s=>s!=='cover'&&!INTERSTITIALS.includes(s));}
+
+/* CANVAS */
+const canvas=document.getElementById('topo'),ctx=canvas.getContext('2d');
+let lines=[],globalPhase=0,lastDraw=0;
+function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;buildLines();}
+function buildLines(){lines=[];for(let i=0;i<80;i++)lines.push({y:(i/80)*canvas.height,amp:6+Math.random()*8,freq:0.004+Math.random()*0.003,phase:Math.random()*Math.PI*2});}
+function drawCanvas(ts){requestAnimationFrame(drawCanvas);if(ts-lastDraw<33)return;lastDraw=ts;ctx.clearRect(0,0,canvas.width,canvas.height);globalPhase+=0.0003;ctx.strokeStyle='rgba(26,26,26,1)';ctx.lineWidth=0.6;lines.forEach(l=>{ctx.beginPath();for(let x=0;x<=canvas.width;x+=4){const y=l.y+Math.sin(x*l.freq+globalPhase+l.phase)*l.amp;x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.stroke();});}
+window.addEventListener('resize',resize);resize();requestAnimationFrame(drawCanvas);
+
+/* PROGRESS DOTS */
+function buildDots(){const c=document.getElementById('progress-dots');c.innerHTML='';getProgressSteps().forEach(s=>{const d=document.createElement('div');d.className='pdot';d.id='pdot-'+s;c.appendChild(d);});}
+function updateDots(sid){const ps=getProgressSteps();const hidden=sid==='cover'||INTERSTITIALS.includes(String(sid));document.getElementById('progress-dots').style.opacity=hidden?'0':'1';const sIdx=ps.indexOf(String(sid));ps.forEach((s,i)=>{const d=document.getElementById('pdot-'+s);if(!d)return;d.classList.remove('active','done');if(s===String(sid))d.classList.add('active');else if(i<sIdx)d.classList.add('done');});}
+buildDots();
+
+/* NAVIGATION */
+function updateBackBtn(){document.getElementById('back-btn').classList.toggle('visible',currentStep!=='cover'&&currentStep!=='confirm');}
+function goBack(){const idx=STEP_ORDER.indexOf(String(currentStep));if(idx>0)navigateTo(STEP_ORDER[idx-1],'back');}
+function getEl(id){return document.getElementById('step-'+id);}
+
+function navigateTo(targetId,direction='forward'){
+  if(String(targetId)==='confirm'){const h=document.getElementById('confirm-heading');if(h)h.textContent=firstName?`You're in, ${firstName}.`:`You're in.`;}
+  const fromEl=getEl(currentStep),toEl=getEl(targetId);
+  if(!toEl)return;
+  toEl.style.transition='none';toEl.style.opacity='0';
+  toEl.style.transform=direction==='back'?'translateX(-20px)':'translateX(28px)';
+  toEl.style.pointerEvents='none';toEl.classList.add('visible');toEl.classList.remove('active');
+  if(fromEl){
+    fromEl.classList.remove('active');fromEl.style.pointerEvents='none';
+    fromEl.style.transition='opacity 0.35s var(--ease),transform 0.35s var(--ease)';
+    fromEl.style.transform=direction==='back'?'translateX(28px)':'translateX(-20px)';fromEl.style.opacity='0';
+    const onEnd=()=>{fromEl.classList.remove('visible');fromEl.style.transform='';fromEl.style.opacity='';fromEl.style.transition='';fromEl.removeEventListener('transitionend',onEnd);};
+    fromEl.addEventListener('transitionend',onEnd);
+    setTimeout(()=>{fromEl.classList.remove('visible');fromEl.style.transform='';fromEl.style.opacity='';fromEl.style.transition='';},500);
+  }
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    toEl.style.transition='opacity 0.42s var(--ease),transform 0.42s var(--ease)';
+    toEl.style.opacity='1';toEl.style.transform='translateX(0)';toEl.style.pointerEvents='all';toEl.classList.add('active');
+  }));
+  currentStep=targetId;updateDots(targetId);updateBackBtn();
+  closeAllFriendPopovers();
+  const fm={'1':'firstName-input','2u':'username-input','3':'email-input','5pw':'pw-input','6':'college-search'};if(targetId==='q-career-sub')setTimeout(buildCareerSubScreen,100);if(targetId==='q-career-sub-other'){
+    const career=answers['career'];
+    const data=CAREER_SUB_DATA[career];
+    const h=document.getElementById('career-sub-other-heading');
+    if(h) h.textContent='Tell us more about your '+career.toLowerCase()+' path.';
+    const inp=document.getElementById('career-sub-other-input');
+    if(inp){
+      inp.value='';
+      inp.placeholder=data&&data.placeholder?data.placeholder:'Describe it in your own words...';
+    }
+    const err=document.getElementById('career-sub-other-error');
+    if(err) err.textContent='';
+    setTimeout(()=>document.getElementById('career-sub-other-input')?.focus(),500);
+  }
+  if(fm[targetId])setTimeout(()=>document.getElementById(fm[targetId])?.focus(),500);
+  if(targetId==='5')setTimeout(()=>document.querySelector('.code-box')?.focus(),500);
+}
+
+(()=>{const c=getEl('cover');if(c){c.classList.add('visible','active');}})();
+function goNext(){const idx=STEP_ORDER.indexOf(String(currentStep));if(idx<STEP_ORDER.length-1)navigateTo(STEP_ORDER[idx+1]);}
+function goNextConditional(){rebuildStepOrder();goNext();}
+
+/* STEP 1: NAME (combined) */
+function checkName(){
+  firstName=document.getElementById('firstName-input').value.trim();
+  lastName=document.getElementById('lastName-input').value.trim();
+  document.getElementById('step1-btn').disabled=!(firstName&&lastName);
+}
+document.getElementById('lastName-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&firstName&&lastName)goNext();});
+
+/* STEP 2u: USERNAME */
+function checkUsername(){
+  const val=document.getElementById('username-input').value;
+  document.getElementById('username-count').textContent=val.length+'/20';
+  const valid=/^[a-zA-Z0-9_]{3,20}$/.test(val);
+  document.getElementById('username-error').textContent=val.length>0&&!/^[a-zA-Z0-9_]*$/.test(val)?'Only letters, numbers, and underscores.':'';
+  document.getElementById('step2u-btn').disabled=!valid;
+}
+document.getElementById('username-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!document.getElementById('step2u-btn').disabled)goNext();});
+
+/* STEP 2p: PHOTO */
+function photoSelected(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const circle=document.getElementById('photo-circle');
+    if(!circle)return;
+    let img=circle.querySelector('img');
+    if(!img){img=document.createElement('img');img.style.cssText='width:100%;height:100%;object-fit:cover;position:absolute;inset:0;border-radius:50%';circle.appendChild(img);}
+    img.src=e.target.result;
+    circle.querySelectorAll('svg,span').forEach(el=>el.style.display='none');
+    const pc=document.getElementById('photo-change');if(pc)pc.style.display='block';
+  };
+  reader.readAsDataURL(file);
+}
+
+/* STEP 3: EMAIL */
+const emailInput=document.getElementById('email-input');
+emailInput.addEventListener('input',function(){
+  const val=this.value.trim();
+  const err=document.getElementById('email-error'),btn=document.getElementById('step3-btn');
+  if(!val){err.textContent='';btn.disabled=true;return;}
+  const valid=/\.ox\.ac\.uk$/i.test(val);
+  err.textContent=val.includes('@')&&!valid?'Please use your Oxford email address ending in .ox.ac.uk':'';
+  btn.disabled=!valid;
+});
+emailInput.addEventListener('keydown',e=>{if(e.key==='Enter')submitEmail();});
+function submitEmail(){if(!document.getElementById('step3-btn').disabled){userEmail=emailInput.value.trim();document.getElementById('verify-subtext').innerHTML=`We sent a code to <strong>${userEmail}</strong>`;goNext();}}
+
+/* STEP 5: VERIFY */
+(function(){
+  const boxes=document.querySelectorAll('.code-box');
+  function checkCode(){const code=Array.from(boxes).map(b=>b.value).join('');document.getElementById('step5-btn').disabled=code.length<6;document.getElementById('code-error').textContent='';}
+  boxes.forEach((box,i)=>{
+    box.addEventListener('input',function(){const val=this.value.replace(/\D/g,'');this.value=val?val[0]:'';if(val&&i<boxes.length-1)boxes[i+1].focus();this.classList.toggle('filled',!!val);checkCode();});
+    box.addEventListener('keydown',function(e){if(e.key==='Backspace'&&!this.value&&i>0){boxes[i-1].focus();boxes[i-1].value='';boxes[i-1].classList.remove('filled');checkCode();}});
+    box.addEventListener('paste',function(e){e.preventDefault();const p=(e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');p.split('').forEach((ch,j)=>{if(boxes[i+j]){boxes[i+j].value=ch;boxes[i+j].classList.add('filled');}});boxes[Math.min(i+p.length,boxes.length-1)].focus();checkCode();});
+  });
+})();
+function verifyCode(){const boxes=document.querySelectorAll('.code-box');const code=Array.from(boxes).map(b=>b.value).join('');if(code==='123456'||code.length===6){goNext();}else{document.getElementById('code-error').textContent='Incorrect code. Try 123456 for this demo.';boxes.forEach(b=>b.style.borderColor='#D84040');setTimeout(()=>boxes.forEach(b=>b.style.borderColor=''),1500);}}
+function resendCode(){const boxes=document.querySelectorAll('.code-box');boxes.forEach(b=>{b.value='';b.classList.remove('filled');});document.getElementById('step5-btn').disabled=true;document.getElementById('code-error').textContent='';const lnk=document.querySelector('.resend-link span');lnk.textContent='Sent!';setTimeout(()=>lnk.textContent='Resend',2000);boxes[0].focus();}
+
+/* STEP 5pw: PASSWORD */
+const EYE_OPEN=`<path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z"/><circle cx="10" cy="7" r="3"/>`;
+const EYE_SHUT=`<path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z"/><line x1="1" y1="7" x2="19" y2="7"/>`;
+function togglePw(inputId,svgId){const inp=document.getElementById(inputId);const showing=inp.type==='text';inp.type=showing?'password':'text';const svg=document.getElementById(svgId);if(svg)svg.innerHTML=showing?EYE_OPEN:EYE_SHUT;}
+function checkPasswords(){const pw=document.getElementById('pw-input').value,pw2=document.getElementById('pw-confirm').value,err=document.getElementById('pw-error'),btn=document.getElementById('step5pw-btn');if(pw.length>0&&pw2.length>0&&pw!==pw2){err.textContent="Passwords don't match.";btn.disabled=true;}else{err.textContent='';btn.disabled=!(pw.length>=8&&pw===pw2);}}
+document.getElementById('pw-input').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('pw-confirm').focus();});
+document.getElementById('pw-confirm').addEventListener('keydown',e=>{if(e.key==='Enter'&&!document.getElementById('step5pw-btn').disabled)goNext();});
+
+/* STEP 6: COLLEGES */
+const OXFORD_COLLEGES=['All Souls','Balliol','Brasenose','Christ Church','Corpus Christi','Exeter','Green Templeton','Harris Manchester','Hertford','Jesus','Keble','Kellogg','Lady Margaret Hall','Linacre','Lincoln','Magdalen','Mansfield','Merton','New College','Nuffield','Oriel','Pembroke',"Queen's",'Reuben',"Regent's Park",'Somerville',"St Anne's","St Antony's","St Catherine's",'St Cross','St Edmund Hall',"St Hilda's","St Hugh's","St John's","St Peter's",'Trinity','University','Wadham','Wolfson','Worcester','Wycliffe Hall'];
+function buildCollegeChips(filter=''){const c=document.getElementById('college-chips');c.innerHTML='';OXFORD_COLLEGES.filter(x=>!filter||x.toLowerCase().includes(filter.toLowerCase())).forEach(col=>{const chip=document.createElement('div');chip.className='chip'+(userCollege===col?' selected':'');chip.textContent=col;chip.onclick=()=>selectCollege(chip,col);c.appendChild(chip);});}
+function selectCollege(el,col){userCollege=col;document.querySelectorAll('#college-chips .chip').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');document.getElementById('step6-btn').disabled=false;}
+let colDebounce;
+function filterCollegesDebounced(){clearTimeout(colDebounce);colDebounce=setTimeout(()=>buildCollegeChips(document.getElementById('college-search').value),120);}
+buildCollegeChips();
+
+/* STEP 8: GOALS */
+const goalQueue=[];
+
+function rankGoal(el){
+  const goal=el.dataset.goal;
+  if(el.classList.contains('selected')){
+    // Deselect: remove from queue and renumber
+    const idx=goalQueue.indexOf(el);
+    if(idx>-1) goalQueue.splice(idx,1);
+    el.classList.remove('selected');
+  } else {
+    // Max 4 (all categories)
+    goalQueue.push(el);
+    el.classList.add('selected');
+  }
+  // Renumber badges
+  document.querySelectorAll('#goal-rank-cards .rank-card').forEach(c=>c.querySelector('.rank-badge').textContent='');
+  goalQueue.forEach((card,i)=>card.querySelector('.rank-badge').textContent=i+1);
+  // Enable Continue once at least 1 ranked
+  document.getElementById('step8-btn').disabled=goalQueue.length===0;
+  // Set rank1Cat from first in queue
+  if(goalQueue.length>0){
+    rank1Cat=goalQueue[0].dataset.goal;
+    userGoals=goalQueue.map(c=>c.dataset.goal);
+  }
+}
+
+/* DATING PERSONALITY MAX 5 */
+const datingPersonalityQueue=[];
+function toggleDatingPersonality(el){
+  if(el.classList.contains('selected')){
+    el.classList.remove('selected');
+    const i=datingPersonalityQueue.indexOf(el);if(i>-1)datingPersonalityQueue.splice(i,1);
+  }else{
+    if(datingPersonalityQueue.length>=5){const old=datingPersonalityQueue.shift();old.classList.remove('selected');}
+    datingPersonalityQueue.push(el);el.classList.add('selected');
+  }
+  answers['dating-personality']=datingPersonalityQueue.map(c=>c.textContent.trim());
+  document.getElementById('btn-q-dating-personality').disabled=datingPersonalityQueue.length===0;
+}
+
+/* STEP 2bday: BIRTHDAY */
+function checkBday(){
+  const d=document.getElementById('bday-day').value;
+  const m=document.getElementById('bday-month').value;
+  const y=document.getElementById('bday-year').value;
+  const err=document.getElementById('bday-error');
+  const btn=document.getElementById('step2bday-btn');
+  btn.disabled=true; err.textContent='';
+  if(!d||!m||!y||y.length<4) return;
+  const dob=new Date(+y,+m-1,+d);
+  const now=new Date();
+  const age=(now-dob)/(365.25*24*60*60*1000);
+  if(isNaN(dob.getTime())||+d<1||+d>31||+m<1||+m>12){err.textContent='Please enter a valid date.';return;}
+  if(age<18){err.textContent='You must be 18 or over to join.';return;}
+  btn.disabled=false;
+}
+
+/* q-career-sub: Industry drill-down */
+const CAREER_SUB_DATA={
+  'Finance and investing':{
+    heading:'Where in finance?',
+    whisper:'Lets us match you with people on the exact same track.',
+    chips:['Investment banking','Private equity','Hedge funds','Venture capital','Asset management','Corporate finance','Financial consulting','Fintech','Trading','Impact investing','Not sure yet'],
+    placeholder:'e.g. Structured finance, quantitative research, family office, distressed debt...'
+  },
+  'Consulting and strategy':{
+    heading:'What type of consulting?',
+    whisper:'',
+    chips:['Strategy consulting (MBB)','Big 4 consulting','Boutique or specialist','In-house strategy','Public sector consulting','Tech consulting','Not sure yet'],
+    placeholder:'e.g. Operational turnaround, pricing strategy, economic consulting, litigation support...'
+  },
+  'Technology and engineering':{
+    heading:'What area of tech?',
+    whisper:'',
+    chips:['Software engineering','Machine learning and AI','Cybersecurity','Hardware and embedded','Data engineering','DevOps and infrastructure','Biotech or deep tech','Not sure yet'],
+    placeholder:'e.g. Robotics, quantum computing, augmented reality, chip design...'
+  },
+  'Startups and entrepreneurship':{
+    heading:'What are you looking to build?',
+    whisper:'',
+    chips:['I am already building something','Consumer app or platform','B2B SaaS','Deep tech or science-based','Social enterprise','Marketplace','Media or content','Hardware or physical product','Not sure yet'],
+    placeholder:'e.g. EdTech, climate tech, defence tech, peer-to-peer lending platform...'
+  },
+  'Law':{
+    heading:'What area of law?',
+    whisper:'',
+    chips:['Corporate and M&A','Litigation','Criminal','Human rights and public law','IP and tech','International law','Barrister route','Not sure yet'],
+    placeholder:'e.g. Restructuring and insolvency, space law, sports law, environmental law...'
+  },
+  'Medicine and healthcare':{
+    heading:'Which direction?',
+    whisper:'',
+    chips:['Clinical medicine','Research and academia','Health policy','Biotech or pharma','Global health','Mental health','Medical technology','Not sure yet'],
+    placeholder:'e.g. Genomics, sports medicine, palliative care, health economics...'
+  },
+  'Academia and research':{
+    heading:'What kind of research?',
+    whisper:'',
+    chips:['Theoretical or pure research','Applied research','Interdisciplinary','Policy-facing research','Commercialising research','Not sure yet'],
+    placeholder:'e.g. Cognitive science, moral philosophy, computational linguistics, political economy...'
+  },
+  'Policy and public sector':{
+    heading:'Where in policy?',
+    whisper:'',
+    chips:['Civil service','Think tanks','International institutions','Political advisory','Local government','Regulatory bodies','Not sure yet'],
+    placeholder:'e.g. Competition policy, housing reform, defence procurement, science policy...'
+  },
+  'Creative industries and media':{
+    heading:'What kind of creative work?',
+    whisper:'',
+    chips:['Journalism and writing','Film and television','Music','Architecture and design','Advertising and branding','Publishing','Digital content','Not sure yet'],
+    placeholder:'e.g. Interactive installation, game design, documentary filmmaking, literary translation...'
+  },
+  'Social impact and NGOs':{
+    heading:'What kind of impact work?',
+    whisper:'',
+    chips:['International development','Climate and environment','Education','Economic empowerment','Human rights','Effective altruism','Not sure yet'],
+    placeholder:'e.g. Criminal justice reform, open-source policy, disability rights, community organising...'
+  },
+  'Other':{
+    heading:'Can you say more?',
+    whisper:'',
+    chips:['Still exploring','Multiple interests','Something unconventional','I will fill this in later'],
+    placeholder:'e.g. Independent research, something highly interdisciplinary, still working it out...'
+  }
+};
+
+function submitCareerSubOther(){
+  const v=document.getElementById('career-sub-other-input').value.trim();
+  const err=document.getElementById('career-sub-other-error');
+  if(!v){err.textContent='Please describe your path before continuing.';return;}
+  err.textContent='';
+  answers['career-sub-detail']=v;
+  goNext();
+}
+
+function buildCareerSubScreen(){
+  const career=answers['career'];
+  const data=CAREER_SUB_DATA[career];
+  if(!data){goNextConditional();return;}
+  document.getElementById('career-sub-heading').textContent=data.heading;
+  const wh=document.getElementById('career-sub-whisper');
+  wh.textContent=data.whisper||'Narrows your matches to the right corner of the field.';
+  const container=document.getElementById('career-sub-chips');
+  container.innerHTML='';
+  // Ensure every list has Other at end
+  const chips=[...data.chips];
+  if(!chips.includes('Other')) chips.push('Other');
+  chips.forEach(chip=>{
+    const el=document.createElement('div');
+    el.className='chip';
+    el.dataset.q='career-sub';
+    el.textContent=chip;
+    el.onclick=()=>{
+      container.querySelectorAll('.chip').forEach(c=>c.classList.remove('selected'));
+      el.classList.add('selected');
+      answers['career-sub']=chip;
+      document.getElementById('btn-q-career-sub').disabled=false;
+      // Update the other-screen heading to match career context
+      const h=document.getElementById('career-sub-other-heading');
+      if(h) h.textContent='Tell us more about your '+career.toLowerCase()+' path.';
+    };
+    container.appendChild(el);
+  });
+  document.getElementById('btn-q-career-sub').disabled=true;
+}
+
+function checkStudy(){
+  const sub=document.getElementById('study-subject-input').value.trim();
+  document.getElementById('step6study-btn').disabled=sub.length<2;
+}
+
+/* q-career: selectCareer handles Other routing */
+function selectCareer(el, value){
+  document.querySelectorAll('[data-q="career"]').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  answers['career']=value;
+  document.getElementById('btn-q-career').disabled=false;
+}
+
+/* CHIP/CARD HELPERS */
+function selectSingle(el,qid){el.closest('.ob-step').querySelectorAll(`[data-q="${qid}"]`).forEach(c=>c.classList.remove('selected'));el.classList.add('selected');answers[qid]=el.textContent.trim();const btn=document.getElementById('btn-q-'+qid);if(btn)btn.disabled=false;}
+function toggleMulti(el,qid,btnId){el.classList.toggle('selected');const sel=el.closest('.ob-step').querySelectorAll(`[data-q="${qid}"].selected`);answers[qid]=Array.from(sel).map(c=>c.textContent.trim());const btn=document.getElementById(btnId);if(btn)btn.disabled=sel.length===0;}
+function selectTapCard(el,qid){el.closest('.ob-step').querySelectorAll('.tap-card').forEach(c=>c.classList.remove('selected'));el.classList.add('selected');answers[qid]=el.firstChild.textContent.trim();const btn=document.getElementById('btn-q-'+qid);if(btn)btn.disabled=false;if(qid==='year')checkStudy();}
+const rankQueues={};
+function rankTap(el,qid,btnId,maxN){if(!rankQueues[qid])rankQueues[qid]=[];const q=rankQueues[qid];if(el.classList.contains('selected')){const i=q.indexOf(el);if(i>-1)q.splice(i,1);el.classList.remove('selected');}else{if(q.length>=maxN){const old=q.shift();old.classList.remove('selected');}q.push(el);el.classList.add('selected');}el.closest('.ob-step').querySelectorAll('.rank-card').forEach(c=>c.querySelector('.rank-badge').textContent='');q.forEach((card,i)=>card.querySelector('.rank-badge').textContent=i+1);answers[qid]=q.map(c=>c.textContent.replace(/^\d+/,'').trim());const btn=document.getElementById(btnId);if(btn)btn.disabled=q.length===0;}
+
+/* FRIENDSHIP MAX 5 */
+const friendshipQueue=[];
+function toggleFriendship(el){if(el.classList.contains('selected')){el.classList.remove('selected');const i=friendshipQueue.indexOf(el);if(i>-1)friendshipQueue.splice(i,1);}else{if(friendshipQueue.length>=5){const old=friendshipQueue.shift();old.classList.remove('selected');}friendshipQueue.push(el);el.classList.add('selected');}answers['friendship']=friendshipQueue.map(c=>c.textContent.trim());const btn=document.getElementById('btn-q-friendship');if(btn)btn.disabled=friendshipQueue.length===0;}
+
+/* SOCIETIES */
+function toggleSocietiesNone(){
+  const card=document.getElementById('societies-none-card');
+  const inp=document.getElementById('societies-input');
+  const sel=!card.style.background.includes('F5F3F0');
+  card.style.borderColor=sel?'var(--text)':'var(--border2)';
+  card.style.background=sel?'#F5F3F0':'var(--bg)';
+  inp.disabled=sel; inp.style.opacity=sel?'0.35':'1';
+  if(sel) inp.value='';
+}
+
+/* HOBBY */
+document.getElementById('hobby-input').addEventListener('input',function(){document.getElementById('btn-q-hobby').disabled=this.value.trim().length<3;});
+document.getElementById('study-subject-input').addEventListener('input',checkStudy);
+
+/* ENERGY SLIDER */
+
+
+/* FRIENDS BUBBLES */
+const friendTimers=[null,null,null];
+function openFriendPopover(idx){closeAllFriendPopovers();const pop=document.getElementById('fp-'+idx);if(pop){pop.style.display='block';setTimeout(()=>pop.querySelector('input')?.focus(),50);}}
+function closeAllFriendPopovers(){[0,1,2].forEach(i=>{const p=document.getElementById('fp-'+i);if(p)p.style.display='none';});}
+document.addEventListener('click',function(e){[0,1,2].forEach(i=>{const pop=document.getElementById('fp-'+i),bub=document.getElementById('fb-'+i);if(pop&&!pop.contains(e.target)&&bub&&!bub.contains(e.target))pop.style.display='none';});});
+function friendPopBlur(idx,val){
+  val=val.trim();if(!val)return;
+  clearTimeout(friendTimers[idx]);
+  const bubble=document.getElementById('fb-'+idx);
+  bubble.innerHTML=`<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:var(--text);color:#FFFEFD;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:2">${idx+1}</div><div class="spinner"></div>`;
+  friendTimers[idx]=setTimeout(()=>{
+    const isOxford=/\.ox\.ac\.uk$/i.test(val);
+    if(isOxford){
+      bubble.style.background='#F0FDF4';bubble.style.border='1.5px solid var(--success)';
+      bubble.innerHTML=`<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:var(--text);color:#FFFEFD;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:2">${idx+1}</div><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--success)" stroke-width="1.8" stroke-linecap="round"><path d="M4 11l5 5L18 6"/></svg><span style="font-size:10px;color:var(--text2);text-align:center;padding:0 8px;word-break:break-all;max-width:88px;line-height:1.3">${val}</span>`;
+      document.getElementById('fb-invite-'+idx).innerHTML='';
+    }else{
+      bubble.style.background='#FAFAF8';bubble.style.border='1.5px solid var(--border2)';
+      bubble.innerHTML=`<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:var(--text);color:#FFFEFD;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:2">${idx+1}</div><span style="font-size:10px;color:var(--text2);text-align:center;padding:0 8px;word-break:break-all;max-width:88px;line-height:1.3">${val}</span>`;
+      document.getElementById('fb-invite-'+idx).innerHTML=`<button onclick="copyFriendInvite(this)" style="border:1px solid var(--border2);border-radius:999px;padding:4px 10px;font-family:'DM Sans',sans-serif;font-size:11px;cursor:pointer;background:transparent;color:var(--text2);margin-top:4px">Invite</button>`;
+    }
+    placeholder:'e.g. Independent research, something highly interdisciplinary, still working it out...'
+  },1200);
+}
+function copyFriendInvite(btn){btn.textContent='Copied!';setTimeout(()=>btn.textContent='Invite',2000);}
+
+/* ENTER APP */
+function enterApp(){
+  const overlay=document.getElementById('ob-overlay');overlay.style.opacity='0';overlay.style.pointerEvents='none';
+  setTimeout(()=>{overlay.style.display='none';const endH=document.getElementById('end-heading');if(endH)endH.textContent=firstName?`You're in, ${firstName}.`:`You're in.`;const end=document.getElementById('end-screen');end.style.display='flex';end.querySelector('div').style.animation='fadeUp 0.8s var(--ease) both';},800);
+  document.getElementById('back-btn').classList.remove('visible');document.getElementById('progress-dots').style.opacity='0';
+}
+
+updateBackBtn();updateDots('cover');
+</script>
+</body>
+</html>

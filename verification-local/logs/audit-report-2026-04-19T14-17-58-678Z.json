@@ -1,0 +1,293 @@
+{
+  "startedAt": "2026-04-19T14:17:03.011Z",
+  "dryRun": true,
+  "model": "gemma4:e2b-it-q4_K_M",
+  "minKeepConfidence": 0.7,
+  "deleteAfterFailedPasses": 2,
+  "total": 10,
+  "keep": 5,
+  "deleteCandidates": 5,
+  "deleted": 5,
+  "errors": 0,
+  "records": [
+    {
+      "person_id": "69e3c664002408ad90d0",
+      "full_name": "Hope Ableton Pahlavi",
+      "action": "delete_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Hope Ableton Pahlavi"
+      },
+      "query": "site:linkedin.com Hope Ableton Pahlavi Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Hope Ableton Pahlavi\"",
+          "count": 2
+        },
+        {
+          "query": "\"Hope Ableton Pahlavi\" linkedin",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "No direct, credible LinkedIn profile was found for the candidate. The provided evidence points to an Instagram profile and unrelated search results."
+      ],
+      "confidence": 0.1,
+      "linkedin_url": "https://www.linkedin.com/in/charlton-johnson-89286491",
+      "fail_count": 2,
+      "deleted_joins": {
+        "deletedSocieties": 1,
+        "deletedSports": 0
+      }
+    },
+    {
+      "person_id": "69e3c6640038ff4d9797",
+      "full_name": "Samwel",
+      "action": "keep_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Samwel"
+      },
+      "query": "site:linkedin.com Samwel Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Samwel\"",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "Multiple profiles found for variations of the name.",
+        "Profiles show diverse professional backgrounds (Data, Engineering, Environmental, Education)."
+      ],
+      "confidence": 0.75,
+      "linkedin_url": "https://www.linkedin.com/in/smemmanuel",
+      "summary_written": true
+    },
+    {
+      "person_id": "69e3c66500072d73aa4a",
+      "full_name": "Horizons: OxWEST’s 2026 Conference",
+      "action": "non_person_delete_dry_run",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 1,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Horizons: OxWEST’s 2026 Conference"
+      },
+      "fail_count": 2,
+      "error": null,
+      "deleted_joins": {
+        "deletedSocieties": 1,
+        "deletedSports": 0
+      }
+    },
+    {
+      "person_id": "69e3c665001d86ffb53d",
+      "full_name": "Xylem 🍀",
+      "action": "delete_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Xylem 🍀"
+      },
+      "query": "site:linkedin.com Xylem 🍀 Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Xylem 🍀\"",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "No direct match found for the candidate's name/username in search results.",
+        "Only an Instagram link was provided, not a LinkedIn profile."
+      ],
+      "confidence": 0.1,
+      "linkedin_url": "https://www.linkedin.com/in/vino__715",
+      "fail_count": 2,
+      "deleted_joins": {
+        "deletedSocieties": 1,
+        "deletedSports": 0
+      }
+    },
+    {
+      "person_id": "69e3c665002c27835d50",
+      "full_name": "abeakerofwater",
+      "action": "delete_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "abeakerofwater"
+      },
+      "query": "site:linkedin.com abeakerofwater Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"abeakerofwater\"",
+          "count": 0
+        },
+        {
+          "query": "\"abeakerofwater\" linkedin",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "No LinkedIn profile was found. Search results provided no evidence of an online professional profile."
+      ],
+      "confidence": 0,
+      "linkedin_url": "",
+      "fail_count": 2,
+      "deleted_joins": {
+        "deletedSocieties": 1,
+        "deletedSports": 0
+      }
+    },
+    {
+      "person_id": "69e3c66600050e5c696f",
+      "full_name": "Harri",
+      "action": "keep_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Harri"
+      },
+      "query": "site:linkedin.com Harri Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Harri\"",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "Name match found in search results (Harri Davies)",
+        "One direct, relevant LinkedIn profile URL was identified."
+      ],
+      "confidence": 0.8,
+      "linkedin_url": "https://uk.linkedin.com/in/harridavies",
+      "summary_written": true
+    },
+    {
+      "person_id": "69e3c666001991770f36",
+      "full_name": "Sawsn Ahmed",
+      "action": "keep_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Sawsn Ahmed"
+      },
+      "query": "site:linkedin.com Sawsn Ahmed Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Sawsn Ahmed\"",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "Multiple, distinct LinkedIn profiles found.",
+        "Profiles cover IT/Cloud, Engineering, and corporate consulting.",
+        "The name matches across multiple results."
+      ],
+      "confidence": 0.85,
+      "linkedin_url": "https://sa.linkedin.com/in/ahmed-sawan",
+      "summary_written": true
+    },
+    {
+      "person_id": "69e3c6660026df2affce",
+      "full_name": "Summer",
+      "action": "keep_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Summer"
+      },
+      "query": "site:linkedin.com Summer Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Summer\"",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "Multiple potential matches found.",
+        "One match is a Health & Beauty Content Creator.",
+        "No direct link to the provided Instagram handle."
+      ],
+      "confidence": 0.7,
+      "linkedin_url": "https://uk.linkedin.com/in/summer-botwe-076b04141",
+      "summary_written": true
+    },
+    {
+      "person_id": "69e3c666003a50317ae2",
+      "full_name": "instauser 10r",
+      "action": "delete_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "instauser 10r"
+      },
+      "query": "site:linkedin.com instauser 10r Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"instauser 10r\"",
+          "count": 0
+        },
+        {
+          "query": "\"instauser 10r\" linkedin",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "No credible LinkedIn evidence found. Search results relate to philosophical/spiritual topics, not professional profiles."
+      ],
+      "confidence": 0,
+      "linkedin_url": "",
+      "fail_count": 2,
+      "deleted_joins": {
+        "deletedSocieties": 1,
+        "deletedSports": 0
+      }
+    },
+    {
+      "person_id": "69e3c6670008b2e31e99",
+      "full_name": "Maria Vitória Barbosa A. Araújo",
+      "action": "keep_dry_run",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Maria Vitória Barbosa A. Araújo"
+      },
+      "query": "site:linkedin.com Maria Vitória Barbosa A. Araújo Chemistry and Biochemistry Society society Oxford University",
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Maria Vitória Barbosa A. Araújo\"",
+          "count": 5
+        }
+      ],
+      "signals": [
+        "Found a direct LinkedIn profile matching the name."
+      ],
+      "confidence": 0.9,
+      "linkedin_url": "https://br.linkedin.com/in/maria-vitoria-barbosa-de-araujo-734aa4339",
+      "summary_written": true
+    }
+  ],
+  "finishedAt": "2026-04-19T14:17:58.675Z"
+}

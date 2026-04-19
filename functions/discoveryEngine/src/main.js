@@ -86,6 +86,8 @@ const ALLOWED_FILTER_KEYS = new Set([
   'dating_hobbies',
 ]);
 
+const WEIGHTABLE_FILTER_KEYS = new Set([...ALLOWED_FILTER_KEYS]);
+
 const ARRAY_FILTER_KEYS = new Set([
   'goals',
   'desired_connections',
@@ -119,6 +121,8 @@ const INTENT_SYNONYMS = {
   study: 'academic',
   intellectual: 'academic',
 };
+
+const STRUCTURED_WEIGHT = 0.2;
 
 const YEAR_SYNONYMS = {
   'first year': 'First year',
@@ -170,7 +174,30 @@ Return JSON only with this schema:
   "must_not": {
     "college": "string",
     "primary_intent": "professional|social|romantic|academic"
-  }
+  },
+  "attribute_weights": {
+    "college": 0.0,
+    "primary_intent": 0.0,
+    "year_of_study": 0.0,
+    "study_subject": 0.0,
+    "career_field": 0.0,
+    "career_subfield": 0.0,
+    "relationship_intent": 0.0,
+    "networking_style": 0.0,
+    "intellectual_venue": 0.0,
+    "relationship_status": 0.0,
+    "sexuality": 0.0,
+    "has_cv": 0.0,
+    "goals": 0.0,
+    "desired_connections": 0.0,
+    "startup_connections": 0.0,
+    "social_circles": 0.0,
+    "friendship_values": 0.0,
+    "dating_appearance": 0.0,
+    "dating_personality": 0.0,
+    "dating_hobbies": 0.0
+  },
+  "strict_key": "one filter key from filters with the highest weight"
 }
 
 Rules:
@@ -178,6 +205,9 @@ Rules:
 - Keep "intent_query" focused on goals, connection intent, and practical intent.
 - Extract only explicit constraints from the query into filters.
 - If a field is not present in query, omit it.
+- Include "attribute_weights" only for keys present in "filters".
+- Weight values must be numeric, non-negative, and sum to 1.0.
+- "strict_key" must be the highest-weight filter key.
 - Do not invent people, names, or unsupported fields.
 `;
 
@@ -267,6 +297,89 @@ function normalizeFilters(raw) {
   return cleaned;
 }
 
+function toPositiveNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function buildDefaultWeights(filters) {
+  const keys = Object.keys(filters || {}).filter((key) => WEIGHTABLE_FILTER_KEYS.has(key));
+  if (keys.length === 0) return {};
+
+  const even = 1 / keys.length;
+  return keys.reduce((acc, key) => {
+    acc[key] = even;
+    return acc;
+  }, {});
+}
+
+function normalizeAttributeWeights(rawWeights, filters) {
+  const defaults = buildDefaultWeights(filters);
+  if (!rawWeights || typeof rawWeights !== 'object') return defaults;
+
+  const filtered = {};
+  for (const [key, value] of Object.entries(rawWeights)) {
+    if (!WEIGHTABLE_FILTER_KEYS.has(key)) continue;
+    if (!(key in (filters || {}))) continue;
+
+    const numeric = toPositiveNumber(value);
+    if (numeric === null) continue;
+    filtered[key] = numeric;
+  }
+
+  const sum = Object.values(filtered).reduce((acc, v) => acc + v, 0);
+  if (sum <= 0) return defaults;
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(filtered)) {
+    normalized[key] = value / sum;
+  }
+
+  return normalized;
+}
+
+function determineStrictKey(rawStrictKey, weights, filters) {
+  const filterKeys = Object.keys(filters || {});
+  if (filterKeys.length === 0) return null;
+
+  const normalizedStrict = normalizeString(rawStrictKey);
+  if (normalizedStrict && filterKeys.includes(normalizedStrict)) {
+    return normalizedStrict;
+  }
+
+  let bestKey = null;
+  let bestWeight = -1;
+  for (const [key, weight] of Object.entries(weights || {})) {
+    if (!(key in (filters || {}))) continue;
+    if (weight > bestWeight) {
+      bestWeight = weight;
+      bestKey = key;
+    }
+  }
+
+  return bestKey || filterKeys[0] || null;
+}
+
+function strictOnlyFilters(translated) {
+  const strictKey = translated?.strict_key;
+  if (!strictKey) return {};
+  if (!translated?.filters || !(strictKey in translated.filters)) return {};
+
+  return {
+    [strictKey]: translated.filters[strictKey],
+  };
+}
+
 function safeParseJson(text) {
   if (!text || typeof text !== 'string') return null;
 
@@ -292,12 +405,14 @@ async function translateSearchQuery(query, ai, log) {
     intent_query: query,
     filters: {},
     must_not: {},
+    attribute_weights: {},
+    strict_key: null,
     translator: 'fallback',
   };
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3.1-flash-lite-preview',
       contents: [{ role: 'user', parts: [{ text: query }] }],
       config: {
         systemInstruction: QUERY_TRANSLATION_SYSTEM_PROMPT,
@@ -313,15 +428,25 @@ async function translateSearchQuery(query, ai, log) {
 
     const semanticQuery = normalizeString(parsed.semantic_query) || query;
     const intentQuery = normalizeString(parsed.intent_query) || semanticQuery;
-    const filters = normalizeFilters(parsed.filters || {});
+    const llmFilters = normalizeFilters(parsed.filters || {});
+    const filters = Object.keys(llmFilters).length > 0 ? llmFilters : inferQueryIntentFilters(query);
     const mustNot = normalizeFilters(parsed.must_not || {});
+    const attributeWeights = normalizeAttributeWeights(parsed.attribute_weights || parsed.weights || {}, filters);
+    const strictKey = determineStrictKey(parsed.strict_key, attributeWeights, filters);
+
+    // Conservative guardrail: if we parsed filters but cannot determine a strict key, do not trust the translation.
+    if (Object.keys(filters).length > 0 && !strictKey) {
+      return fallback;
+    }
 
     return {
       semantic_query: semanticQuery,
       intent_query: intentQuery,
       filters,
       must_not: mustNot,
-      translator: 'llm',
+      attribute_weights: attributeWeights,
+      strict_key: strictKey,
+      translator: Object.keys(llmFilters).length > 0 ? 'llm' : 'heuristic',
     };
   } catch (err) {
     log(`Query translation fallback due to error: ${err.message}`);
@@ -387,6 +512,220 @@ function extractKeywords(text) {
     .slice(0, 12);
 }
 
+function toNormalizedSet(values) {
+  return new Set((Array.isArray(values) ? values : [values])
+    .map((value) => normalizeText(value))
+    .filter(Boolean));
+}
+
+function overlapCount(left, right) {
+  const leftSet = toNormalizedSet(left);
+  const rightSet = toNormalizedSet(right);
+  let count = 0;
+  leftSet.forEach((entry) => {
+    if (rightSet.has(entry)) count += 1;
+  });
+  return count;
+}
+
+function scoreOverlap(left, right, maxPoints = 1) {
+  if (!left || !right) return 0;
+  const count = overlapCount(left, right);
+  if (count === 0) return 0;
+  return Math.min(maxPoints, count / Math.max(1, Array.isArray(left) ? left.length : 1));
+}
+
+function scoreScalarMatch(expected, actual) {
+  const left = normalizeText(expected);
+  const right = normalizeText(actual);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  if (right.includes(left) || left.includes(right)) return 0.65;
+  return 0;
+}
+
+function scoreArrayMatch(expected, actual) {
+  const left = Array.isArray(expected) ? expected : [expected];
+  const right = Array.isArray(actual) ? actual : [actual];
+  if (left.length === 0 || right.length === 0) return 0;
+
+  const overlap = overlapCount(left, right);
+  if (overlap === 0) return 0;
+
+  return Math.min(1, overlap / left.length);
+}
+
+function scoreFilterMatch(key, expectedValue, match) {
+  if (!(key in (match || {}))) return 0;
+
+  const actualValue = match[key];
+
+  if (key === 'has_cv') {
+    return Boolean(actualValue) === Boolean(expectedValue) ? 1 : 0;
+  }
+
+  if (ARRAY_FILTER_KEYS.has(key)) {
+    return scoreArrayMatch(expectedValue, actualValue);
+  }
+
+  return scoreScalarMatch(expectedValue, actualValue);
+}
+
+function inferQueryIntentFilters(query) {
+  const text = normalizeText(query);
+  const filters = {};
+
+  for (const [phrase, intent] of Object.entries(INTENT_SYNONYMS)) {
+    if (text.includes(phrase)) {
+      filters.primary_intent = intent;
+      break;
+    }
+  }
+
+  for (const college of OXFORD_COLLEGES) {
+    if (text.includes(college.toLowerCase())) {
+      filters.college = college;
+      break;
+    }
+  }
+
+  for (const [phrase, year] of Object.entries(YEAR_SYNONYMS)) {
+    if (text.includes(phrase)) {
+      filters.year_of_study = year;
+      break;
+    }
+  }
+
+  return filters;
+}
+
+function computeStructuredScore(match, context = {}) {
+  const details = [];
+  let total = 0;
+
+  if (context.type === 'search') {
+    const translated = context.translated || {};
+    const filters = translated.filters || {};
+    const weights = normalizeAttributeWeights(translated.attribute_weights || {}, filters);
+    const strictKey = translated.strict_key;
+    const queryText = `${translated.semantic_query || ''} ${translated.intent_query || ''} ${context.originalQuery || ''}`;
+    const keywords = extractKeywords(queryText);
+    const perFilterScores = {};
+
+    for (const [key, expectedValue] of Object.entries(filters)) {
+      const score = scoreFilterMatch(key, expectedValue, match);
+      perFilterScores[key] = score;
+
+      if (score >= 0.99) {
+        details.push(`${key}=exact`);
+      } else if (score >= 0.5) {
+        details.push(`${key}=partial`);
+      }
+    }
+
+    if (strictKey && (perFilterScores[strictKey] ?? 0) <= 0) {
+      return {
+        score: 0,
+        details: [`strict_key_miss=${strictKey}`],
+      };
+    }
+
+    const weightedFilterScore = Object.entries(weights).reduce((acc, [key, weight]) => {
+      return acc + ((perFilterScores[key] || 0) * weight);
+    }, 0);
+
+    total += weightedFilterScore * 0.85;
+
+    const startupWords = ['startup', 'founder', 'cofounder', 'co-founder', 'build', 'venture', 'mvp', 'entrepreneur'];
+    const matchText = [
+      match.primary_intent,
+      match.career_field,
+      match.career_subfield,
+      match.building_description,
+      ...(Array.isArray(match.goals) ? match.goals : []),
+      ...(Array.isArray(match.desired_connections) ? match.desired_connections : []),
+      ...(Array.isArray(match.startup_connections) ? match.startup_connections : []),
+    ].join(' ').toLowerCase();
+    const startupHit = startupWords.some((word) => queryText.includes(word) && matchText.includes(word));
+    if (startupHit) {
+      total += 0.08;
+      details.push('startup signal');
+    }
+
+    const keywordHits = keywords.filter((keyword) => matchText.includes(keyword)).slice(0, 3);
+    if (keywordHits.length > 0) {
+      total += Math.min(0.15, keywordHits.length * 0.05);
+      details.push(`keywords=${keywordHits.join(', ')}`);
+    }
+
+    if (strictKey) {
+      details.push(`strict_key=${strictKey}`);
+    }
+  }
+
+  if (context.type === 'recommend') {
+    const source = context.source || {};
+    const sourceFilters = inferQueryIntentFilters([source.primary_intent, source.career_field, source.study_subject, source.year_of_study].filter(Boolean).join(' '));
+
+    if (source.primary_intent && normalizeText(match.primary_intent) === normalizeText(source.primary_intent)) {
+      total += 0.2;
+      details.push('shared primary intent');
+    }
+    if (source.career_field && normalizeText(match.career_field) === normalizeText(source.career_field)) {
+      total += 0.15;
+      details.push('shared career field');
+    }
+    if (source.career_subfield && normalizeText(match.career_subfield) === normalizeText(source.career_subfield)) {
+      total += 0.1;
+      details.push('shared career subfield');
+    }
+    if (source.study_subject && normalizeText(match.study_subject) === normalizeText(source.study_subject)) {
+      total += 0.1;
+      details.push('shared study subject');
+    }
+    if (source.year_of_study && normalizeText(match.year_of_study) === normalizeText(source.year_of_study)) {
+      total += 0.05;
+      details.push('same year');
+    }
+
+    const goalsOverlap = scoreOverlap(source.goals || [], match.goals || [], 1) * 0.15;
+    if (goalsOverlap > 0) {
+      total += goalsOverlap;
+      details.push('goal overlap');
+    }
+
+    const desiredOverlap = scoreOverlap(source.desired_connections || [], match.desired_connections || match.startup_connections || [], 1) * 0.15;
+    if (desiredOverlap > 0) {
+      total += desiredOverlap;
+      details.push('connection overlap');
+    }
+
+    const startupOverlap = scoreOverlap(source.startup_connections || [], match.startup_connections || match.desired_connections || [], 1) * 0.2;
+    if (startupOverlap > 0) {
+      total += startupOverlap;
+      details.push('startup overlap');
+    }
+
+    const sourceKeywords = extractKeywords([source.primary_intent, source.career_field, source.career_subfield, source.study_subject].filter(Boolean).join(' '));
+    const matchText = [match.primary_intent, match.career_field, match.career_subfield, match.study_subject, match.building_description].join(' ').toLowerCase();
+    const keywordHits = sourceKeywords.filter((keyword) => matchText.includes(keyword)).slice(0, 3);
+    if (keywordHits.length > 0) {
+      total += Math.min(0.1, keywordHits.length * 0.04);
+      details.push(`keywords=${keywordHits.join(', ')}`);
+    }
+
+    if (sourceFilters.primary_intent && normalizeText(match.primary_intent) === normalizeText(sourceFilters.primary_intent)) {
+      total += 0.05;
+      details.push(`inferred intent=${sourceFilters.primary_intent}`);
+    }
+  }
+
+  return {
+    score: Math.min(1, total),
+    details,
+  };
+}
+
 function intersects(left = [], right = []) {
   const rightSet = new Set(right.map((v) => normalizeText(v)).filter(Boolean));
   return left.filter((v) => rightSet.has(normalizeText(v)));
@@ -395,6 +734,7 @@ function intersects(left = [], right = []) {
 function buildMatchReason(match, translated, originalQuery) {
   const reasons = [];
   const filters = translated.filters || {};
+  const strictKey = translated.strict_key;
   const filterLabels = {
     college: 'college',
     year_of_study: 'study year',
@@ -421,6 +761,15 @@ function buildMatchReason(match, translated, originalQuery) {
 
     if (normalizeText(match[key]) === normalizeText(String(value))) {
       reasons.push(`${filterLabels[key] || key}: ${value}`);
+    }
+  }
+
+  if (strictKey && filters[strictKey] !== undefined) {
+    const strictValue = filters[strictKey];
+    if (Array.isArray(strictValue)) {
+      reasons.unshift(`key requirement ${strictKey}: ${strictValue.join(', ')}`);
+    } else {
+      reasons.unshift(`key requirement ${strictKey}: ${strictValue}`);
     }
   }
 
@@ -460,6 +809,24 @@ function buildMatchReason(match, translated, originalQuery) {
   }
 
   return `Matched on ${reasons.slice(0, 2).join(' and ')}.`;
+}
+
+function applyStructuredScoring(matches, context) {
+  return matches.map((match) => {
+    const structured = computeStructuredScore(match, context);
+    const baseScore = Number(match.score || 0) / 100;
+    const blendedScore = Math.min(1, (baseScore * (1 - STRUCTURED_WEIGHT)) + (structured.score * STRUCTURED_WEIGHT));
+    return {
+      ...match,
+      structured_score: Math.round(structured.score * 100),
+      score: Math.round(blendedScore * 100),
+      score_breakdown: {
+        base: Math.round(baseScore * 100),
+        structured: Math.round(structured.score * 100),
+        details: structured.details,
+      },
+    };
+  });
 }
 
 // Same deterministic UUID function as profileSync
@@ -530,6 +897,8 @@ function buildSearchMetadata({ variant, translated, filters, startedAt, parseMs,
     translator: translated.translator,
     semantic_query: translated.semantic_query,
     intent_query: translated.intent_query,
+    strict_key: translated.strict_key || null,
+    attribute_weights: translated.attribute_weights || {},
     filter_count: (filters.must || []).length + (filters.must_not || []).length,
     applied_filters: summarizeFilter(translated.filters, translated.must_not),
     parse_ms: parseMs,
@@ -562,7 +931,7 @@ export default async ({ req, res, log, error }) => {
       // Safeguard: check the point exists
       const existing = await qdrant.retrieve(COLLECTION, {
         ids: [qdrantId],
-        with_payload: false,
+        with_payload: true,
         with_vector: false
       });
 
@@ -585,7 +954,11 @@ export default async ({ req, res, log, error }) => {
         }),
       ]);
 
-      const matches = fuseResults(intentRes, semanticRes, qdrantId);
+      const source = existing?.[0]?.payload || null;
+      const matches = applyStructuredScoring(
+        fuseResults(intentRes, semanticRes, qdrantId),
+        { type: 'recommend', source }
+      );
       log(`Returning ${matches.length} matches`);
       return res.json({ matches });
     }
@@ -607,8 +980,9 @@ export default async ({ req, res, log, error }) => {
       const translated = await translateSearchQuery(query, ai, log);
       const parseMs = Date.now() - parseStart;
 
+      const strictFilters = strictOnlyFilters(translated);
       const qdrantFilter = variant === 'hybrid_filtered'
-        ? buildQdrantFilter(translated.filters, translated.must_not)
+        ? buildQdrantFilter(strictFilters, translated.must_not)
         : null;
 
       const filterForSearch = qdrantFilter || {};
@@ -634,7 +1008,7 @@ export default async ({ req, res, log, error }) => {
 
         const results = await qdrant.search(COLLECTION, request);
 
-        matches = results.map((r) => ({
+        matches = applyStructuredScoring(results.map((r) => ({
           ...r.payload,
           source: 'in-app',
           retrieval_variant: variant,
@@ -643,7 +1017,7 @@ export default async ({ req, res, log, error }) => {
           intent_pct: 0,
           applied_filters: summarizeFilter(translated.filters, translated.must_not),
           match_reason: buildMatchReason(r.payload || {}, translated, query),
-        }));
+        })), { type: 'search', translated, originalQuery: query });
       } else if (variant === 'intent_only') {
         const embeddingResult = await ai.models.embedContent({
           model: 'gemini-embedding-001',
@@ -662,7 +1036,7 @@ export default async ({ req, res, log, error }) => {
 
         const results = await qdrant.search(COLLECTION, request);
 
-        matches = results.map((r) => ({
+        matches = applyStructuredScoring(results.map((r) => ({
           ...r.payload,
           source: 'in-app',
           retrieval_variant: variant,
@@ -671,7 +1045,7 @@ export default async ({ req, res, log, error }) => {
           intent_pct: Math.round(r.score * 100),
           applied_filters: summarizeFilter(translated.filters, translated.must_not),
           match_reason: buildMatchReason(r.payload || {}, translated, query),
-        }));
+        })), { type: 'search', translated, originalQuery: query });
       } else {
         const [semanticEmbedding, intentEmbedding] = await Promise.all([
           ai.models.embedContent({
@@ -712,11 +1086,11 @@ export default async ({ req, res, log, error }) => {
           qdrant.search(COLLECTION, intentRequest),
         ]);
 
-        matches = fuseResults(intentRes, semanticRes, null, {
+        matches = applyStructuredScoring(fuseResults(intentRes, semanticRes, null, {
           limit: 8,
           semanticWeight: SEMANTIC_WEIGHT,
           intentWeight: INTENT_WEIGHT,
-        }).map((match) => ({
+        }), { type: 'search', translated, originalQuery: query }).map((match) => ({
           ...match,
           source: 'in-app',
           retrieval_variant: variant,

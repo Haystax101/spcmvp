@@ -1,0 +1,160 @@
+{
+  "startedAt": "2026-04-19T14:11:06.621Z",
+  "dryRun": true,
+  "model": "gemma4:e2b-it-q4_K_M",
+  "minKeepConfidence": 0.7,
+  "deleteAfterFailedPasses": 2,
+  "total": 10,
+  "keep": 0,
+  "deleteCandidates": 10,
+  "deleted": 0,
+  "errors": 0,
+  "records": [
+    {
+      "person_id": "69e3c664002408ad90d0",
+      "full_name": "Hope Ableton Pahlavi",
+      "action": "marked_delete_candidate",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0.55,
+        "reason": "Heuristic fallback uncertain but person-like; classifier_error=Entity classifier timeout after 25000ms",
+        "source": "heuristic_fallback",
+        "name": "Hope Ableton Pahlavi"
+      },
+      "query": "site:linkedin.com Hope Ableton Pahlavi Chemistry and Biochemistry Society society Oxford University",
+      "signals": [
+        "No LinkedIn profile found. Only an Instagram profile was provided."
+      ],
+      "confidence": 0.1,
+      "linkedin_url": "",
+      "fail_count": 1
+    },
+    {
+      "person_id": "69e3c6640038ff4d9797",
+      "full_name": "Samwel",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Samwel"
+      },
+      "fail_count": 1,
+      "error": null
+    },
+    {
+      "person_id": "69e3c66500072d73aa4a",
+      "full_name": "Horizons: OxWEST’s 2026 Conference",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 1,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Horizons: OxWEST’s 2026 Conference"
+      },
+      "fail_count": 1,
+      "error": null
+    },
+    {
+      "person_id": "69e3c665001d86ffb53d",
+      "full_name": "Xylem 🍀",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Xylem 🍀"
+      },
+      "fail_count": 1,
+      "error": null
+    },
+    {
+      "person_id": "69e3c665002c27835d50",
+      "full_name": "abeakerofwater",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "abeakerofwater"
+      },
+      "fail_count": 1,
+      "error": null
+    },
+    {
+      "person_id": "69e3c66600050e5c696f",
+      "full_name": "Harri",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Harri"
+      },
+      "fail_count": 1,
+      "error": null
+    },
+    {
+      "person_id": "69e3c666001991770f36",
+      "full_name": "Sawsn Ahmed",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Sawsn Ahmed"
+      },
+      "fail_count": 1,
+      "error": null
+    },
+    {
+      "person_id": "69e3c6660026df2affce",
+      "full_name": "Summer",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Summer"
+      },
+      "fail_count": 1,
+      "error": null
+    },
+    {
+      "person_id": "69e3c666003a50317ae2",
+      "full_name": "instauser 10r",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "instauser 10r"
+      },
+      "fail_count": 1,
+      "error": null
+    },
+    {
+      "person_id": "69e3c6670008b2e31e99",
+      "full_name": "Maria Vitória Barbosa A. Araújo",
+      "action": "non_person_auto_remove_candidate",
+      "entity_check": {
+        "is_person": false,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Maria Vitória Barbosa A. Araújo"
+      },
+      "fail_count": 1,
+      "error": null
+    }
+  ],
+  "finishedAt": "2026-04-19T14:11:54.794Z"
+}

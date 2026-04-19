@@ -8,6 +8,7 @@ import {
   Search
 } from 'lucide-react'
 import { tables, account, functions, DB_ID, PROFILES_TABLE, DISCOVERY_FUNCTION_ID, ID, Query } from './lib/appwrite'
+import NewOnboarding from './NewOnboarding'
 
 const OXFORD_COLLEGES = [
   'All Souls', 'Balliol', 'Brasenose', 'Christ Church', 'Corpus Christi', 'Exeter', 
@@ -1259,8 +1260,14 @@ function MatchCard({ match, rank }) {
         </div>
 
         <p className="text-[11px] text-text3 mb-5 font-mono uppercase tracking-wider">
-          Semantic {match.semantic_pct ?? 0}% • Intent {match.intent_pct ?? 0}%
+          Semantic {match.semantic_pct ?? 0}% • Intent {match.intent_pct ?? 0}%{typeof match.structured_score === 'number' ? ` • Structured ${match.structured_score}%` : ''}
         </p>
+
+        {Array.isArray(match.score_breakdown?.details) && match.score_breakdown.details.length > 0 && (
+          <p className="text-[11px] text-text3 mb-4 font-mono leading-relaxed">
+            {match.score_breakdown.details.join(' · ')}
+          </p>
+        )}
 
         {match.match_reason && (
           <p className="text-sm text-text2 mb-6 leading-relaxed">
@@ -1424,39 +1431,42 @@ function App() {
   const [docId, setDocId] = useState(null)
   const [profile, setProfile] = useState(null)
 
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const authenticatedUser = await account.get()
-        setUser(authenticatedUser)
-        const result = await tables.listRows({
-          databaseId: DB_ID,
-          tableId: PROFILES_TABLE,
-          queries: [Query.equal('user_id', authenticatedUser.$id), Query.limit(1)]
-        })
-        if (result.rows.length > 0) {
-          const existingProfile = result.rows[0]
-          if (existingProfile.is_onboarding_complete && existingProfile.is_indexed) {
-            setProfile(existingProfile)
-            setStep('discovery')
-          } else if (existingProfile.is_onboarding_complete) {
-            setDocId(existingProfile.$id)
-            setStep('loading')
-          } else {
-            setDocId(existingProfile.$id)
-            setStep('onboarding')
-          }
+  const checkSession = async () => {
+    try {
+      const authenticatedUser = await account.get()
+      setUser(authenticatedUser)
+      const result = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: PROFILES_TABLE,
+        queries: [Query.equal('user_id', authenticatedUser.$id), Query.limit(1)]
+      })
+      if (result.rows.length > 0) {
+        const existingProfile = result.rows[0]
+        if (existingProfile.is_onboarding_complete && existingProfile.is_indexed) {
+          setProfile(existingProfile)
+          setStep('discovery')
+        } else if (existingProfile.is_onboarding_complete) {
+          setDocId(existingProfile.$id)
+          setStep('loading')
         } else {
+          setDocId(existingProfile.$id)
           setStep('onboarding')
         }
-      } catch {
-        setStep('auth')
+      } else {
+        setStep('onboarding')
       }
+    } catch {
+      setUser(null)
+      setStep('onboarding')
     }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkSession()
   }, [])
 
-  const handleAuth = (u) => { setUser(u); setStep('onboarding') }
+  const handleAuth = () => { checkSession() }
   const handleOnboardingComplete = (id) => { setDocId(id); setStep('loading') }
   const handleSynced = (doc) => { setProfile(doc); setStep('discovery') }
 
@@ -1467,8 +1477,7 @@ function App() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text" />
         </div>
       )}
-      {step === 'auth' && <AuthScreen onAuth={handleAuth} />}
-      {step === 'onboarding' && user && <OnboardingScreen user={user} onComplete={handleOnboardingComplete} />}
+      {step === 'onboarding' && <NewOnboarding user={user} onAuth={handleAuth} onComplete={handleOnboardingComplete} />}
       {step === 'loading' && <LoadingScreen docId={docId} onReady={handleSynced} />}
       {step === 'discovery' && <DiscoveryScreen profile={profile} user={user} />}
     </div>

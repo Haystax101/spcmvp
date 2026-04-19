@@ -1,0 +1,42 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    mem_limit: 256m
+    cpus: 0.25
+
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "8080:8080"
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+      - SEARXNG_REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    mem_limit: 768m
+    cpus: 1.0
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    depends_on:
+      - searxng
+    ports:
+      - "3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - ENABLE_RAG_WEB_SEARCH=true
+      - RAG_WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>&format=json
+    volumes:
+      - open-webui-data:/app/backend/data
+    mem_limit: 768m
+    cpus: 1.0
+
+volumes:
+  open-webui-data:
