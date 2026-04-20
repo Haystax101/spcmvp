@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const LOGS_DIR = path.join(ROOT, 'logs');
 const STATE_DIR = path.join(ROOT, 'state');
 const STATE_FILE = path.join(STATE_DIR, 'non_findable_state.json');
+
 const ORG_HINT_WORDS = [
   'society',
   'club',
@@ -52,6 +53,7 @@ const cfg = {
   searxngTimeoutMs: Number.parseInt(process.env.SEARXNG_TIMEOUT_MS || '15000', 10),
   maxModelOutputTokens: Number.parseInt(process.env.MAX_MODEL_OUTPUT_TOKENS || '220', 10),
   minKeepConfidence: Number.parseFloat(process.env.MIN_KEEP_CONFIDENCE || '0.70'),
+  minMembershipTotal: Number.parseInt(process.env.MIN_MEMBERSHIP_TOTAL || '2', 10),
   minIdentityKeepScore: Number.parseFloat(process.env.MIN_IDENTITY_KEEP_SCORE || '0.72'),
   minOxfordKeepScore: Number.parseFloat(process.env.MIN_OXFORD_KEEP_SCORE || '0.58'),
   minIdentityReviewScore: Number.parseFloat(process.env.MIN_IDENTITY_REVIEW_SCORE || '0.50'),
@@ -60,6 +62,8 @@ const cfg = {
   maxDeleteOxfordScore: Number.parseFloat(process.env.MAX_DELETE_OXFORD_SCORE || '0.20'),
   deleteAfterFailedPasses: Number.parseInt(process.env.DELETE_AFTER_FAILED_PASSES || '2', 10),
   searchResultsLimit: Number.parseInt(process.env.SEARCH_RESULTS_LIMIT || '5', 10),
+  minSearchAttempts: Number.parseInt(process.env.MIN_SEARCH_ATTEMPTS || '5', 10),
+  maxSearchQueries: Number.parseInt(process.env.MAX_SEARCH_QUERIES || '14', 10),
   maxPeopleLimit: Number.parseInt(process.env.MAX_PEOPLE_LIMIT || '0', 10),
 };
 
@@ -185,32 +189,19 @@ function extractLooseModelObject(text) {
 
   const parsed = {};
 
-  const knownNumberKeys = [
-    'identity_match_score',
-    'oxford_affiliation_score',
-    'confidence',
-  ];
+  const knownNumberKeys = ['identity_match_score', 'oxford_affiliation_score', 'confidence'];
   for (const key of knownNumberKeys) {
     const value = findNumber(key);
     if (value !== undefined) parsed[key] = value;
   }
 
-  const knownBoolKeys = [
-    'found_linkedin',
-    'is_person',
-  ];
+  const knownBoolKeys = ['found_linkedin', 'is_person'];
   for (const key of knownBoolKeys) {
     const value = findBool(key);
     if (value !== undefined) parsed[key] = value;
   }
 
-  const knownStringKeys = [
-    'linkedin_url',
-    'summary',
-    'decision',
-    'rationale',
-    'reason',
-  ];
+  const knownStringKeys = ['linkedin_url', 'summary', 'decision', 'rationale', 'reason'];
   for (const key of knownStringKeys) {
     const value = findString(key);
     if (value !== undefined) parsed[key] = value;
@@ -311,49 +302,70 @@ async function getGroupContext(tables, personId, societiesMap, sportsMap) {
     listRowsAll(tables, cfg.peopleSportsTable, [Query.equal('person_id', personId)]),
   ]);
 
-  const societyNames = socRows
-    .map((row) => societiesMap.get(row.society_id)?.name || '')
-    .map(normalizeString)
+  const uniqueSocietyIds = new Set(socRows.map((row) => normalizeString(row.society_id)).filter(Boolean));
+  const uniqueSportIds = new Set(sportRows.map((row) => normalizeString(row.sport_id)).filter(Boolean));
+
+  const societyNames = Array.from(uniqueSocietyIds)
+    .map((id) => normalizeString(societiesMap.get(id)?.name || ''))
     .filter(Boolean)
     .slice(0, 3);
 
-  const sportNames = sportRows
-    .map((row) => sportsMap.get(row.sport_id)?.name || '')
-    .map(normalizeString)
+  const sportNames = Array.from(uniqueSportIds)
+    .map((id) => normalizeString(sportsMap.get(id)?.name || ''))
     .filter(Boolean)
     .slice(0, 3);
 
   return {
     societies: societyNames,
     sports: sportNames,
+    societyCount: uniqueSocietyIds.size,
+    sportCount: uniqueSportIds.size,
+    membershipTotal: uniqueSocietyIds.size + uniqueSportIds.size,
   };
-}
-
-function buildSearchQuery(person, groupContext) {
-  const name = normalizeString(person.full_name || person.username || person.normalized_name || '');
-  const hints = [
-    ...groupContext.societies.map((s) => `${s} society`),
-    ...groupContext.sports.map((s) => `${s} sport`),
-  ].slice(0, 2);
-
-  const hintSuffix = hints.length ? ` ${hints.join(' ')}` : '';
-  return `site:linkedin.com ${name}${hintSuffix} Oxford University`;
 }
 
 function buildSearchQueries(person, groupContext) {
   const name = normalizeString(person.full_name || person.username || person.normalized_name || '');
   const username = normalizeString(person.username).replace(/^@+/, '');
+  const subject = name || username;
+  if (!subject) return [];
+
   const hint = normalizeString(groupContext.societies[0] || groupContext.sports[0] || '');
+  const normalizedHint = hint.replace(/"/g, '');
   const queries = [
-    `site:linkedin.com/in "${name}"`,
-    `"${name}" linkedin`,
-    `"${name}" linkedin oxford`,
-    hint ? `"${name}" "${hint}" linkedin` : '',
-    username ? `site:linkedin.com/in ${username}` : '',
-    username ? `${username} linkedin` : '',
+    // LinkedIn dorks
+    `site:linkedin.com/in "${subject}" "University of Oxford"`,
+    `site:linkedin.com/in "${subject}" "Oxford University"`,
+    `site:linkedin.com/in "${subject}" Oxford`,
+    username ? `site:linkedin.com/in ${username} Oxford` : '',
+    // Instagram handle + bio clues
+    username ? `site:instagram.com "${username}" Oxford` : '',
+    username ? `site:instagram.com "${username}" "ox.ac.uk"` : '',
+    username ? `site:instagram.com/${username}` : '',
+    // X / Twitter
+    `site:x.com "${subject}" Oxford`,
+    username ? `site:x.com "${username}" Oxford` : '',
+    `site:twitter.com "${subject}" Oxford`,
+    // Facebook
+    `site:facebook.com "${subject}" "University of Oxford"`,
+    // Cherwell newspaper
+    `site:cherwell.org "${subject}"`,
+    `site:cherwell.org "${subject}" Oxford`,
+    // Oxford Boat Club references
+    `site:oubc.org.uk "${subject}"`,
+    `"Oxford University Boat Club" "${subject}"`,
+    // Context-aware broad fallback
+    normalizedHint ? `"${subject}" "${normalizedHint}" Oxford` : '',
+    `"${subject}" linkedin oxford`,
+    `"${subject}" "Oxford" profile`,
   ].map(normalizeString).filter(Boolean);
 
-  return Array.from(new Set(queries));
+  return Array.from(new Set(queries)).slice(0, cfg.maxSearchQueries);
+}
+
+function buildSearchQuery(person, groupContext) {
+  const queries = buildSearchQueries(person, groupContext);
+  return queries[0] || '';
 }
 
 async function searchWeb(query) {
@@ -393,17 +405,29 @@ async function searchWeb(query) {
 }
 
 async function searchWebWithFallback(queries) {
+  if (!Array.isArray(queries) || queries.length === 0) {
+    return { results: [], attempted: [] };
+  }
+
   const merged = [];
   const seen = new Set();
   const attempted = [];
+  const minAttempts = Math.min(Math.max(1, cfg.minSearchAttempts), queries.length);
 
   for (let i = 0; i < queries.length; i += 1) {
     const query = queries[i];
     console.log(`  → Search attempt ${i + 1}/${queries.length}: "${query}"`);
 
-    const results = await searchWeb(query);
-    attempted.push({ query, count: results.length });
-    console.log(`  → Attempt ${i + 1} returned ${results.length} results`);
+    let results = [];
+    try {
+      results = await searchWeb(query);
+      attempted.push({ query, count: results.length });
+      console.log(`  → Attempt ${i + 1} returned ${results.length} results`);
+    } catch (err) {
+      attempted.push({ query, count: 0, error: err.message });
+      console.log(`  → Attempt ${i + 1} failed: ${err.message}`);
+      continue;
+    }
 
     for (const result of results) {
       const key = normalizeString(result.url).toLowerCase();
@@ -412,7 +436,7 @@ async function searchWebWithFallback(queries) {
       merged.push(result);
     }
 
-    if (merged.length >= cfg.searchResultsLimit) break;
+    if (merged.length >= cfg.searchResultsLimit && (i + 1) >= minAttempts) break;
   }
 
   return {
@@ -425,7 +449,7 @@ function heuristicEntityClassification(person) {
   const name = normalizeString(person.full_name || person.username || person.normalized_name || '');
   const lower = name.toLowerCase();
 
-const hasOrgHint = ORG_HINT_WORDS.some((word) => lower.includes(word));
+  const hasOrgHint = ORG_HINT_WORDS.some((word) => lower.includes(word));
   const hasComma = name.includes(',');
   const longTokens = name.split(/\s+/).filter(Boolean).length >= 5;
 
@@ -486,14 +510,44 @@ function normalizeEvidenceArray(items, limit = 8) {
       const domain = normalizeString(entry.domain) || domainFromUrl(source);
       const snippet = normalizeString(entry.snippet || entry.rationale || entry.note);
       if (!source && !snippet) return null;
-      return {
-        source,
-        domain,
-        snippet,
-      };
+      return { source, domain, snippet };
     })
     .filter(Boolean)
     .slice(0, limit);
+}
+
+function fallbackIdentityEvidenceFromResults(results) {
+  return results
+    .filter((entry) => {
+      const domain = domainFromUrl(entry.url);
+      return /linkedin\.com|instagram\.com|x\.com|twitter\.com|facebook\.com/i.test(domain);
+    })
+    .slice(0, 5)
+    .map((entry) => ({
+      source: normalizeString(entry.url),
+      domain: domainFromUrl(entry.url),
+      snippet: normalizeString(entry.content || entry.title),
+    }));
+}
+
+function fallbackOxfordEvidenceFromResults(results) {
+  return results
+    .filter((entry) => {
+      const domain = domainFromUrl(entry.url);
+      const text = `${normalizeString(entry.title)} ${normalizeString(entry.content)}`.toLowerCase();
+      return (
+        /ox\.ac\.uk|cherwell\.org|oubc\.org\.uk/i.test(domain) ||
+        text.includes('oxford') ||
+        text.includes('university of oxford') ||
+        text.includes('oxford university')
+      );
+    })
+    .slice(0, 5)
+    .map((entry) => ({
+      source: normalizeString(entry.url),
+      domain: domainFromUrl(entry.url),
+      snippet: normalizeString(entry.content || entry.title),
+    }));
 }
 
 function auditPrompt(person, groupContext, results) {
@@ -526,18 +580,19 @@ Rules:
 - decision must be one of: "keep", "needs_review", "delete_candidate".
 - identity_match_score and oxford_affiliation_score must be 0-1.
 - confidence should reflect overall certainty, not only LinkedIn quality.
-- LinkedIn is only one source. Do not treat any LinkedIn hit as sufficient proof of Oxford affiliation.
-- If evidence is mixed or incomplete, choose needs_review.
+- LinkedIn is only one source. Do not treat any LinkedIn hit as sufficient Oxford proof.
+- If evidence is mixed/incomplete, choose needs_review.
 - Only choose delete_candidate when both identity and Oxford evidence are weak.
-- summary must be 60-140 words only when decision is keep or needs_review; empty for delete_candidate.
+- summary must be 60-140 words only when decision is keep or needs_review.
 - Prefer direct profile/page URLs in evidence arrays.
 
 Candidate:
 - Name: ${name}
-- Username: ${normalizeString(person.username)}
+- Instagram handle: ${normalizeString(person.username)}
 - Existing profile URL: ${normalizeString(person.profile_url)}
 - Societies: ${groupContext.societies.join(', ') || 'None'}
 - Sports: ${groupContext.sports.join(', ') || 'None'}
+- Membership totals: societies=${groupContext.societyCount}, sports=${groupContext.sportCount}, total=${groupContext.membershipTotal}
 
 Search evidence:
 ${resultsText || 'No results'}
@@ -590,7 +645,6 @@ Rules:
     const likelyPerson = isLikelyPersonName(person);
     const hasStrongOrgHint = ORG_HINT_WORDS.some((word) => displayName.toLowerCase().includes(word));
 
-    // Conservative calibration: only auto-reject as non-person when evidence is strong.
     const finalIsPerson = parsedIsPerson || likelyPerson || !(parsedConfidence >= 0.85 && hasStrongOrgHint);
 
     return {
@@ -659,7 +713,7 @@ async function ollamaJsonCall({
     const data = await response.json();
     const text = data?.message?.content || '';
     console.log(`  → Response length: ${text.length} chars`);
-    
+
     const parsed = extractJsonObject(text);
     if (!parsed) {
       const loose = extractLooseModelObject(text);
@@ -683,17 +737,24 @@ async function ollamaJsonCall({
   }
 }
 
-function normalizeDecision(raw, results) {
+function normalizeDecision(raw, results, groupContext) {
   const fallbackLinkedin = bestLinkedinFromResults(results);
   const foundLinkedin = Boolean(raw?.found_linkedin) || Boolean(fallbackLinkedin);
   const linkedin = normalizeString(raw?.linkedin_url) || fallbackLinkedin;
+
   const confidenceRaw = Number.parseFloat(String(raw?.confidence ?? 0));
   const confidence = Number.isFinite(confidenceRaw) ? Math.max(0, Math.min(1, confidenceRaw)) : 0;
-  const signals = Array.isArray(raw?.signals) ? raw.signals.map(normalizeString).filter(Boolean).slice(0, 8) : [];
+
+  let signals = Array.isArray(raw?.signals) ? raw.signals.map(normalizeString).filter(Boolean).slice(0, 8) : [];
   const summary = normalizeString(raw?.summary);
   const rationale = normalizeString(raw?.rationale);
-  const identityEvidence = normalizeEvidenceArray(raw?.identity_evidence);
-  const oxfordEvidence = normalizeEvidenceArray(raw?.oxford_evidence);
+
+  const explicitIdentityEvidence = normalizeEvidenceArray(raw?.identity_evidence);
+  const explicitOxfordEvidence = normalizeEvidenceArray(raw?.oxford_evidence);
+  const fallbackIdentityEvidence = fallbackIdentityEvidenceFromResults(results);
+  const fallbackOxfordEvidence = fallbackOxfordEvidenceFromResults(results);
+  const identityEvidence = explicitIdentityEvidence.length > 0 ? explicitIdentityEvidence : fallbackIdentityEvidence;
+  const oxfordEvidence = explicitOxfordEvidence.length > 0 ? explicitOxfordEvidence : fallbackOxfordEvidence;
 
   const identityRaw = Number.parseFloat(String(raw?.identity_match_score ?? 0));
   const identityScore = Number.isFinite(identityRaw) ? Math.max(0, Math.min(1, identityRaw)) : 0;
@@ -702,19 +763,29 @@ function normalizeDecision(raw, results) {
   const oxfordScore = Number.isFinite(oxfordRaw) ? Math.max(0, Math.min(1, oxfordRaw)) : 0;
 
   const hasCredibleLinkedin = foundLinkedin && /linkedin\.com\/(in|pub)\//i.test(linkedin);
+  const hasIdentityEvidence = hasCredibleLinkedin || identityEvidence.length > 0;
+  const hasOxfordEvidence = oxfordEvidence.length > 0;
+
+  if (signals.length === 0) {
+    if (!hasIdentityEvidence) signals.push('No reliable social/profile identity evidence found');
+    if (!hasOxfordEvidence) signals.push('No Oxford-specific evidence found in web evidence');
+  }
 
   let decision = normalizeString(raw?.decision).toLowerCase();
   if (!['keep', 'needs_review', 'delete_candidate'].includes(decision)) {
     if (
       identityScore >= cfg.minIdentityKeepScore &&
       oxfordScore >= cfg.minOxfordKeepScore &&
-      confidence >= cfg.minKeepConfidence
+      confidence >= cfg.minKeepConfidence &&
+      hasIdentityEvidence &&
+      hasOxfordEvidence
     ) {
       decision = 'keep';
     } else if (
       identityScore <= cfg.maxDeleteIdentityScore &&
       oxfordScore <= cfg.maxDeleteOxfordScore &&
-      !hasCredibleLinkedin
+      !hasIdentityEvidence &&
+      !hasOxfordEvidence
     ) {
       decision = 'delete_candidate';
     } else {
@@ -729,8 +800,14 @@ function normalizeDecision(raw, results) {
   if (decision === 'delete_candidate' && (
     identityScore >= cfg.minIdentityReviewScore ||
     oxfordScore >= cfg.minOxfordReviewScore ||
-    hasCredibleLinkedin
+    hasIdentityEvidence ||
+    hasOxfordEvidence
   )) {
+    decision = 'needs_review';
+  }
+
+  if (decision === 'delete_candidate' && Number(groupContext?.membershipTotal || 0) >= cfg.minMembershipTotal + 2) {
+    // High internal membership footprint should be manually reviewed, not auto-deleted by web uncertainty.
     decision = 'needs_review';
   }
 
@@ -843,6 +920,7 @@ async function main() {
   console.log(`  Model:    ${cfg.model}`);
   console.log(`  Classifier model: ${cfg.classifierModel}`);
   console.log(`  Confidence threshold: ${(cfg.minKeepConfidence * 100).toFixed(0)}%`);
+  console.log(`  Membership rule: delete if society+sport total < ${cfg.minMembershipTotal}`);
   console.log(`  Timeouts: searxng=${cfg.searxngTimeoutMs}ms classifier=${cfg.classifierTimeoutMs}ms model=${cfg.ollamaTimeoutMs}ms`);
   console.log('');
 
@@ -851,12 +929,14 @@ async function main() {
     dryRun: args.dryRun,
     model: cfg.model,
     minKeepConfidence: cfg.minKeepConfidence,
+    minMembershipTotal: cfg.minMembershipTotal,
     deleteAfterFailedPasses: cfg.deleteAfterFailedPasses,
     total: people.length,
     keep: 0,
     needsReview: 0,
     deleteCandidates: 0,
     deleted: 0,
+    autoDeletedLowMembership: 0,
     errors: 0,
     records: [],
   };
@@ -902,20 +982,39 @@ async function main() {
         report.records.push(record);
         continue;
       }
-      
+
       const groupContext = await getGroupContext(tables, person.$id, societiesMap, sportsMap);
+      record.society_count = groupContext.societyCount;
+      record.sport_count = groupContext.sportCount;
+      record.membership_total = groupContext.membershipTotal;
+
+      if (groupContext.membershipTotal < cfg.minMembershipTotal) {
+        const cascade = await deletePersonCascade(tables, person.$id, args.dryRun);
+        clearNonFindableState(state, person.$id);
+        report.deleted += 1;
+        report.autoDeletedLowMembership += 1;
+        record.action = args.dryRun ? 'low_membership_delete_dry_run' : 'low_membership_deleted';
+        record.reason = `membership_total=${groupContext.membershipTotal} below threshold=${cfg.minMembershipTotal}`;
+        record.deleted_joins = cascade;
+        console.log(`  ✗ DELETE (low membership: ${groupContext.membershipTotal} < ${cfg.minMembershipTotal})`);
+        report.records.push(record);
+        continue;
+      }
+
       const query = buildSearchQuery(person, groupContext);
       const searchQueries = buildSearchQueries(person, groupContext);
-      
+
+      record.query = query;
+      record.search_queries = searchQueries;
+
       console.log(`  → Primary query: "${query}"`);
       const searchOutcome = await searchWebWithFallback(searchQueries);
       const results = searchOutcome.results;
       console.log(`  → Final merged results: ${results.length}`);
-      
-      const modelRaw = await runModel(auditPrompt(person, groupContext, results));
-      const normalized = normalizeDecision(modelRaw, results);
 
-      record.query = query;
+      const modelRaw = await runModel(auditPrompt(person, groupContext, results));
+      const normalized = normalizeDecision(modelRaw, results, groupContext);
+
       record.search_attempts = searchOutcome.attempted;
       record.signals = normalized.signals;
       record.confidence = normalized.confidence;
@@ -984,6 +1083,7 @@ async function main() {
   console.log(`  Needs review: ${report.needsReview}`);
   console.log(`  Delete (candidate): ${report.deleteCandidates}`);
   console.log(`  Deleted:   ${report.deleted}`);
+  console.log(`  Auto-deleted (low membership): ${report.autoDeletedLowMembership}`);
   console.log(`  Errors:    ${report.errors}`);
   console.log(`  Mode:      ${report.dryRun ? 'DRY RUN (no writes)' : 'PRODUCTION (writes applied)'}`);
   console.log('');

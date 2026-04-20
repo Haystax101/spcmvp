@@ -5,10 +5,14 @@ import {
   ChevronLeft,
   ArrowRight,
   LogOut,
-  Search
+  Search,
+  Inbox as InboxIcon,
+  UserCircle
 } from 'lucide-react'
 import { tables, account, functions, DB_ID, PROFILES_TABLE, DISCOVERY_FUNCTION_ID, ID, Query } from './lib/appwrite'
 import NewOnboarding from './NewOnboarding'
+import SuperchargedInbox from './SuperchargedInbox'
+import SuperchargedProfile from './supercharged_v18'
 
 const OXFORD_COLLEGES = [
   'All Souls', 'Balliol', 'Brasenose', 'Christ Church', 'Corpus Christi', 'Exeter', 
@@ -1296,6 +1300,7 @@ function DiscoveryScreen({ profile }) {
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
   const [activeQuery, setActiveQuery] = useState('')
+  const [activeScreen, setActiveScreen] = useState('home')
 
   const callDiscovery = async (body) => {
     const exec = await functions.createExecution(DISCOVERY_FUNCTION_ID, JSON.stringify(body), false)
@@ -1344,80 +1349,116 @@ function DiscoveryScreen({ profile }) {
 
   const displayMatches = searchResults !== null ? searchResults : matches
   const isSearchMode = searchResults !== null
+  const navItems = [
+    { key: 'home', label: 'Search', Icon: Search },
+    { key: 'inbox', label: 'Inbox', Icon: InboxIcon },
+    { key: 'profile', label: 'Profile', Icon: UserCircle }
+  ]
+
+  const renderHome = () => (
+    <div className="h-full lg:px-4 lg:py-4">
+      <div className="h-full flex flex-col bg-bg/95 w-full max-w-6xl mx-auto relative overflow-hidden lg:rounded-[28px] lg:border lg:border-border-light lg:shadow-[0_18px_50px_rgba(0,0,0,0.08)]">
+        <TopoBackground />
+
+        <header className="px-6 sm:px-8 pt-8 sm:pt-10 pb-5 sm:pb-6 flex items-center justify-between border-b border-border-light/50 bg-bg/75 backdrop-blur-md sticky top-0 z-20">
+          <div>
+            <h1 className="font-playfair text-2xl font-light tracking-tight">Supercharged</h1>
+            <p className="font-jetbrains text-[10px] text-text3 uppercase tracking-widest mt-1">DISCOVERY ENGINE V3.1</p>
+          </div>
+          <button onClick={handleLogout} className="p-2 text-text3 hover:text-text transition-colors" aria-label="Log out">
+            <LogOut size={20} />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 sm:py-8 space-y-12 pb-24 lg:pb-8">
+          <section>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="font-playfair text-3xl font-light">
+                {isSearchMode ? `Searching for "${activeQuery}"` : 'Your matches'}
+              </h2>
+              <div className="flex gap-1">
+                {[1, 2, 3].map(i => <div key={i} className="w-1 h-1 rounded-full bg-border-light" />)}
+              </div>
+            </div>
+
+            {(loadingMatches || searching) ? (
+              <div className="grid gap-6 xl:grid-cols-2">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="h-48 bg-white border border-border-light animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-6 xl:grid-cols-2">
+                {displayMatches.length === 0 ? (
+                  <div className="text-center py-20 border border-dashed border-border-light bg-white/60 xl:col-span-2">
+                    <p className="text-text3 italic">No connections found in this dimensional space.</p>
+                  </div>
+                ) : (
+                  displayMatches.map((match, i) => (
+                    <MatchCard key={match.user_id || i} match={match} rank={i} />
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <div className="px-6 sm:px-8 py-4 sm:py-6 bg-gradient-to-t from-bg via-bg/95 to-bg/80 backdrop-blur-md border-t border-border-light/40">
+          <form onSubmit={handleSearch} className="relative group">
+            <input
+              type="text"
+              placeholder="Search by interest, goal, or field..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full bg-white border-2 border-border-light rounded-full px-8 py-5 text-sm focus:border-text focus:outline-none transition-all pr-16 shadow-[0_12px_30px_rgba(0,0,0,0.06)]"
+            />
+            <button
+              type="submit"
+              disabled={searching || !query.trim()}
+              className="absolute right-3 top-2.5 w-10 h-10 rounded-full bg-text text-white flex items-center justify-center hover:bg-black transition-all disabled:opacity-20"
+            >
+              {searching ? <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowRight size={18} />}
+            </button>
+          </form>
+          <div className="mt-4 flex justify-center gap-6 text-[10px] font-mono text-text3 uppercase tracking-widest">
+            <span>Press Enter to scout</span>
+            <span>•</span>
+            <span>Clear to reset</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
-    <div className="h-screen flex flex-col bg-bg max-w-2xl mx-auto border-x border-border-light relative">
-      <TopoBackground />
-      
-      {/* Header */}
-      <header className="px-8 pt-10 pb-6 flex items-center justify-between border-b border-border-light/50 bg-bg/80 backdrop-blur-md sticky top-0 z-20">
-        <div>
-          <h1 className="font-playfair text-2xl font-light tracking-tight">Supercharged</h1>
-          <p className="font-jetbrains text-[10px] text-text3 uppercase tracking-widest mt-1">DISCOVERY ENGINE V3.1</p>
-        </div>
-        <button onClick={handleLogout} className="p-2 text-text3 hover:text-text transition-colors">
-          <LogOut size={20} />
-        </button>
-      </header>
+    <div className="h-[100dvh] relative overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(245,200,66,0.12),transparent_35%),radial-gradient(circle_at_88%_12%,rgba(26,26,26,0.06),transparent_28%),#f7f4ef]">
+      {activeScreen === 'home' && renderHome()}
+      {activeScreen === 'inbox' && <div className="h-full"><SuperchargedInbox /></div>}
+      {activeScreen === 'profile' && <div className="h-full"><SuperchargedProfile /></div>}
 
-      {/* Results Area */}
-      <div className="flex-1 overflow-y-auto px-8 py-8 space-y-12">
-        <section>
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="font-playfair text-3xl font-light">
-              {isSearchMode ? `Searching for "${activeQuery}"` : 'Your matches'}
-            </h2>
-            <div className="flex gap-1">
-              {[1, 2, 3].map(i => <div key={i} className="w-1 h-1 rounded-full bg-border-light" />)}
-            </div>
+      <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-3">
+        <div className="pointer-events-auto w-[min(92vw,430px)] rounded-[22px] border border-border-light bg-white/88 p-2 shadow-[0_14px_40px_rgba(0,0,0,0.15)] backdrop-blur-xl">
+          <div className="grid grid-cols-3 gap-1">
+            {navItems.map((item) => {
+              const isActive = activeScreen === item.key
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setActiveScreen(item.key)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2 text-[11px] font-medium transition-colors ${
+                    isActive ? 'text-text bg-white border border-border-light shadow-sm' : 'text-text3 hover:text-text'
+                  }`}
+                >
+                  <item.Icon size={18} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
           </div>
-
-          {(loadingMatches || searching) ? (
-            <div className="space-y-6">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-48 bg-white border border-border-light animate-pulse" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-6">
-              {displayMatches.length === 0 ? (
-                <div className="text-center py-20 border border-dashed border-border-light">
-                  <p className="text-text3 italic">No connections found in this dimensional space.</p>
-                </div>
-              ) : (
-                displayMatches.map((match, i) => (
-                  <MatchCard key={match.user_id || i} match={match} rank={i} />
-                ))
-              )}
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Search Interaction (Floating Pill) */}
-      <div className="px-8 py-6 bg-bg/80 backdrop-blur-md">
-        <form onSubmit={handleSearch} className="relative group">
-          <input
-            type="text"
-            placeholder="Search by interest, goal, or field..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-white border border-border-light rounded-full px-8 py-5 text-sm focus:border-text focus:outline-none transition-all pr-16 shadow-[0_10px_30px_rgba(0,0,0,0.03)]"
-          />
-          <button
-            type="submit"
-            disabled={searching || !query.trim()}
-            className="absolute right-3 top-2.5 w-10 h-10 rounded-full bg-text text-white flex items-center justify-center hover:bg-black transition-all disabled:opacity-20"
-          >
-            {searching ? <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowRight size={18} />}
-          </button>
-        </form>
-        <div className="mt-4 flex justify-center gap-6 text-[10px] font-mono text-text3 uppercase tracking-widest">
-           <span>Press Enter to scout</span>
-           <span>•</span>
-           <span>Clear to reset</span>
         </div>
-      </div>
+      </nav>
     </div>
   )
 }

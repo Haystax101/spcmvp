@@ -192,7 +192,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
   
   const stepOrder = useMemo(() => {
-    let pre = ['cover', 'login', '1', '2bday', '2u', '3', '5', '5pw', '6', '6study', '6year', '7', '8'];
+    let pre = ['cover', 'login', '1', '2bday', '2u', '3', '5', '5pw', '6study', '6year', '7', '8'];
     if (user) {
       pre = pre.filter(s => !['cover', 'login', '3', '5', '5pw'].includes(s));
     }
@@ -531,7 +531,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
           {currentStep === '1' && (
 <StepWrapper key="1" currentStep={currentStep} id="1">
-            <h1 className="ob-heading">What's your name?</h1>
+            <h1 className="ob-heading sm">What's your name?</h1>
             <p className="ob-whisper">So your matches know who they're talking to.</p>
             <input className="underline-input" autoFocus type="text" placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ marginBottom: 20 }} />
             <input className="underline-input" type="text" placeholder="Last name" value={lastName} onChange={e => setLastName(e.target.value)} onKeyDown={e => e.key === 'Enter' && firstName && lastName && goNext()} />
@@ -585,7 +585,6 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
             <h1 className="ob-heading sm">Your Oxford email.</h1>
             <p className="ob-subtext">We'll send a code to verify you're a current student.</p>
             <p className="ob-whisper" style={{ marginBottom: 20 }}>We verify your student status once. We won't email you anything else without permission.</p>
-            <input autoFocus className="underline-input" type="email" placeholder="you@college.ox.ac.uk" spellCheck="false" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && emailValid && goNext()} />
             <input autoFocus className="underline-input" type="email" placeholder="you@college.ox.ac.uk" spellCheck="false" value={email} onChange={e => {
               const nextEmail = e.target.value;
               setEmail(nextEmail);
@@ -678,39 +677,22 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
           </StepWrapper>
 )}
 
-          {currentStep === '6' && (
-<StepWrapper key="6" currentStep={currentStep} id="6">
-            <h1 className="ob-heading sm">Which college are you at?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 12 }}>Helps us surface connections across colleges, not just your own bubble.</p>
-            <input autoFocus className="college-search" type="text" placeholder="Search colleges..." value={collegeSearch} onChange={e => setCollegeSearch(e.target.value)} />
-            <div className="chip-grid chip-scroll" style={{ gap: 8 }}>
-              {filteredColleges.map(col => (
-                <div key={col} className={`chip ${answers['college'] === col ? 'selected' : ''}`} onClick={() => updateAnswer('college', col)}>
-                  {col}
-                </div>
-              ))}
-            </div>
+          {currentStep === '6study' && (
+<StepWrapper key="6study" currentStep={currentStep} id="6study">
+            <h1 className="ob-heading sm">What do you study?</h1>
+            <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us match you with people in adjacent or complementary fields.</p>
+            <input autoFocus className="underline-input" type="text" placeholder="e.g. PPE, Computer Science, Law" style={{ fontSize: 26 }} value={studySubject} onChange={e => setStudySubject(e.target.value)} onKeyDown={e => e.key === 'Enter' && studySubject.trim().length >= 2 && goNext()} />
             <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['college']} onClick={goNext}>Continue</button>
+            <button className="btn-primary" disabled={studySubject.trim().length < 2} onClick={goNext}>Continue</button>
           </StepWrapper>
 )}
 
-          {currentStep === '6' && (
-<StepWrapper key="6" currentStep={currentStep} id="6">
-            <h1 className="ob-heading sm">Which college are you at?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 12 }}>Helps us surface connections across colleges, not just your own bubble.</p>
-            <input autoFocus className="college-search" type="text" placeholder="Search colleges..." value={collegeSearch} onChange={e => setCollegeSearch(e.target.value)} />
-            <div className="chip-grid chip-scroll" style={{ gap: 8 }}>
-              {filteredColleges.map(col => (
-                <div key={col} className={`chip ${answers['college'] === col ? 'selected' : ''}`} onClick={() => updateAnswer('college', col)}>
-                  {col}
-                </div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['college']} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+          {currentStep === '6year' && (
+<StepWrapper key="6year" currentStep={currentStep} id="6year">
+            <h1 className="ob-heading sm">Which year are you in?</h1>
+            <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us calibrate the kind of connections that make sense for where you are right now.</p>
+            <div className="tap-cards">
+              {['First year', 'Second year', 'Third year', 'Fourth year or above', 'Postgraduate'].map(y => (
                 <div key={y} className={`tap-card ${answers['year'] === y ? 'selected' : ''}`} onClick={() => updateAnswer('year', y)}>{y}</div>
               ))}
             </div>
@@ -721,7 +703,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
           {currentStep === '7' && (
 <StepWrapper key="7" currentStep={currentStep} id="7">
-            <h1 className="ob-heading em" style={{ fontSize: 44 }}>"Your profile runs<br/>in the background."</h1>
+            <h1 className="ob-heading" style={{ fontSize: 44 }}>Your profile runs<br/>in the background.</h1>
             <p className="ob-subtext" style={{ marginBottom: 0 }}>While you're in lectures, Supercharged is computing simulations. By the time you open the app, your best matches are already waiting.</p>
             <div className="flow-diagram">
               <div className="flow-node"><div className="flow-circle">&#128100;</div><div className="flow-label">Your profile</div></div>
@@ -737,7 +719,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
           {currentStep === '8' && (
 <StepWrapper key="8" currentStep={currentStep} id="8">
-            <h1 className="ob-heading sm">What are you here for?</h1>
+            <h1 className="ob-heading sm">Rank your priorities.</h1>
             <p className="ob-subtext" style={{ marginBottom: 8 }}>Rank your priorities. Tap in order.</p>
             <p className="ob-whisper" style={{ marginBottom: 20 }}>Your top priority determines who we surface first. You can select up to four.</p>
             <div className="rank-cards">
@@ -785,6 +767,40 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
           </StepWrapper>
 )}
 
+          {currentStep === 'q-career-sub' && (
+<StepWrapper key="q-career-sub" currentStep={currentStep} id="q-career-sub">
+            <h1 className="ob-heading sm">{CAREER_SUB_DATA[answers['career']]?.heading || 'Where specifically?'}</h1>
+            <p className="ob-whisper" style={{ marginBottom: 16 }}>{CAREER_SUB_DATA[answers['career']]?.whisper || "Narrows your matches to the exact corner of the field."}</p>
+            <div className="chip-grid">
+              {((CAREER_SUB_DATA[answers['career']]?.chips || []).includes('Other') ? CAREER_SUB_DATA[answers['career']].chips : [...(CAREER_SUB_DATA[answers['career']]?.chips || []), 'Other']).map(c => (
+                <div key={c} className={`chip ${answers['career-sub'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('career-sub', c)}>{c}</div>
+              ))}
+            </div>
+            <div className="ob-spacer"></div>
+            <button className="btn-primary" disabled={!answers['career-sub']} onClick={goNext}>Continue</button>
+            <p className="skip-link" onClick={goNext}>Skip for now</p>
+          </StepWrapper>
+)}
+
+          {currentStep === 'q-career-sub-other' && (
+<StepWrapper key="q-career-sub-other" currentStep={currentStep} id="q-career-sub-other">
+            <h1 className="ob-heading sm">Tell us more.</h1>
+            <p className="ob-subtext">Describe it in your own words.</p>
+            <p className="ob-whisper" style={{ marginBottom: 20 }}>Free-text answers are matched semantically. Be as specific as you like.</p>
+            <input autoFocus className="underline-input" type="text" placeholder={CAREER_SUB_DATA[answers['career']]?.placeholder || "Describe it..."} style={{ fontSize: 22 }} value={answers['career-sub-other'] || ''} onChange={e => updateAnswer('career-sub-other', e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} />
+            <div className="ob-spacer"></div>
+            <button className="btn-primary" onClick={goNext}>Continue</button>
+            <p className="skip-link" onClick={goNext}>Skip for now</p>
+          </StepWrapper>
+)}
+
+          {currentStep === 'q-building-desc' && (
+<StepWrapper key="q-building-desc" currentStep={currentStep} id="q-building-desc">
+            <h1 className="ob-heading sm">What are you building?</h1>
+            <p className="ob-whisper" style={{ marginBottom: 20 }}>A sentence or two is fine. We use this to match you with people who can actually help.</p>
+            <input autoFocus className="underline-input" type="text" placeholder="e.g. An AI tool for legal research..." style={{ fontSize: 20 }} value={answers['building-desc'] || ''} onChange={e => updateAnswer('building-desc', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['building-desc']||'').trim().length >= 5 && goNext()} />
+            <div className="ob-spacer"></div>
+            <button className="btn-primary" disabled={(answers['building-desc']||'').trim().length < 5} onClick={goNext}>Continue</button>
             <p className="skip-link" onClick={goNext}>Skip for now</p>
           </StepWrapper>
 )}
@@ -861,6 +877,12 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
           </StepWrapper>
 )}
 
+          {currentStep === 'q-sexuality' && (
+<StepWrapper key="q-sexuality" currentStep={currentStep} id="q-sexuality">
+            <h1 className="ob-heading sm">How do you describe your sexuality?</h1>
+            <p className="ob-whisper" style={{ marginBottom: 16 }}>Only used for better matching. You can skip this if you prefer.</p>
+            <div className="tap-cards">
+              {['Straight', 'Gay', 'Lesbian', 'Bisexual', 'Pansexual', 'Queer', 'Asexual', 'Prefer not to say'].map(c => (
                 <div key={c} className={`tap-card ${answers['sexuality'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('sexuality', c)}>{c}</div>
               ))}
             </div>

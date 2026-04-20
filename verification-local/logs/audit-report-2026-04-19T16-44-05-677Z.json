@@ -1,0 +1,133 @@
+{
+  "startedAt": "2026-04-19T16:43:55.081Z",
+  "dryRun": true,
+  "model": "gemma4:e2b-it-q4_K_M",
+  "minKeepConfidence": 0.7,
+  "minMembershipTotal": 1,
+  "deleteAfterFailedPasses": 2,
+  "total": 1,
+  "keep": 0,
+  "needsReview": 1,
+  "deleteCandidates": 0,
+  "deleted": 0,
+  "autoDeletedLowMembership": 0,
+  "errors": 0,
+  "records": [
+    {
+      "person_id": "69e3c664002408ad90d0",
+      "full_name": "Hope Ableton Pahlavi",
+      "action": "needs_review",
+      "entity_check": {
+        "is_person": true,
+        "confidence": 0,
+        "reason": "Classifier result",
+        "source": "llm",
+        "name": "Hope Ableton Pahlavi"
+      },
+      "society_count": 1,
+      "sport_count": 0,
+      "membership_total": 1,
+      "query": "site:linkedin.com/in \"Hope Ableton Pahlavi\" \"University of Oxford\"",
+      "search_queries": [
+        "site:linkedin.com/in \"Hope Ableton Pahlavi\" \"University of Oxford\"",
+        "site:linkedin.com/in \"Hope Ableton Pahlavi\" \"Oxford University\"",
+        "site:linkedin.com/in \"Hope Ableton Pahlavi\" Oxford",
+        "site:linkedin.com/in hopeabletonpahlavi Oxford",
+        "site:instagram.com \"hopeabletonpahlavi\" Oxford",
+        "site:instagram.com \"hopeabletonpahlavi\" \"ox.ac.uk\"",
+        "site:instagram.com/hopeabletonpahlavi",
+        "site:x.com \"Hope Ableton Pahlavi\" Oxford",
+        "site:x.com \"hopeabletonpahlavi\" Oxford",
+        "site:twitter.com \"Hope Ableton Pahlavi\" Oxford",
+        "site:facebook.com \"Hope Ableton Pahlavi\" \"University of Oxford\"",
+        "site:cherwell.org \"Hope Ableton Pahlavi\"",
+        "site:cherwell.org \"Hope Ableton Pahlavi\" Oxford",
+        "site:oubc.org.uk \"Hope Ableton Pahlavi\""
+      ],
+      "search_attempts": [
+        {
+          "query": "site:linkedin.com/in \"Hope Ableton Pahlavi\" \"University of Oxford\"",
+          "count": 5
+        },
+        {
+          "query": "site:linkedin.com/in \"Hope Ableton Pahlavi\" \"Oxford University\"",
+          "count": 0
+        },
+        {
+          "query": "site:linkedin.com/in \"Hope Ableton Pahlavi\" Oxford",
+          "count": 0
+        },
+        {
+          "query": "site:linkedin.com/in hopeabletonpahlavi Oxford",
+          "count": 0
+        },
+        {
+          "query": "site:instagram.com \"hopeabletonpahlavi\" Oxford",
+          "count": 3
+        }
+      ],
+      "signals": [],
+      "confidence": 0,
+      "identity_match_score": 0.1,
+      "oxford_affiliation_score": 0.3,
+      "linkedin_url": "https://www.instagram.com/hopeabletonpahlavi",
+      "identity_evidence": [
+        {
+          "source": "https://www.linkedin.com/in/kate-hope-b10b45a0/",
+          "domain": "linkedin.com",
+          "snippet": "Experience: School of Hope · Education: University of Oxford · Location: Coven · 287 connections on LinkedIn. View Kate Hope’s profile on LinkedIn, a professional community of 1 billion members."
+        },
+        {
+          "source": "https://www.linkedin.com/in/peter-hope/",
+          "domain": "linkedin.com",
+          "snippet": "· Experience: Oxera · Education: University of Oxford · Location: London · 500+ connections on LinkedIn. View Peter Hope’s profile on LinkedIn, a professional community of 1 billion members."
+        },
+        {
+          "source": "https://www.linkedin.com/in/hope-o-brien-096717246/",
+          "domain": "linkedin.com",
+          "snippet": "As I start thinking about my return to Oxford, I am honoured to have been elected as President of Lady Margaret Hall Boat Club for another… ... The elected representative for my college’s Junior Common Room, liasing with the Student Union on behalf of the students, which involves representing the college at the fortnightly University-wide Student Union meetings."
+        },
+        {
+          "source": "https://www.linkedin.com/in/hope-adamson/",
+          "domain": "linkedin.com",
+          "snippet": "I’m a senior protein engineer and assay development scientist, motivated to help address… · Experience: Enara Bio · Education: University of Oxford · Location: Greater Oxford Area · 342 connections on LinkedIn."
+        },
+        {
+          "source": "https://www.linkedin.com/in/hope-edwards-39a908250/",
+          "domain": "linkedin.com",
+          "snippet": "Student at University of Oxford · Education: University of Oxford · Location: IG5 0AA · 16 connections on LinkedIn. View Hope Edwards’ profile on LinkedIn, a professional community of 1 billion members."
+        }
+      ],
+      "oxford_evidence": [
+        {
+          "source": "https://www.linkedin.com/in/kate-hope-b10b45a0/",
+          "domain": "linkedin.com",
+          "snippet": "Experience: School of Hope · Education: University of Oxford · Location: Coven · 287 connections on LinkedIn. View Kate Hope’s profile on LinkedIn, a professional community of 1 billion members."
+        },
+        {
+          "source": "https://www.linkedin.com/in/peter-hope/",
+          "domain": "linkedin.com",
+          "snippet": "· Experience: Oxera · Education: University of Oxford · Location: London · 500+ connections on LinkedIn. View Peter Hope’s profile on LinkedIn, a professional community of 1 billion members."
+        },
+        {
+          "source": "https://www.linkedin.com/in/hope-o-brien-096717246/",
+          "domain": "linkedin.com",
+          "snippet": "As I start thinking about my return to Oxford, I am honoured to have been elected as President of Lady Margaret Hall Boat Club for another… ... The elected representative for my college’s Junior Common Room, liasing with the Student Union on behalf of the students, which involves representing the college at the fortnightly University-wide Student Union meetings."
+        },
+        {
+          "source": "https://www.linkedin.com/in/hope-adamson/",
+          "domain": "linkedin.com",
+          "snippet": "I’m a senior protein engineer and assay development scientist, motivated to help address… · Experience: Enara Bio · Education: University of Oxford · Location: Greater Oxford Area · 342 connections on LinkedIn."
+        },
+        {
+          "source": "https://www.linkedin.com/in/hope-edwards-39a908250/",
+          "domain": "linkedin.com",
+          "snippet": "Student at University of Oxford · Education: University of Oxford · Location: IG5 0AA · 16 connections on LinkedIn. View Hope Edwards’ profile on LinkedIn, a professional community of 1 billion members."
+        }
+      ],
+      "rationale": "",
+      "summary_written": false
+    }
+  ],
+  "finishedAt": "2026-04-19T16:44:05.676Z"
+}
