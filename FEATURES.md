@@ -138,18 +138,18 @@ When the user taps a new connection card, the chat view loads in a **preview sta
 
 Background gamification tied to relationship events. No dedicated UI beyond a black toast pill that slides in from the top of the chat screen:
 
-| Event | Voltz |
-|---|---|
-| Message sent | +2 |
-| Reply received / new connection accepted | +5 |
-| 5-exchange milestone | +10 |
-| 10-exchange milestone | +15 |
-| Nudge responded | +8 |
-| Call booked | +25 |
-| Coffee arranged | +20 |
-| Introduction made | +30 |
-| AI draft used | +3 |
-| Stage advanced | +12 |
+| Event                                    | Voltz |
+| ---------------------------------------- | ----- |
+| Message sent                             | +2    |
+| Reply received / new connection accepted | +5    |
+| 5-exchange milestone                     | +10   |
+| 10-exchange milestone                    | +15   |
+| Nudge responded                          | +8    |
+| Call booked                              | +25   |
+| Coffee arranged                          | +20   |
+| Introduction made                        | +30   |
+| AI draft used                            | +3    |
+| Stage advanced                           | +12   |
 
 Toasts stagger automatically (900ms between) when multiple events fire in sequence (e.g. sending a message from a draft = +3 voltz followed by +2 voltz). Running total is surfaced in each person's drawer ("This relationship has earned you X voltz"), connecting the abstract points back to real human connections.
 

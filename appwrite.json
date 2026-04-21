@@ -81,6 +81,88 @@
             "commands": "npm install",
             "version": "v1",
             "path": "functions/biosContext"
+        },
+        {
+            "$id": "connectionGateway",
+            "name": "connectionGateway",
+            "enabled": true,
+            "live": true,
+            "logging": true,
+            "execute": [
+                "users"
+            ],
+            "scopes": [
+                "databases.read",
+                "databases.write",
+                "tables.read",
+                "tables.write",
+                "rows.read",
+                "rows.write"
+            ],
+            "runtime": "node-22",
+            "deployment": "dist",
+            "vars": [],
+            "events": [],
+            "schedule": "",
+            "timeout": 30,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "version": "v1",
+            "path": "functions/connectionGateway"
+        },
+        {
+            "$id": "messageGateway",
+            "name": "messageGateway",
+            "enabled": true,
+            "live": true,
+            "logging": true,
+            "execute": [
+                "users"
+            ],
+            "scopes": [
+                "databases.read",
+                "databases.write",
+                "tables.read",
+                "tables.write",
+                "rows.read",
+                "rows.write"
+            ],
+            "runtime": "node-22",
+            "deployment": "dist",
+            "vars": [],
+            "events": [],
+            "schedule": "",
+            "timeout": 30,
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "version": "v1",
+            "path": "functions/messageGateway"
+        }
+    ],
+    "buckets": [
+        {
+            "$id": "profilePhotos",
+            "name": "profilePhotos",
+            "$permissions": [
+                "create(\"users\")",
+                "read(\"users\")",
+                "update(\"users\")",
+                "delete(\"users\")"
+            ],
+            "enabled": true,
+            "maximumFileSize": 10485760,
+            "allowedFileExtensions": [
+                "jpg",
+                "jpeg",
+                "png",
+                "webp",
+                "heic",
+                "heif"
+            ],
+            "compression": "none",
+            "encryption": false,
+            "antivirus": false,
+            "fileSecurity": true
         }
     ],
     "tablesDB": [
@@ -1332,6 +1414,493 @@
                     "status": "available",
                     "columns": [
                         "reply_to_message_id"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "connections",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Connections",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "pair_key",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 80,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "initiator",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "profiles",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "connections_initiated",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "initiator_profile_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "responder",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "profiles",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "connections_received",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "responder_profile_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "status",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "default": "pending",
+                    "format": "enum",
+                    "elements": [
+                        "pending",
+                        "accepted",
+                        "declined",
+                        "blocked"
+                    ]
+                },
+                {
+                    "key": "conversation",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "conversations",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "connections",
+                    "onDelete": "setNull",
+                    "side": "parent"
+                },
+                {
+                    "key": "conversation_row_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "opening_message_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "opening_message_preview",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 500,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "initiated_at",
+                    "type": "datetime",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "accepted_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "declined_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "blocked_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "last_activity_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "compatibility_score_snapshot",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
+                },
+                {
+                    "key": "compatibility_snapshot_json",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "compatibility_generated_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_connections_pair_key",
+                    "type": "unique",
+                    "status": "available",
+                    "columns": [
+                        "pair_key"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_connections_initiator_status",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "initiator_profile_id",
+                        "status"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_connections_responder_status",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "responder_profile_id",
+                        "status"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_connections_status_activity",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "status",
+                        "last_activity_at"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_connections_conversation_row",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "conversation_row_id"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "relationship_events",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Relationship Events",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "connection",
+                    "type": "relationship",
+                    "required": true,
+                    "array": false,
+                    "relatedTable": "connections",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "relationship_events",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "connection_row_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "actor",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "profiles",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "relationship_events",
+                    "onDelete": "setNull",
+                    "side": "parent"
+                },
+                {
+                    "key": "actor_profile_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "event_type",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": "enum",
+                    "elements": [
+                        "outreach_sent",
+                        "connection_accepted",
+                        "declined",
+                        "undone",
+                        "blocked",
+                        "message_sent",
+                        "message_read",
+                        "call_booked",
+                        "coffee_done",
+                        "introduction_made",
+                        "milestone_5_exchanges",
+                        "milestone_10_exchanges"
+                    ]
+                },
+                {
+                    "key": "details",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "voltz_awarded",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": 0,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
+                },
+                {
+                    "key": "occurred_at",
+                    "type": "datetime",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_rel_events_connection_time",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "connection_row_id",
+                        "occurred_at"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_rel_events_type",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "event_type"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "voltz_ledger",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Voltz Ledger",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "profile",
+                    "type": "relationship",
+                    "required": true,
+                    "array": false,
+                    "relatedTable": "profiles",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "voltz_ledger",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "profile_row_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "connection",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "connections",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "voltz_ledger",
+                    "onDelete": "setNull",
+                    "side": "parent"
+                },
+                {
+                    "key": "connection_row_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "relationship_event",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "relationship_events",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "voltz_ledger",
+                    "onDelete": "setNull",
+                    "side": "parent"
+                },
+                {
+                    "key": "relationship_event_row_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "event_type",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "amount",
+                    "type": "integer",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
+                },
+                {
+                    "key": "reason",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 200,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "awarded_at",
+                    "type": "datetime",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_voltz_profile_awarded",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "profile_row_id",
+                        "awarded_at"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_voltz_connection_row",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "connection_row_id"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_voltz_event_type",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "event_type"
                     ],
                     "orders": []
                 }

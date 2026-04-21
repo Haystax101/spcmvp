@@ -1,0 +1,41 @@
+{
+  "created_at": "2026-04-20T13:44:47.890Z",
+  "password": "Sup3rCharged!123",
+  "actors": {
+    "initiatorA": {
+      "label": "initiatorA",
+      "name": "E2E Initiator A 1776692683211",
+      "email": "e2e.initiatorA.1776692683211@example.com",
+      "user_id": "69e62dcb000d3d020bed",
+      "profile_id": "69e62dcb001ff6ca1d3e"
+    },
+    "responderB": {
+      "label": "responderB",
+      "name": "E2E Responder B 1776692683211",
+      "email": "e2e.responderB.1776692683211@example.com",
+      "user_id": "69e62dcb0029481c2edf",
+      "profile_id": "69e62dcb0038161f61ac"
+    },
+    "initiatorC": {
+      "label": "initiatorC",
+      "name": "E2E Initiator C 1776692683211",
+      "email": "e2e.initiatorC.1776692683211@example.com",
+      "user_id": "69e62dcc00076b28f3bf",
+      "profile_id": "69e62dcc0021e0480e8b"
+    },
+    "initiatorExtra1776696033899": {
+      "label": "initiatorExtra1776696033899",
+      "name": "E2E Initiator Extra 1776696033899",
+      "email": "e2e.initiatorExtra1776696033899.1776696033899@example.com",
+      "user_id": "69e63ae1003849d67941",
+      "profile_id": "69e63ae2000d3e34f8b2"
+    }
+  },
+  "created_connections": {
+    "accept_target": "69e62dcc003b052d8bed",
+    "decline_target": "69e62dce0009ce5541f7",
+    "latest_extra_target": "69e63ae20027045f8115"
+  },
+  "pending_total_for_responder": 3,
+  "updated_at": "2026-04-20T14:40:36.627Z"
+}

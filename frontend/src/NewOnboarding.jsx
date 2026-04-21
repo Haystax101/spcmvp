@@ -174,6 +174,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showEndScreen, setShowEndScreen] = useState(false);
+  const [existingSessionUser, setExistingSessionUser] = useState(user || null);
 
   useEffect(() => {
     const handleDocumentClick = (event) => {
@@ -189,6 +190,30 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
       document.removeEventListener('click', handleDocumentClick);
     };
   }, [activeFriendPopover]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const detectExistingSession = async () => {
+      if (user) {
+        setExistingSessionUser(user);
+        return;
+      }
+
+      try {
+        const existing = await account.get();
+        if (isMounted) setExistingSessionUser(existing);
+      } catch {
+        if (isMounted) setExistingSessionUser(null);
+      }
+    };
+
+    detectExistingSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   
   const stepOrder = useMemo(() => {
@@ -282,18 +307,63 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
     goNext();
   };
 
+  const canGoBack = useMemo(() => {
+    if (currentStep === 'confirm' || currentStep === 'cover') return false;
+    if (history.length > 0) return true;
+    if (currentStep === '1') return true;
+
+    const idx = stepOrder.indexOf(currentStep);
+    return idx > 0;
+  }, [currentStep, history.length, stepOrder]);
+
   const goBack = () => {
     setError('');
     if (history.length > 0) {
       const prevStep = history[history.length - 1];
       setHistory(prev => prev.slice(0, -1));
       setCurrentStep(prevStep);
+      return;
+    }
+
+    const idx = stepOrder.indexOf(currentStep);
+    if (idx > 0) {
+      setCurrentStep(stepOrder[idx - 1]);
+      return;
+    }
+
+    if (currentStep === '1') {
+      setCurrentStep('cover');
+    }
+  };
+
+  const clearCurrentSessionForCredentialAuth = async () => {
+    try {
+      await account.deleteSession('current');
+    } catch {
+      // Ignore when no session exists.
+    }
+    setExistingSessionUser(null);
+  };
+
+  const continueExistingSession = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const existing = await account.get();
+      setLoading(false);
+      onAuth(existing);
+    } catch (err) {
+      setLoading(false);
+      setExistingSessionUser(null);
+      setError(err.message || 'Unable to restore your session.');
     }
   };
 
   const handleLogin = async () => {
     try {
       setLoading(true);
+      setError('');
+      await clearCurrentSessionForCredentialAuth();
       await account.createEmailPasswordSession(loginEmail, loginPassword);
       const u = await account.get();
       setLoading(false);
@@ -307,6 +377,8 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
   const handleSignUp = async () => {
     try {
       setLoading(true);
+      setError('');
+      await clearCurrentSessionForCredentialAuth();
       await account.create(ID.unique(), email, password, firstName + ' ' + lastName);
       await account.createEmailPasswordSession(email, password);
       setLoading(false);
@@ -452,6 +524,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
   const emailValid = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.ox\.ac\.uk$/.test(email.toLowerCase()) && !email.toLowerCase().endsWith('@ox.ac.uk');
   const codeValid = code.join('').length === 6 || code.join('') === '123456';
   const pwValid = password.length >= 8 && password === confirmPassword;
+  const quickLoginLabel = existingSessionUser?.name?.trim() || existingSessionUser?.email || 'your account';
 
   return (
     <div className="new-onboarding selection:bg-accent selection:text-text">
@@ -474,8 +547,9 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
       <button
         id="back-btn"
-        className={currentStep !== 'cover' && currentStep !== 'login' && currentStep !== 'confirm' ? 'visible' : ''}
+        className={canGoBack ? 'visible' : ''}
         onClick={goBack}
+        disabled={!canGoBack}
       >
         &#8592; Back
       </button>
@@ -502,6 +576,11 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
             </div>
             <h1 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 300, fontSize: 40, lineHeight: 1.1, color: 'var(--text)', marginBottom: 12 }}>The network that works<br/>for you.</h1>
             <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 36, lineHeight: 1.5 }}>Oxford University students <span style={{ fontWeight: 600 }}>only</span> &middot; Verified by email</p>
+            {!user && existingSessionUser && (
+              <button className="btn-outline" style={{ marginBottom: 12 }} onClick={continueExistingSession} disabled={loading}>
+                {loading ? 'Continuing...' : `Log in as ${quickLoginLabel}`}
+              </button>
+            )}
             <button className="btn-accent" style={{ marginBottom: 12 }} onClick={() => { setHistory(['cover']); setCurrentStep('1'); }}>Sign up</button>
             <button className="btn-outline" onClick={() => { setHistory(['cover']); setCurrentStep('login'); }}>Log in</button>
           </StepWrapper>
@@ -511,6 +590,11 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 <StepWrapper key="login" currentStep={currentStep} id="login">
             <h1 className="ob-heading">Welcome back.</h1>
             <p className="ob-whisper" style={{ marginBottom: 20 }}>Sign in to continue to Supercharged.</p>
+            {!user && existingSessionUser && (
+              <button className="btn-outline" style={{ marginBottom: 16 }} onClick={continueExistingSession} disabled={loading}>
+                {loading ? 'Continuing...' : `Log in as ${quickLoginLabel}`}
+              </button>
+            )}
             <input className="underline-input" autoFocus type="email" placeholder="you@ox.ac.uk" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} />
             <div className="pw-wrap" style={{ marginTop: 12 }}>
               <input className="underline-input" type={pwVisible ? "text" : "password"} placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && loginEmail && loginPassword && handleLogin()} />

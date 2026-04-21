@@ -5,6 +5,7 @@ This directory contains a fully local stack for pre-release people auditing.
 ## Purpose
 
 Use local web search + local model inference to audit imported `people` rows:
+
 - Keep people that are findable with reliable LinkedIn evidence and write strong summaries.
 - Remove people that repeatedly fail findability checks.
 
@@ -41,6 +42,7 @@ cp .env.example .env
 ```
 
 2. Fill `.env` values, especially:
+
 - `APPWRITE_API_KEY`
 - `APPWRITE_ENDPOINT`
 - `APPWRITE_PROJECT_ID`
@@ -86,6 +88,7 @@ Stop local stack:
 ## Deletion safety policy
 
 The audit uses two-pass deletion confirmation:
+
 1. first non-findable pass marks candidate in state
 2. second failed pass deletes in safe order:
    - `people_societies` rows by `person_id`

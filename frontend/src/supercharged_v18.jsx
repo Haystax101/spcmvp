@@ -1,24 +1,42 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  account,
+  tables,
+  storage,
+  DB_ID,
+  PROFILES_TABLE,
+  PROFILE_PHOTOS_BUCKET_ID,
+  Query,
+  ID,
+  Permission,
+  Role,
+} from "./lib/appwrite";
 
 // ─── CSS injected once ───────────────────────────────────────────────────────
 const GLOBAL_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
 .sc-profile-root,.sc-profile-root *{box-sizing:border-box;margin:0;padding:0}
-.outer{display:block;min-height:100%;height:100%;padding:0;background:transparent}
-.phone{width:100%;height:100%;overflow:hidden;display:flex;flex-direction:column;background:#EDECEA;position:relative;font-family:'DM Sans',system-ui,sans-serif}
+.sc-profile-root{height:100%;min-height:0;display:flex;flex-direction:column}
+.outer{display:flex;flex:1;min-height:0;height:100%;padding:0;background:transparent}
+.phone{flex:1;width:100%;height:100%;min-height:0;display:flex;flex-direction:column;background:#EDECEA;position:relative;font-family:'DM Sans',system-ui,sans-serif;overflow:hidden}
 @media (min-width:1024px){.outer{padding:16px 24px}.phone{max-width:1100px;margin:0 auto;border-radius:24px;border:1px solid rgba(0,0,0,0.08);box-shadow:0 20px 60px rgba(0,0,0,0.08)}}
 .sbar{background:#F2F2F7;border-bottom:0.5px solid #C8C8CC;padding:10px 14px 7px;flex-shrink:0;z-index:20}
 .sbar-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
 .sbar-time{font-size:14px;font-weight:600;color:#1A1A1A}
 .url-row{background:#fff;border:0.5px solid #C8C8CC;border-radius:10px;padding:7px 12px;display:flex;align-items:center;gap:7px}
 .url-text{font-size:12px;color:#1A1A1A;flex:1;text-align:center}
-.scroller{flex:1;overflow-y:auto;scrollbar-width:none;position:relative;background:#EDECEA}
+.scroller{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;position:relative;background:#EDECEA}
 .scroller::-webkit-scrollbar{display:none}
 .hero{position:relative;height:480px;overflow:hidden;flex-shrink:0;background:linear-gradient(145deg,#2a3a42,#1a2a32)}
 .hero-img{width:100%;height:100%;object-fit:cover;object-position:center 15%;display:block}
 .dots-row{position:absolute;top:14px;left:0;right:0;display:flex;justify-content:center;gap:5px;z-index:4;padding:0 24px}
 .dot{height:4px;border-radius:3px;flex:1;max-width:80px;background:rgba(255,254,253,0.35)}
 .dot.on{background:rgba(255,254,253,0.92)}
+.photo-pager{position:absolute;top:32px;left:50%;transform:translateX(-50%);z-index:6;display:inline-flex;align-items:center;gap:8px;padding:5px 9px;border-radius:999px;background:rgba(7,7,6,0.42);border:1px solid rgba(255,254,253,0.24);backdrop-filter:blur(4px)}
+.photo-pager-btn{width:22px;height:22px;border:none;background:transparent;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#FFFEFD;cursor:pointer;padding:0;outline:none}
+.photo-pager-btn svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.photo-pager-btn:disabled{opacity:0.35;cursor:default}
+.photo-pager-count{min-width:30px;text-align:center;font-size:11px;font-weight:600;color:rgba(255,254,253,0.92);letter-spacing:0.04em}
 .scrim{position:absolute;bottom:0;left:0;right:0;height:280px;background:linear-gradient(to top,rgba(4,4,2,0.93) 0%,rgba(4,4,2,0.5) 40%,transparent 100%);z-index:3;pointer-events:none}
 .hero-info{position:absolute;bottom:0;left:0;right:0;padding:0 22px 24px;z-index:4;pointer-events:none}
 .name-row{display:flex;align-items:center;gap:9px;margin-bottom:6px;white-space:nowrap}
@@ -31,7 +49,7 @@ const GLOBAL_CSS = `
 .upload-prompt{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:2;cursor:pointer;pointer-events:auto}
 .upload-prompt svg{width:32px;height:32px;stroke:rgba(255,254,253,0.5);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 .upload-prompt span{font-size:13px;color:rgba(255,254,253,0.7);font-weight:500}
-.content{padding:12px 12px 44px;background:#EDECEA}
+.content{padding:12px 12px calc(16px + env(safe-area-inset-bottom, 0px));background:#EDECEA}
 .bio-card{background:#FFFEFD;border-radius:18px;padding:18px 19px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
 .bio-ey{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#AFAFAF;margin-bottom:10px}
 .bio-lead{font-size:19px;font-weight:400;color:#1A1A1A;line-height:1.45;letter-spacing:-0.2px}
@@ -95,14 +113,14 @@ const GLOBAL_CSS = `
 .sbot{background:#F2F2F7;border-top:0.5px solid #C8C8CC;padding:8px 4px 20px;display:flex;justify-content:space-around;align-items:center;flex-shrink:0;z-index:20}
 .sbtn{width:44px;height:36px;display:flex;align-items:center;justify-content:center;color:#007AFF}
 .sbtn.dim{color:#C8C8CC}
-.conn-panel{position:absolute;inset:0;background:#EDECEA;z-index:50;transform:translateX(100%);transition:transform 0.36s cubic-bezier(0.22,1,0.36,1);display:flex;flex-direction:column;pointer-events:none}
+.conn-panel{position:absolute;inset:0;background:#EDECEA;z-index:50;transform:translateX(calc(100% + 28px));transition:transform 0.36s cubic-bezier(0.22,1,0.36,1);display:flex;flex-direction:column;pointer-events:none}
 .conn-panel.open{transform:translateX(0);pointer-events:auto}
 .conn-nav{background:#F2F2F7;border-bottom:0.5px solid #C8C8CC;padding:11px 16px 10px;display:flex;align-items:center;position:relative;flex-shrink:0;min-height:44px}
 .conn-back{display:inline-flex;align-items:center;gap:5px;background:none;border:none;cursor:pointer;color:#007AFF;font-size:14px;font-family:'DM Sans',system-ui,sans-serif;padding:0}
 .conn-nav-title{position:absolute;left:50%;transform:translateX(-50%);font-size:15px;font-weight:600;color:#1A1A1A;font-family:'DM Sans',system-ui,sans-serif;letter-spacing:-0.2px}
 .conn-score-header{font-size:11px;color:#AFAFAF;padding:10px 16px 4px}
 .conn-score-header span{font-weight:500;color:#888}
-.conn-list{flex:1;overflow-y:auto;padding:0 12px 32px;scrollbar-width:none}
+.conn-list{flex:1;overflow-y:auto;padding:0 12px calc(32px + env(safe-area-inset-bottom, 0px));scrollbar-width:none}
 .conn-list::-webkit-scrollbar{display:none}
 .conn-item{background:#FFFEFD;border-radius:16px;padding:13px 15px;margin-bottom:7px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
 .conn-av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0;color:#FFFEFD}
@@ -114,7 +132,7 @@ const GLOBAL_CSS = `
 .score-mid{background:#FAEEDA;color:#854F0B}
 .score-low{background:#F1EFE8;color:#888780}
 .lb-rank{font-size:16px;font-weight:700;color:#AFAFAF;width:24px;flex-shrink:0;text-align:center;font-family:'DM Sans',system-ui,sans-serif}
-.edit-panel{position:absolute;inset:0;z-index:60;background:rgba(237,236,234,0.92);backdrop-filter:blur(32px) saturate(1.8);-webkit-backdrop-filter:blur(32px) saturate(1.8);transform:translateY(100%);transition:transform 0.42s cubic-bezier(0.16,1,0.3,1);display:flex;flex-direction:column;overflow:hidden;pointer-events:none}
+.edit-panel{position:absolute;inset:0;z-index:60;background:rgba(237,236,234,0.92);backdrop-filter:blur(32px) saturate(1.8);-webkit-backdrop-filter:blur(32px) saturate(1.8);transform:translateY(calc(100% + 28px));transition:transform 0.42s cubic-bezier(0.16,1,0.3,1);display:flex;flex-direction:column;overflow:hidden;pointer-events:none}
 .edit-panel.open{transform:translateY(0);pointer-events:auto}
 .edit-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;background:rgba(255,254,253,0.6);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:0.5px solid rgba(0,0,0,0.1);flex-shrink:0;position:relative}
 .edit-cancel{background:none;border:none;cursor:pointer;padding:0;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:400;color:#AFAFAF;-webkit-appearance:none}
@@ -122,7 +140,7 @@ const GLOBAL_CSS = `
 .edit-title-text{position:absolute;left:50%;transform:translateX(-50%);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:#1A1A1A;letter-spacing:-0.2px}
 .edit-save{background:#1A1A1A;color:#FFFEFD;border:none;border-radius:999px;padding:7px 18px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;-webkit-appearance:none;transition:opacity 0.15s ease}
 .edit-save:hover{opacity:0.82}
-.edit-body{flex:1;overflow-y:auto;scrollbar-width:none;padding:4px 0 120px}
+.edit-body{flex:1;overflow-y:auto;scrollbar-width:none;padding:4px 0 calc(32px + env(safe-area-inset-bottom, 0px))}
 .edit-body::-webkit-scrollbar{display:none}
 .edit-photo-strip{margin:16px 16px 8px;display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch}
 .edit-photo-strip::-webkit-scrollbar{display:none}
@@ -347,14 +365,131 @@ function renderChartSVG(stat, period) {
   return { fillPts, polyPts, lineColor, fillColor, num: d.num, change: d.change, changeColor: d.changeColor };
 }
 
-// ─── localStorage helpers ────────────────────────────────────────────────────
-const LS = {
-  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
-  set: (k,v) => { try { localStorage.setItem(k,v); return true; } catch { return false; } },
-  remove: (k) => { try { localStorage.removeItem(k); return true; } catch { return false; } },
-  getJSON: (k, def) => { try { const v=localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } },
-  setJSON: (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+const DEFAULT_PROFILE_STATE = {
+  firstName: '',
+  lastName: '',
+  college: '',
+  subject: '',
+  year: '',
+  bio: '',
+  music: [],
+  hobbies: [],
+  campus: [],
+  primaryIntent: '',
+  goals: [],
+  desiredConnections: [],
+  projectStage: '',
+  careerField: '',
+  roles: {},
 };
+
+const ALLOWED_PHOTO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+
+const toHumanLabel = (value) => {
+  const text = normalizeString(value);
+  if (!text) return '';
+  return text
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+};
+
+const deriveIntentHeading = (profileState) => {
+  const intent = normalizeString(profileState?.primaryIntent).toLowerCase();
+  if (intent === 'professional') return 'Build';
+  if (intent === 'social') return 'Connect';
+  if (intent === 'academic') return 'Study';
+  if (intent === 'romantic') return 'Date';
+  if (intent) return toHumanLabel(intent);
+  return profileState?.goals?.[0] ? toHumanLabel(profileState.goals[0]) : 'Build';
+};
+
+const uniqCleanList = (values) => {
+  const out = [];
+  const seen = new Set();
+  for (const value of values || []) {
+    const text = normalizeString(value);
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
+};
+
+const safeParseJson = (value, fallback) => {
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+const parseTextList = (value, fallback = []) => {
+  if (Array.isArray(value)) {
+    const clean = uniqCleanList(value);
+    return clean.length > 0 ? clean : [...fallback];
+  }
+
+  if (typeof value !== 'string') return [...fallback];
+  const trimmed = value.trim();
+  if (!trimmed) return [...fallback];
+
+  if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+    const parsed = safeParseJson(trimmed, null);
+    if (Array.isArray(parsed)) {
+      const clean = uniqCleanList(parsed);
+      return clean.length > 0 ? clean : [...fallback];
+    }
+  }
+
+  const rawParts = trimmed.includes(',')
+    ? trimmed.split(',')
+    : trimmed.includes('\n')
+      ? trimmed.split('\n')
+      : [trimmed];
+
+  const clean = uniqCleanList(rawParts);
+  return clean.length > 0 ? clean : [...fallback];
+};
+
+const normalizePhotoSlots = (value) => {
+  const source = Array.isArray(value) ? value : [];
+  return [0, 1, 2].map((idx) => {
+    const fileId = normalizeString(source[idx]);
+    return fileId || null;
+  });
+};
+
+const buildPhotoUrl = (fileId) => {
+  const id = normalizeString(fileId);
+  if (!id) return null;
+  return String(storage.getFilePreview({
+    bucketId: PROFILE_PHOTOS_BUCKET_ID,
+    fileId: id,
+    width: 1800,
+    height: 1800,
+    quality: 88,
+    output: 'jpg',
+  }));
+};
+
+const buildPhotoFallbackUrl = (fileId) => {
+  const id = normalizeString(fileId);
+  if (!id) return null;
+  return String(storage.getFileView({
+    bucketId: PROFILE_PHOTOS_BUCKET_ID,
+    fileId: id,
+  }));
+};
+
+const listToText = (list) => uniqCleanList(list).join(', ');
 
 // ─── TagInput sub-component ──────────────────────────────────────────────────
 function TagInput({ type, chips, setChips, placeholder }) {
@@ -463,27 +598,22 @@ export default function SuperchargedProfile() {
   }, []);
 
   // ── Profile state ──
-  const [profile, setProfile] = useState({
-    firstName: LS.get('sc_firstname') || 'Alex',
-    lastName:  LS.get('sc_lastname')  || 'Cheung',
-    college:   LS.get('sc_college')   || 'Christ Church',
-    subject:   LS.get('sc_subject')   || 'Geography',
-    year:      LS.get('sc_year')      || 'First Year',
-    bio:       LS.get('sc_about_lead')|| 'COO building Supercharged from Oxford.',
-    music:     LS.getJSON('sc_music', ['Frank Ocean','Tyler the Creator','Rex Orange County','Bon Iver']),
-    hobbies:   LS.getJSON('sc_hobbies', ['Football','Hiking','Cooking','Reading','Film']),
-    campus:    LS.getJSON('sc_campus', ['Oxford Entrepreneurs','Geography Society','Oxford Union']),
-    roles:     LS.getJSON('sc_campus_roles', {}),
-  });
+  const [profile, setProfile] = useState(DEFAULT_PROFILE_STATE);
+  const [profileRowId, setProfileRowId] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
+  const [freeTextResponses, setFreeTextResponses] = useState({});
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
 
   // ── Photos ──
-  const [photos, setPhotos] = useState([
-    LS.get('sc_photo_0')||null,
-    LS.get('sc_photo_1')||null,
-    LS.get('sc_photo_2')||null,
-  ]);
+  const [photoFileIds, setPhotoFileIds] = useState([null, null, null]);
+  const [photos, setPhotos] = useState([null, null, null]);
+  const [photoBusySlot, setPhotoBusySlot] = useState(null);
   const [photoIdx, setPhotoIdx] = useState(0);
   const fileRef0 = useRef(), fileRef1 = useRef(), fileRef2 = useRef();
+  const touchStartXRef = useRef(null);
+  const skipNextTapCycleRef = useRef(false);
   const fileRefs = [fileRef0, fileRef1, fileRef2];
 
   // ── Panel state ──
@@ -500,6 +630,144 @@ export default function SuperchargedProfile() {
   // ── Edit panel local state (initialised on open) ──
   const [editData, setEditData] = useState(null);
 
+  const applyProfileRow = useCallback((row) => {
+    const parsedFreeText = safeParseJson(row?.free_text_responses, {});
+    const profileUi = parsedFreeText?.profile_ui && typeof parsedFreeText.profile_ui === 'object'
+      ? parsedFreeText.profile_ui
+      : {};
+
+    const music = parseTextList(profileUi.music ?? row?.music, DEFAULT_PROFILE_STATE.music);
+    const hobbies = parseTextList(profileUi.hobbies ?? row?.hobby, DEFAULT_PROFILE_STATE.hobbies);
+    const campus = parseTextList(profileUi.campus ?? row?.societies, DEFAULT_PROFILE_STATE.campus);
+    const goals = parseTextList(profileUi.goals ?? row?.goals, DEFAULT_PROFILE_STATE.goals);
+    const desiredConnections = parseTextList(profileUi.desired_connections ?? row?.desired_connections, DEFAULT_PROFILE_STATE.desiredConnections);
+    const primaryIntent = normalizeString(profileUi.primary_intent || row?.primary_intent) || DEFAULT_PROFILE_STATE.primaryIntent;
+    const projectStage = normalizeString(profileUi.project_stage || row?.project_stage) || DEFAULT_PROFILE_STATE.projectStage;
+    const careerField = normalizeString(profileUi.career_field || row?.career_field) || DEFAULT_PROFILE_STATE.careerField;
+
+    const roleSource = profileUi.roles && typeof profileUi.roles === 'object' ? profileUi.roles : {};
+    const roles = campus.reduce((acc, name) => {
+      acc[name] = normalizeString(roleSource[name]) || 'Member';
+      return acc;
+    }, {});
+
+    const photoIds = normalizePhotoSlots(profileUi.photo_file_ids);
+
+    setProfile({
+      firstName: normalizeString(row?.first_name) || DEFAULT_PROFILE_STATE.firstName,
+      lastName: normalizeString(row?.last_name) || DEFAULT_PROFILE_STATE.lastName,
+      college: normalizeString(row?.college) || DEFAULT_PROFILE_STATE.college,
+      subject: normalizeString(row?.study_subject || row?.course) || DEFAULT_PROFILE_STATE.subject,
+      year: normalizeString(row?.year_of_study || row?.stage) || DEFAULT_PROFILE_STATE.year,
+      bio: normalizeString(profileUi.bio || row?.building_description) || DEFAULT_PROFILE_STATE.bio,
+      music,
+      hobbies,
+      campus,
+      primaryIntent,
+      goals,
+      desiredConnections,
+      projectStage,
+      careerField,
+      roles,
+    });
+
+    setFreeTextResponses(parsedFreeText && typeof parsedFreeText === 'object' ? parsedFreeText : {});
+    setPhotoFileIds(photoIds);
+    setPhotos(photoIds.map((id) => buildPhotoUrl(id)));
+    setPhotoIdx((prev) => {
+      if (photoIds[prev]) return prev;
+      const firstWithPhoto = photoIds.findIndex(Boolean);
+      return firstWithPhoto >= 0 ? firstWithPhoto : 0;
+    });
+  }, []);
+
+  const buildProfileUiPayload = (profileState, photoIds) => {
+    const current = freeTextResponses && typeof freeTextResponses === 'object' ? freeTextResponses : {};
+    const currentUi = current.profile_ui && typeof current.profile_ui === 'object' ? current.profile_ui : {};
+    return {
+      ...current,
+      profile_ui: {
+        ...currentUi,
+        bio: normalizeString(profileState.bio),
+        music: uniqCleanList(profileState.music),
+        hobbies: uniqCleanList(profileState.hobbies),
+        campus: uniqCleanList(profileState.campus),
+        primary_intent: normalizeString(profileState.primaryIntent),
+        goals: uniqCleanList(profileState.goals),
+        desired_connections: uniqCleanList(profileState.desiredConnections),
+        project_stage: normalizeString(profileState.projectStage),
+        career_field: normalizeString(profileState.careerField),
+        roles: profileState.roles || {},
+        photo_file_ids: normalizePhotoSlots(photoIds),
+      },
+    };
+  };
+
+  const persistPhotoSlots = async (nextPhotoIds) => {
+    if (!profileRowId) return;
+
+    const nextFreeText = buildProfileUiPayload(profile, nextPhotoIds);
+    await tables.updateRow({
+      databaseId: DB_ID,
+      tableId: PROFILES_TABLE,
+      rowId: profileRowId,
+      data: {
+        free_text_responses: JSON.stringify(nextFreeText),
+      },
+    });
+
+    setFreeTextResponses(nextFreeText);
+    setPhotoFileIds(nextPhotoIds);
+    setPhotos(nextPhotoIds.map((id) => buildPhotoUrl(id)));
+    setPhotoIdx((prev) => {
+      if (nextPhotoIds[prev]) return prev;
+      const firstWithPhoto = nextPhotoIds.findIndex(Boolean);
+      return firstWithPhoto >= 0 ? firstWithPhoto : 0;
+    });
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProfile = async () => {
+      setProfileLoading(true);
+      setProfileError('');
+
+      try {
+        const user = await account.get();
+        if (!isMounted) return;
+
+        setCurrentUserId(user.$id);
+
+        const result = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: PROFILES_TABLE,
+          queries: [Query.equal('user_id', user.$id), Query.limit(1)],
+        });
+
+        const row = result.rows?.[0] || null;
+        if (!row) {
+          setProfileError('No profile row found for this account.');
+          setProfileLoading(false);
+          return;
+        }
+
+        setProfileRowId(row.$id);
+        applyProfileRow(row);
+      } catch (err) {
+        setProfileError(err?.message || 'Unable to load profile right now.');
+      } finally {
+        if (isMounted) setProfileLoading(false);
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [applyProfileRow]);
+
   const openEdit = () => {
     setEditData({
       firstName: profile.firstName, lastName: profile.lastName,
@@ -511,53 +779,222 @@ export default function SuperchargedProfile() {
     setEditOpen(true);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
+    if (!editData || !profileRowId) return;
+
     const p = {
-      firstName: editData.firstName, lastName: editData.lastName,
-      college: editData.college, subject: editData.subject, year: editData.year,
-      bio: editData.bio,
-      music: editData.music, hobbies: editData.hobbies, campus: editData.campus,
-      roles: editData.roles,
+      firstName: normalizeString(editData.firstName),
+      lastName: normalizeString(editData.lastName),
+      college: normalizeString(editData.college),
+      subject: normalizeString(editData.subject),
+      year: normalizeString(editData.year),
+      bio: normalizeString(editData.bio),
+      music: uniqCleanList(editData.music),
+      hobbies: uniqCleanList(editData.hobbies),
+      campus: uniqCleanList(editData.campus),
+      roles: editData.roles && typeof editData.roles === 'object' ? editData.roles : {},
     };
-    LS.set('sc_firstname', p.firstName); LS.set('sc_lastname', p.lastName);
-    LS.set('sc_college', p.college); LS.set('sc_subject', p.subject); LS.set('sc_year', p.year);
-    LS.set('sc_about_lead', p.bio);
-    LS.setJSON('sc_music', p.music); LS.setJSON('sc_hobbies', p.hobbies);
-    LS.setJSON('sc_campus', p.campus); LS.setJSON('sc_campus_roles', p.roles);
-    setProfile(p);
-    setEditOpen(false);
+
+    const safeFirstName = p.firstName || profile.firstName || 'Oxford';
+    const safeLastName = p.lastName || profile.lastName || '';
+
+    const normalizedRoles = p.campus.reduce((acc, name) => {
+      acc[name] = normalizeString(p.roles[name]) || 'Member';
+      return acc;
+    }, {});
+
+    const nextProfile = {
+      ...profile,
+      ...p,
+      firstName: safeFirstName,
+      lastName: safeLastName,
+      roles: normalizedRoles,
+    };
+
+    const nextFreeText = buildProfileUiPayload(nextProfile, photoFileIds);
+
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      await tables.updateRow({
+        databaseId: DB_ID,
+        tableId: PROFILES_TABLE,
+        rowId: profileRowId,
+        data: {
+          full_name: [safeFirstName, safeLastName].filter(Boolean).join(' ').trim(),
+          first_name: safeFirstName,
+          last_name: safeLastName,
+          college: nextProfile.college,
+          study_subject: nextProfile.subject,
+          course: nextProfile.subject,
+          year_of_study: nextProfile.year,
+          stage: nextProfile.year,
+          building_description: nextProfile.bio,
+          hobby: listToText(nextProfile.hobbies),
+          music: listToText(nextProfile.music),
+          societies: listToText(nextProfile.campus),
+          free_text_responses: JSON.stringify(nextFreeText),
+        },
+      });
+
+      setFreeTextResponses(nextFreeText);
+      setProfile(nextProfile);
+      setEditOpen(false);
+    } catch (err) {
+      setProfileError(err?.message || 'Unable to save profile right now.');
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   // ── Photo handlers ──
-  const handlePhoto = (idx, file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target.result;
-      LS.set('sc_photo_'+idx, dataUrl);
-      setPhotos(prev => { const n=[...prev]; n[idx]=dataUrl; return n; });
-      if (idx===0) setPhotoIdx(0);
-    };
-    reader.readAsDataURL(file);
+  const handlePhoto = async (idx, file) => {
+    if (!file || !profileRowId || !currentUserId) return;
+    if (file.type && !ALLOWED_PHOTO_MIME_TYPES.has(file.type)) {
+      setProfileError('Please upload a JPG, PNG, WEBP, or GIF image.');
+      return;
+    }
+
+    setPhotoBusySlot(idx);
+    setProfileError('');
+
+    const oldFileId = photoFileIds[idx];
+    let uploadedFileId = null;
+
+    try {
+      const uploaded = await storage.createFile(
+        PROFILE_PHOTOS_BUCKET_ID,
+        ID.unique(),
+        file,
+        [
+          Permission.read(Role.any()),
+          Permission.update(Role.user(currentUserId)),
+          Permission.delete(Role.user(currentUserId)),
+        ]
+      );
+      uploadedFileId = uploaded.$id;
+
+      const nextPhotoIds = [...photoFileIds];
+      nextPhotoIds[idx] = uploadedFileId;
+      await persistPhotoSlots(nextPhotoIds);
+
+      if (oldFileId && oldFileId !== uploadedFileId) {
+        try {
+          await storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, oldFileId);
+        } catch {
+          // Ignore cleanup errors; metadata is already updated to the new file.
+        }
+      }
+    } catch (err) {
+      if (uploadedFileId) {
+        try {
+          await storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, uploadedFileId);
+        } catch {
+          // Ignore rollback cleanup failures.
+        }
+      }
+      setProfileError(err?.message || 'Unable to upload photo right now.');
+    } finally {
+      setPhotoBusySlot(null);
+    }
   };
-  const removePhoto = (idx) => {
-    LS.remove('sc_photo_'+idx);
-    setPhotos(prev => { const n=[...prev]; n[idx]=null; return n; });
-    if (photoIdx===idx) setPhotoIdx(0);
+
+  const removePhoto = async (idx) => {
+    if (!profileRowId) return;
+    const existingFileId = photoFileIds[idx];
+    if (!existingFileId) return;
+
+    setPhotoBusySlot(idx);
+    setProfileError('');
+
+    try {
+      const nextPhotoIds = [...photoFileIds];
+      nextPhotoIds[idx] = null;
+      await persistPhotoSlots(nextPhotoIds);
+
+      try {
+        await storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, existingFileId);
+      } catch {
+        // Ignore delete cleanup failures.
+      }
+    } catch (err) {
+      setProfileError(err?.message || 'Unable to remove photo right now.');
+    } finally {
+      setPhotoBusySlot(null);
+    }
   };
+
+  const cyclePhotoByDirection = (direction) => {
+    if (!Array.isArray(photos) || photos.every((photo) => !photo)) return;
+    const step = direction >= 0 ? 1 : -1;
+    for (let i = 1; i <= 2; i += 1) {
+      const nextIdx = (photoIdx + (step * i) + 3) % 3;
+      if (photos[nextIdx]) {
+        setPhotoIdx(nextIdx);
+        return;
+      }
+    }
+  };
+
   const cyclePhoto = (e) => {
     if (e.target.closest('button')) return;
-    for (let i=1; i<=2; i++) {
-      const ni = (photoIdx+i)%3;
-      if (photos[ni]) { setPhotoIdx(ni); return; }
+    if (skipNextTapCycleRef.current) {
+      skipNextTapCycleRef.current = false;
+      return;
+    }
+    cyclePhotoByDirection(1);
+  };
+
+  const handleHeroTouchStart = (e) => {
+    const x = e.touches?.[0]?.clientX;
+    touchStartXRef.current = Number.isFinite(x) ? x : null;
+  };
+
+  const handleHeroTouchEnd = (e) => {
+    const startX = touchStartXRef.current;
+    const endX = e.changedTouches?.[0]?.clientX;
+    touchStartXRef.current = null;
+
+    if (!Number.isFinite(startX) || !Number.isFinite(endX)) return;
+    const delta = endX - startX;
+    if (Math.abs(delta) < 24) return;
+
+    skipNextTapCycleRef.current = true;
+    if (delta < 0) {
+      cyclePhotoByDirection(1);
+    } else {
+      cyclePhotoByDirection(-1);
     }
   };
 
   const openConnProfile = (person) => setProfilePanel({ open:true, data:person });
 
-  const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
+  const availablePhotoCount = photos.filter(Boolean).length;
+  const hasNavigablePhotos = availablePhotoCount > 1;
+  const photoSlotLabel = `${photoIdx + 1}/3`;
+  const heroPhotoFallback = buildPhotoFallbackUrl(photoFileIds[photoIdx]);
+
+  const intentHeading = deriveIntentHeading(profile);
+  const intentPrimaryPill = profile.goals[0] || (profile.projectStage ? `Stage: ${toHumanLabel(profile.projectStage)}` : 'Open to meaningful projects');
+  const intentSecondaryPills = (
+    (profile.desiredConnections.length ? profile.desiredConnections : profile.goals.slice(1)).filter(Boolean)
+  ).slice(0, 2);
+
+  const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Oxford Member';
   const subLine  = [profile.college, profile.subject, profile.year].filter(Boolean).join(' \u00a0 ');
   const hobbyColors = ['#FAC775','#EF9F27','#FAEEDA'];
+
+  if (profileLoading) {
+    return (
+      <div className="sc-profile-root">
+        <div className="outer">
+          <div className="phone" style={{ alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontSize: 14, color: '#6B6B6B', fontWeight: 500 }}>Loading profile...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="sc-profile-root">
@@ -572,16 +1009,62 @@ export default function SuperchargedProfile() {
         {/* ── Scroller ── */}
         <div className="scroller">
           {/* Hero */}
-          <div className="hero" onClick={cyclePhoto}>
+          <div className="hero" onClick={cyclePhoto} onTouchStart={handleHeroTouchStart} onTouchEnd={handleHeroTouchEnd}>
             <div className="dots-row">
               {[0,1,2].map(i => <div key={i} className={`dot${photoIdx===i?' on':''}`}/>)}
             </div>
+            <div className="photo-pager" aria-label="Photo navigation">
+              <button
+                type="button"
+                className="photo-pager-btn"
+                aria-label="Previous photo"
+                disabled={!hasNavigablePhotos}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cyclePhotoByDirection(-1);
+                }}
+              >
+                <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <span className="photo-pager-count">{photoSlotLabel}</span>
+              <button
+                type="button"
+                className="photo-pager-btn"
+                aria-label="Next photo"
+                disabled={!hasNavigablePhotos}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cyclePhotoByDirection(1);
+                }}
+              >
+                <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
             {photos[photoIdx] ? (
-              <img className="hero-img" src={photos[photoIdx]} alt="" style={{display:'block'}}/>
+              <img
+                className="hero-img"
+                src={photos[photoIdx]}
+                data-fallback-src={heroPhotoFallback || ''}
+                alt=""
+                style={{display:'block'}}
+                onError={(e) => {
+                  const fallback = e.currentTarget.dataset.fallbackSrc;
+                  if (fallback && e.currentTarget.src !== fallback) {
+                    e.currentTarget.src = fallback;
+                    return;
+                  }
+                  setPhotos((prev) => {
+                    if (!prev[photoIdx]) return prev;
+                    const next = [...prev];
+                    next[photoIdx] = null;
+                    return next;
+                  });
+                }}
+              />
             ) : (
-              <div className="upload-prompt" onClick={e=>{e.stopPropagation();fileRef0.current?.click()}}>
+              <div className="upload-prompt" onClick={e=>{e.stopPropagation(); if (photoBusySlot !== null) return; fileRef0.current?.click();}}>
                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                <span>Tap to upload your photo</span>
+                <span>{photoBusySlot === 0 ? 'Uploading photo...' : 'Tap to upload your photo'}</span>
               </div>
             )}
             <button className="photo-edit-btn" onClick={e=>{e.stopPropagation();openEdit();}} aria-label="Edit profile">
@@ -602,20 +1085,30 @@ export default function SuperchargedProfile() {
 
           {/* Content */}
           <div className="content">
+            {profileError && (
+              <div style={{ marginBottom: 10, border: '1px solid #F2D3D3', borderRadius: 12, background: '#FFF8F8', color: '#B34747', fontSize: 12, fontWeight: 500, padding: '10px 12px' }}>
+                {profileError}
+              </div>
+            )}
+
             {/* Bio */}
             <div className="bio-card">
               <div className="bio-ey">About</div>
-              <div className="bio-lead">{profile.bio}</div>
+              <div className="bio-lead">{profile.bio || 'Tell people what you are building.'}</div>
             </div>
 
             {/* Here to */}
             <div className="intent-card">
               <div className="i-ey">Here to</div>
-              <div className="i-hl"><div className="i-dot"/><span className="i-lbl">Build</span></div>
+              <div className="i-hl"><div className="i-dot"/><span className="i-lbl">{intentHeading}</span></div>
               <div className="i-pills">
-                <span className="ip-p">Technical co-founder</span>
-                <span className="ip-s">Someone 3 years ahead</span>
-                <span className="ip-s">First customers</span>
+                <span className="ip-p">{intentPrimaryPill}</span>
+                {intentSecondaryPills.map((pill, idx) => (
+                  <span key={`${pill}-${idx}`} className="ip-s">{pill}</span>
+                ))}
+                {!intentSecondaryPills.length && profile.careerField && (
+                  <span className="ip-s">{toHumanLabel(profile.careerField)}</span>
+                )}
               </div>
             </div>
 
@@ -842,7 +1335,9 @@ export default function SuperchargedProfile() {
           <div className="edit-header">
             <button className="edit-cancel" onClick={() => setEditOpen(false)}>Cancel</button>
             <span className="edit-title-text">Edit profile</span>
-            <button className="edit-save" onClick={saveEdit}>Save</button>
+            <button className="edit-save" onClick={saveEdit} disabled={profileSaving || photoBusySlot !== null} style={(profileSaving || photoBusySlot !== null) ? { opacity: 0.55, cursor: 'default' } : undefined}>
+              {profileSaving ? 'Saving...' : 'Save'}
+            </button>
           </div>
           {editData && (
             <div className="edit-body">
@@ -851,7 +1346,25 @@ export default function SuperchargedProfile() {
                 {[0,1,2].map(i => (
                   <div key={i} className="edit-photo-slot" onClick={() => fileRefs[i].current?.click()}>
                     {photos[i] ? (
-                      <img src={photos[i]} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}/>
+                      <img
+                        src={photos[i]}
+                        data-fallback-src={buildPhotoFallbackUrl(photoFileIds[i]) || ''}
+                        alt=""
+                        style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}
+                        onError={(e) => {
+                          const fallback = e.currentTarget.dataset.fallbackSrc;
+                          if (fallback && e.currentTarget.src !== fallback) {
+                            e.currentTarget.src = fallback;
+                            return;
+                          }
+                          setPhotos((prev) => {
+                            if (!prev[i]) return prev;
+                            const next = [...prev];
+                            next[i] = null;
+                            return next;
+                          });
+                        }}
+                      />
                     ) : (
                       <>
                         <svg className="slot-icon" viewBox="0 0 24 24">

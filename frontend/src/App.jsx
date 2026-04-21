@@ -96,6 +96,12 @@ function AuthScreen({ onAuth }) {
     setLoading(true)
     setError('')
     try {
+      try {
+        await account.deleteSession('current')
+      } catch {
+        // Ignore if no active session exists.
+      }
+
       if (mode === 'signup') {
         const tempName = email.split('@')[0]
         await account.create(ID.unique(), email, password, tempName)
@@ -1343,8 +1349,17 @@ function DiscoveryScreen({ profile }) {
   }
 
   const handleLogout = async () => {
-    await account.deleteSession('current')
-    window.location.reload()
+    try {
+      await account.deleteSession('current')
+    } catch {
+      try {
+        await account.deleteSessions()
+      } catch {
+        // Ignore cleanup failures and force app reset below.
+      }
+    } finally {
+      window.location.reload()
+    }
   }
 
   const displayMatches = searchResults !== null ? searchResults : matches
@@ -1370,7 +1385,7 @@ function DiscoveryScreen({ profile }) {
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 sm:py-8 space-y-12 pb-24 lg:pb-8">
+        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 sm:py-8 space-y-12 pb-8">
           <section>
             <div className="flex items-center justify-between mb-8">
               <h2 className="font-playfair text-3xl font-light">
@@ -1431,10 +1446,13 @@ function DiscoveryScreen({ profile }) {
   )
 
   return (
-    <div className="h-[100dvh] relative overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(245,200,66,0.12),transparent_35%),radial-gradient(circle_at_88%_12%,rgba(26,26,26,0.06),transparent_28%),#f7f4ef]">
-      {activeScreen === 'home' && renderHome()}
-      {activeScreen === 'inbox' && <div className="h-full"><SuperchargedInbox /></div>}
-      {activeScreen === 'profile' && <div className="h-full"><SuperchargedProfile /></div>}
+    <div
+      className="h-[100dvh] relative overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(245,200,66,0.12),transparent_35%),radial-gradient(circle_at_88%_12%,rgba(26,26,26,0.06),transparent_28%),#f7f4ef]"
+      style={{ '--sc-nav-clearance': 'calc(env(safe-area-inset-bottom, 0px) + 112px)' }}
+    >
+      {activeScreen === 'home' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}>{renderHome()}</div>}
+      {activeScreen === 'inbox' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedInbox currentUserProfile={profile} /></div>}
+      {activeScreen === 'profile' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedProfile /></div>}
 
       <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-3">
         <div className="pointer-events-auto w-[min(92vw,430px)] rounded-[22px] border border-border-light bg-white/88 p-2 shadow-[0_14px_40px_rgba(0,0,0,0.15)] backdrop-blur-xl">
@@ -1473,9 +1491,20 @@ function App() {
   const [profile, setProfile] = useState(null)
 
   const checkSession = async () => {
+    let authenticatedUser = null
+
     try {
-      const authenticatedUser = await account.get()
+      authenticatedUser = await account.get()
       setUser(authenticatedUser)
+    } catch {
+      setUser(null)
+      setProfile(null)
+      setDocId(null)
+      setStep('onboarding')
+      return
+    }
+
+    try {
       const result = await tables.listRows({
         databaseId: DB_ID,
         tableId: PROFILES_TABLE,
@@ -1496,8 +1525,10 @@ function App() {
       } else {
         setStep('onboarding')
       }
-    } catch {
-      setUser(null)
+    } catch (err) {
+      console.error('Profile lookup failed for active session:', err)
+      setProfile(null)
+      setDocId(null)
       setStep('onboarding')
     }
   }
