@@ -7,10 +7,11 @@
             "name": "profileSync",
             "enabled": true,
             "live": true,
+            "deployment": "dist",
             "logging": true,
             "runtime": "node-22",
-            "deployment": "dist",
-            "vars": [],
+            "version": "v3",
+            "vars": {},
             "events": [
                 "databases.supercharged.tables.profiles.rows.*.create",
                 "databases.supercharged.tables.profiles.rows.*.update",
@@ -20,7 +21,6 @@
             "timeout": 15,
             "entrypoint": "src/main.js",
             "commands": "npm install",
-            "version": "v3",
             "path": "functions/profileSync"
         },
         {
@@ -28,19 +28,19 @@
             "name": "discoveryEngine",
             "enabled": true,
             "live": true,
+            "deployment": "dist",
             "logging": true,
             "execute": [
                 "users"
             ],
             "runtime": "node-22",
-            "deployment": "dist",
-            "vars": [],
+            "version": "v3",
+            "vars": {},
             "events": [],
             "schedule": "",
             "timeout": 30,
             "entrypoint": "src/main.js",
             "commands": "npm install",
-            "version": "v3",
             "path": "functions/discoveryEngine"
         },
         {
@@ -48,10 +48,11 @@
             "name": "cvParser",
             "enabled": true,
             "live": true,
+            "deployment": "dist",
             "logging": true,
             "runtime": "node-22",
-            "deployment": "dist",
-            "vars": [],
+            "version": "v1",
+            "vars": {},
             "events": [
                 "buckets.cvs.files.*.create"
             ],
@@ -59,7 +60,6 @@
             "timeout": 60,
             "entrypoint": "src/main.js",
             "commands": "npm install",
-            "version": "v1",
             "path": "functions/cvParser"
         },
         {
@@ -67,19 +67,19 @@
             "name": "biosContext",
             "enabled": true,
             "live": true,
+            "deployment": "dist",
             "logging": true,
             "execute": [
                 "users"
             ],
             "runtime": "node-22",
-            "deployment": "dist",
-            "vars": [],
+            "version": "v1",
+            "vars": {},
             "events": [],
             "schedule": "",
             "timeout": 15,
             "entrypoint": "src/main.js",
             "commands": "npm install",
-            "version": "v1",
             "path": "functions/biosContext"
         },
         {
@@ -87,6 +87,7 @@
             "name": "connectionGateway",
             "enabled": true,
             "live": true,
+            "deployment": "dist",
             "logging": true,
             "execute": [
                 "users"
@@ -100,14 +101,13 @@
                 "rows.write"
             ],
             "runtime": "node-22",
-            "deployment": "dist",
-            "vars": [],
+            "version": "v1",
+            "vars": {},
             "events": [],
             "schedule": "",
             "timeout": 30,
             "entrypoint": "src/main.js",
             "commands": "npm install",
-            "version": "v1",
             "path": "functions/connectionGateway"
         },
         {
@@ -115,6 +115,7 @@
             "name": "messageGateway",
             "enabled": true,
             "live": true,
+            "deployment": "dist",
             "logging": true,
             "execute": [
                 "users"
@@ -128,15 +129,32 @@
                 "rows.write"
             ],
             "runtime": "node-22",
-            "deployment": "dist",
-            "vars": [],
+            "version": "v1",
+            "vars": {},
             "events": [],
             "schedule": "",
             "timeout": 30,
             "entrypoint": "src/main.js",
             "commands": "npm install",
-            "version": "v1",
             "path": "functions/messageGateway"
+        },
+        {
+            "$id": "stripeGateway",
+            "name": "stripeGateway",
+            "enabled": true,
+            "live": true,
+            "deployment": "dist",
+            "logging": true,
+            "execute": [
+                "users",
+                "any"
+            ],
+            "runtime": "node-22",
+            "version": "v1",
+            "vars": {},
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "path": "functions/stripeGateway"
         }
     ],
     "buckets": [
@@ -207,9 +225,7 @@
                     "type": "double",
                     "required": true,
                     "array": false,
-                    "default": null,
-                    "min": -1.7976931348623157e+308,
-                    "max": 1.7976931348623157e+308
+                    "default": null
                 },
                 {
                     "key": "narrative",
@@ -715,6 +731,46 @@
                     "array": false,
                     "default": null,
                     "format": ""
+                },
+                {
+                    "key": "current_voltz",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": 0
+                },
+                {
+                    "key": "visibility_boost_level",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": 0
+                },
+                {
+                    "key": "visibility_boost_expires_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "stripe_customer_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "stripe_subscription_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
                 }
             ],
             "indexes": [
@@ -1659,14 +1715,15 @@
                 {
                     "key": "connection",
                     "type": "relationship",
-                    "required": true,
+                    "required": false,
                     "array": false,
                     "relatedTable": "connections",
                     "relationType": "manyToOne",
                     "twoWay": false,
                     "twoWayKey": "relationship_events",
                     "onDelete": "cascade",
-                    "side": "parent"
+                    "side": "parent",
+                    "default": null
                 },
                 {
                     "key": "connection_row_id",
@@ -1779,14 +1836,15 @@
                 {
                     "key": "profile",
                     "type": "relationship",
-                    "required": true,
+                    "required": false,
                     "array": false,
                     "relatedTable": "profiles",
                     "relationType": "manyToOne",
                     "twoWay": false,
                     "twoWayKey": "voltz_ledger",
                     "onDelete": "cascade",
-                    "side": "parent"
+                    "side": "parent",
+                    "default": null
                 },
                 {
                     "key": "profile_row_id",
@@ -1873,6 +1931,15 @@
                     "array": false,
                     "default": null,
                     "format": ""
+                },
+                {
+                    "key": "stripe_session_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
                 }
             ],
             "indexes": [

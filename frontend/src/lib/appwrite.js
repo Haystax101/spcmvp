@@ -14,4 +14,6 @@ export const DISCOVERY_FUNCTION_ID = import.meta.env.VITE_DISCOVERY_FUNCTION_ID;
 export const CONNECTION_GATEWAY_FUNCTION_ID = import.meta.env.VITE_CONNECTION_GATEWAY_FUNCTION_ID || 'connectionGateway';
 export const MESSAGE_GATEWAY_FUNCTION_ID = import.meta.env.VITE_MESSAGE_GATEWAY_FUNCTION_ID || 'messageGateway';
 export const PROFILE_PHOTOS_BUCKET_ID = import.meta.env.VITE_APPWRITE_PROFILE_PHOTOS_BUCKET_ID || 'profilePhotos';
+export const CONNECTIONS_TABLE = import.meta.env.VITE_APPWRITE_TABLE_CONNECTIONS || 'connections';
+export const VOLTZ_LEDGER_TABLE = import.meta.env.VITE_APPWRITE_TABLE_VOLTZ_LEDGER || 'voltz_ledger';
 export { ID, Query, Permission, Role };

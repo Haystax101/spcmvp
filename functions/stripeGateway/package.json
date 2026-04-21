@@ -1,0 +1,11 @@
+{
+  "name": "stripeGateway",
+  "version": "1.0.0",
+  "description": "Supercharged Stripe Gateway for Voltz Currency",
+  "main": "src/main.js",
+  "type": "module",
+  "dependencies": {
+    "node-appwrite": "^24.0.0",
+    "stripe": "^15.1.0"
+  }
+}

@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   account,
+  functions,
   tables,
   storage,
   DB_ID,
   PROFILES_TABLE,
   PROFILE_PHOTOS_BUCKET_ID,
+  CONNECTION_GATEWAY_FUNCTION_ID,
   Query,
   ID,
   Permission,
   Role,
 } from "./lib/appwrite";
+import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
 
 // ─── CSS injected once ───────────────────────────────────────────────────────
 const GLOBAL_CSS = `
@@ -383,6 +386,15 @@ const DEFAULT_PROFILE_STATE = {
   roles: {},
 };
 
+const PROFILE_CACHE_TTL_MS = 15 * 60 * 1000;
+const PROFILE_CACHE_KEY = (userId) => `supercharged:profile:v1:${userId}`;
+const DEFAULT_STATS = {
+  connectionsCount: 0,
+  connectionsGrowth: 0,
+  voltzBalance: 0,
+  voltzGrowth: 0,
+};
+
 const ALLOWED_PHOTO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -405,6 +417,34 @@ const deriveIntentHeading = (profileState) => {
   if (intent === 'romantic') return 'Date';
   if (intent) return toHumanLabel(intent);
   return profileState?.goals?.[0] ? toHumanLabel(profileState.goals[0]) : 'Build';
+};
+
+const normalizeStats = (stats) => ({
+  connectionsCount: Number(stats?.connectionsCount || 0),
+  connectionsGrowth: Number(stats?.connectionsGrowth || 0),
+  voltzBalance: Number(stats?.voltzBalance || 0),
+  voltzGrowth: Number(stats?.voltzGrowth || 0),
+});
+
+const fetchProfileStats = async () => {
+  const execution = await functions.createExecution(
+    CONNECTION_GATEWAY_FUNCTION_ID,
+    JSON.stringify({ action: 'get_profile_stats' }),
+    false
+  );
+
+  let body;
+  try {
+    body = JSON.parse(execution?.responseBody || '{}');
+  } catch {
+    throw new Error('Invalid profile stats response.');
+  }
+
+  if (body?.error) {
+    throw new Error(body.error);
+  }
+
+  return normalizeStats(body?.stats || DEFAULT_STATS);
 };
 
 const uniqCleanList = (values) => {
@@ -606,6 +646,11 @@ export default function SuperchargedProfile() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState('');
 
+  // ── Stats state ──
+  const [stats, setStats] = useState({
+    ...DEFAULT_STATS,
+  });
+
   // ── Photos ──
   const [photoFileIds, setPhotoFileIds] = useState([null, null, null]);
   const [photos, setPhotos] = useState([null, null, null]);
@@ -724,6 +769,10 @@ export default function SuperchargedProfile() {
       const firstWithPhoto = nextPhotoIds.findIndex(Boolean);
       return firstWithPhoto >= 0 ? firstWithPhoto : 0;
     });
+
+    if (currentUserId) {
+      removeCacheEntry(PROFILE_CACHE_KEY(currentUserId));
+    }
   };
 
   useEffect(() => {
@@ -732,12 +781,25 @@ export default function SuperchargedProfile() {
     const loadProfile = async () => {
       setProfileLoading(true);
       setProfileError('');
+      let usedCachedProfile = false;
 
       try {
         const user = await account.get();
         if (!isMounted) return;
 
         setCurrentUserId(user.$id);
+
+        const cached = readCacheEntry(PROFILE_CACHE_KEY(user.$id), PROFILE_CACHE_TTL_MS);
+        const cachedStats = cached?.data?.stats ? normalizeStats(cached.data.stats) : null;
+        if (cached?.data?.row) {
+          usedCachedProfile = true;
+          setProfileRowId(cached.data.row.$id || null);
+          applyProfileRow(cached.data.row);
+          if (cachedStats) {
+            setStats(cachedStats);
+          }
+          setProfileLoading(false);
+        }
 
         const result = await tables.listRows({
           databaseId: DB_ID,
@@ -747,17 +809,39 @@ export default function SuperchargedProfile() {
 
         const row = result.rows?.[0] || null;
         if (!row) {
-          setProfileError('No profile row found for this account.');
-          setProfileLoading(false);
+          if (!usedCachedProfile) {
+            setProfileError('No profile row found for this account.');
+            setProfileLoading(false);
+          }
           return;
         }
 
         setProfileRowId(row.$id);
         applyProfileRow(row);
+
+        try {
+          const nextStats = await fetchProfileStats();
+
+          if (isMounted) {
+            setStats(nextStats);
+            writeCacheEntry(PROFILE_CACHE_KEY(user.$id), { row, stats: nextStats });
+          }
+        } catch (statsErr) {
+          console.warn('Could not load profile stats, using cached/default values.', statsErr);
+          if (isMounted) {
+            writeCacheEntry(PROFILE_CACHE_KEY(user.$id), {
+              row,
+              stats: cachedStats || DEFAULT_STATS,
+            });
+          }
+        }
+
       } catch (err) {
-        setProfileError(err?.message || 'Unable to load profile right now.');
+        if (isMounted && !usedCachedProfile) {
+          setProfileError(err?.message || 'Unable to load profile right now.');
+        }
       } finally {
-        if (isMounted) setProfileLoading(false);
+        if (isMounted && !usedCachedProfile) setProfileLoading(false);
       }
     };
 
@@ -840,6 +924,9 @@ export default function SuperchargedProfile() {
       setFreeTextResponses(nextFreeText);
       setProfile(nextProfile);
       setEditOpen(false);
+      if (currentUserId) {
+        removeCacheEntry(PROFILE_CACHE_KEY(currentUserId));
+      }
     } catch (err) {
       setProfileError(err?.message || 'Unable to save profile right now.');
     } finally {
@@ -971,7 +1058,8 @@ export default function SuperchargedProfile() {
 
   const availablePhotoCount = photos.filter(Boolean).length;
   const hasNavigablePhotos = availablePhotoCount > 1;
-  const photoSlotLabel = `${photoIdx + 1}/3`;
+  const actualPhotoIndex = photos.slice(0, photoIdx + 1).filter(Boolean).length;
+  const photoSlotLabel = `${actualPhotoIndex}/${availablePhotoCount}`;
   const heroPhotoFallback = buildPhotoFallbackUrl(photoFileIds[photoIdx]);
 
   const intentHeading = deriveIntentHeading(profile);
@@ -1010,36 +1098,38 @@ export default function SuperchargedProfile() {
         <div className="scroller">
           {/* Hero */}
           <div className="hero" onClick={cyclePhoto} onTouchStart={handleHeroTouchStart} onTouchEnd={handleHeroTouchEnd}>
-            <div className="dots-row">
-              {[0,1,2].map(i => <div key={i} className={`dot${photoIdx===i?' on':''}`}/>)}
-            </div>
-            <div className="photo-pager" aria-label="Photo navigation">
-              <button
-                type="button"
-                className="photo-pager-btn"
-                aria-label="Previous photo"
-                disabled={!hasNavigablePhotos}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  cyclePhotoByDirection(-1);
-                }}
-              >
-                <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
-              </button>
-              <span className="photo-pager-count">{photoSlotLabel}</span>
-              <button
-                type="button"
-                className="photo-pager-btn"
-                aria-label="Next photo"
-                disabled={!hasNavigablePhotos}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  cyclePhotoByDirection(1);
-                }}
-              >
-                <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
-              </button>
-            </div>
+            {hasNavigablePhotos && (
+              <>
+                <div className="dots-row">
+                  {photos.map((p, i) => p ? <div key={i} className={`dot${photoIdx===i?' on':''}`}/> : null)}
+                </div>
+                <div className="photo-pager" aria-label="Photo navigation">
+                  <button
+                    type="button"
+                    className="photo-pager-btn"
+                    aria-label="Previous photo"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cyclePhotoByDirection(-1);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+                  </button>
+                  <span className="photo-pager-count">{photoSlotLabel}</span>
+                  <button
+                    type="button"
+                    className="photo-pager-btn"
+                    aria-label="Next photo"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      cyclePhotoByDirection(1);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+                </div>
+              </>
+            )}
             {photos[photoIdx] ? (
               <img
                 className="hero-img"
@@ -1217,9 +1307,9 @@ export default function SuperchargedProfile() {
                   </svg>
                 </div>
                 <div className="stat-text">
-                  <div className="stat-num">31</div>
+                  <div className="stat-num">{stats.connectionsCount.toLocaleString()}</div>
                   <div className="stat-desc">connections made</div>
-                  <div className="stat-growth" style={{color:'#0F6E56'}}>+4 this week</div>
+                  <div className="stat-growth" style={{color:'#0F6E56'}}>+{stats.connectionsGrowth.toLocaleString()} this week</div>
                 </div>
                 <div className="stat-caret">
                   <svg width="7" height="12" viewBox="0 0 7 12" fill="none" stroke="#C8C8CC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l5 5-5 5"/></svg>
@@ -1232,9 +1322,9 @@ export default function SuperchargedProfile() {
                   </svg>
                 </div>
                 <div className="stat-text">
-                  <div className="stat-num y">1,620</div>
+                  <div className="stat-num y">{stats.voltzBalance.toLocaleString()}</div>
                   <div className="stat-desc">voltz earned</div>
-                  <div className="stat-growth" style={{color:'#BA7517'}}>+220 this week</div>
+                  <div className="stat-growth" style={{color:'#BA7517'}}>+{stats.voltzGrowth.toLocaleString()} this week</div>
                 </div>
                 <div className="stat-caret">
                   <svg width="7" height="12" viewBox="0 0 7 12" fill="none" stroke="#C8C8CC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l5 5-5 5"/></svg>

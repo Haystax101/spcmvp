@@ -126,6 +126,17 @@ async function getProfileByUserId(tables, userId) {
   return listOneRow(tables, PROFILES_TABLE, [Query.equal('user_id', userId)]);
 }
 
+async function getProfilesByIds(tables, profileIds) {
+  const ids = Array.from(new Set(profileIds)).filter(Boolean);
+  if (ids.length === 0) return [];
+  const out = await tables.listRows({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    queries: [Query.equal('$id', ids), Query.limit(ids.length)],
+  });
+  return out.rows || [];
+}
+
 async function requireCurrentProfile(tables, req, body) {
   const userId = resolveCurrentUserId(req, body);
   if (!userId) throw new HttpError(401, 'Unable to resolve current user id');
@@ -422,12 +433,8 @@ async function actionListMessages({ tables, body, currentProfile }) {
   });
 
   const senderIds = Array.from(new Set(out.rows.map((row) => relationId(row.sender)).filter(Boolean)));
-  const profileMap = new Map();
-
-  for (const senderId of senderIds) {
-    const profile = await getRowOrNull(tables, PROFILES_TABLE, senderId);
-    if (profile) profileMap.set(senderId, profile);
-  }
+  const counterpartyRows = await getProfilesByIds(tables, senderIds);
+  const profileMap = new Map(counterpartyRows.map((p) => [p.$id, p]));
 
   const mapped = out.rows.map((row) => {
     const senderId = relationId(row.sender);

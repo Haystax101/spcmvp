@@ -9,6 +9,7 @@ import {
   MESSAGE_GATEWAY_FUNCTION_ID,
   Query,
 } from "./lib/appwrite";
+import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
 
 // ============================================================================
 // DATA
@@ -320,6 +321,11 @@ const milestoneStatus = (stageProgress, stageKey) => {
 };
 
 const HAS_BACKEND_GATEWAYS = Boolean(CONNECTION_GATEWAY_FUNCTION_ID && MESSAGE_GATEWAY_FUNCTION_ID);
+const PROFILE_CACHE_TTL_MS = 15 * 60 * 1000;
+const INBOX_CACHE_TTL_MS = 5 * 60 * 1000;
+const THREAD_CACHE_TTL_MS = 10 * 60 * 1000;
+const INBOX_CACHE_KEY = (profileId) => `supercharged:inbox:v2:${profileId}`;
+const THREAD_CACHE_KEY = (profileId, conversationId) => `supercharged:thread:v1:${profileId}:${conversationId}`;
 
 const formatChatTime = (iso) => {
   if (!iso) return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -1502,6 +1508,12 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
 
     try {
       const user = await account.get();
+      const cached = readCacheEntry(`supercharged:profile:v1:${user.$id}`, PROFILE_CACHE_TTL_MS);
+      if (cached?.data?.row) {
+        setBackendProfile((prev) => (prev?.$id === cached.data.row.$id ? prev : cached.data.row));
+        return cached.data.row;
+      }
+
       const found = await tables.listRows({
         databaseId: DB_ID,
         tableId: PROFILES_TABLE,
@@ -1518,23 +1530,41 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
   const loadConversationMessages = useCallback(async (conversationId, profileId) => {
     if (!backendReady || !conversationId || !profileId) return false;
 
-    const data = await executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
-      action: "list_messages",
-      conversation_id: conversationId,
-      limit: 100,
-    });
-
-    const mapped = mapMessagesToThread(data.messages || [], profileId);
-    if (mapped.length > 0) {
-      setMessages(mapped);
-    } else {
-      setMessages([{ type: "sep", text: "No messages yet" }]);
+    const cacheKey = THREAD_CACHE_KEY(profileId, conversationId);
+    const cached = readCacheEntry(cacheKey, THREAD_CACHE_TTL_MS);
+    if (cached?.data?.messages) {
+      setMessages(cached.data.messages);
+      if (Date.now() - (cached.savedAt || 0) < 30 * 1000) {
+        return true;
+      }
     }
 
-    await executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
-      action: "mark_conversation_read",
-      conversation_id: conversationId,
-    });
+    const fetchMessages = async () => {
+      const data = await executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
+        action: "list_messages",
+        conversation_id: conversationId,
+        limit: 100,
+      });
+
+      const mapped = mapMessagesToThread(data.messages || [], profileId);
+      const nextMessages = mapped.length > 0 ? mapped : [{ type: "sep", text: "No messages yet" }];
+      setMessages(nextMessages);
+      writeCacheEntry(cacheKey, { messages: nextMessages });
+
+      await executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
+        action: "mark_conversation_read",
+        conversation_id: conversationId,
+      });
+    };
+
+    if (cached?.data?.messages) {
+      fetchMessages().catch((err) => {
+        console.error("Conversation refresh failed:", err);
+      });
+      return true;
+    }
+
+    await fetchMessages();
 
     return true;
   }, [backendReady, executeFunction]);
@@ -1577,17 +1607,48 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
     }
     setInboxError(null);
 
+    const cacheKey = INBOX_CACHE_KEY(profile.$id);
+    const cached = readCacheEntry(cacheKey, 15 * 60 * 1000);
+    if (cached?.data) {
+      const { conversations: cachedConversations = [], newConnections: cachedNewConnections = [], notifications: cachedNotifications = [] } = cached.data;
+      setConversations(cachedConversations);
+      setNewConnections(cachedNewConnections);
+      setNotifications(cachedNotifications);
+      setHasHydratedInbox(true);
+      setInboxLoading(false);
+      if (Date.now() - (cached.savedAt || 0) < INBOX_CACHE_TTL_MS) {
+        return true;
+      }
+    }
+
     try {
-      const [activeData, pendingData] = await Promise.all([
-        executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
-          action: "list_active",
+      let activeData;
+      let pendingData;
+
+      try {
+        const bootstrapData = await executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
+          action: "bootstrap_inbox",
           limit: 80,
-        }),
-        executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
-          action: "list_pending_to_me",
-          limit: 80,
-        }),
-      ]);
+        });
+
+        activeData = { conversations: Array.isArray(bootstrapData?.conversations) ? bootstrapData.conversations : [] };
+        pendingData = { connections: Array.isArray(bootstrapData?.pending) ? bootstrapData.pending : [] };
+      } catch (bootstrapErr) {
+        const bootstrapMessage = String(bootstrapErr?.message || "");
+        const canFallback = /Unknown action|not found/i.test(bootstrapMessage);
+        if (!canFallback) throw bootstrapErr;
+
+        [activeData, pendingData] = await Promise.all([
+          executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
+            action: "list_active",
+            limit: 80,
+          }),
+          executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
+            action: "list_pending_to_me",
+            limit: 80,
+          }),
+        ]);
+      }
 
       const mappedConversations = (activeData?.conversations || [])
         .map(mapConversationFromBackend)
@@ -1603,8 +1664,14 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
         .filter(Boolean);
       setNewConnections(mappedPending);
 
-      setNotifications(buildLiveNotifications(mappedConversations, mappedPending));
+      const nextNotifications = buildLiveNotifications(mappedConversations, mappedPending);
+      setNotifications(nextNotifications);
       setHasHydratedInbox(true);
+      writeCacheEntry(cacheKey, {
+        conversations: mappedConversations,
+        newConnections: mappedPending,
+        notifications: nextNotifications,
+      });
     } catch (err) {
       console.error("Inbox backend sync failed:", err);
       setInboxError("Unable to refresh inbox right now.");
@@ -1981,6 +2048,10 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
         awardVoltzAmount(Number(out.voltz_earned));
       } else {
         earnVoltz("message_sent");
+      }
+
+      if (backendProfile?.$id && activeConversationId) {
+        removeCacheEntry(THREAD_CACHE_KEY(backendProfile.$id, activeConversationId));
       }
 
       await refreshInboxData();

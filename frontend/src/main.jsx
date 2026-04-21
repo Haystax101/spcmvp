@@ -7,13 +7,42 @@ import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 
 if (import.meta.env.VITE_SENTRY_DSN) {
+  const isProd = import.meta.env.PROD;
+  const tracesSampleRate = Number(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE ?? (isProd ? 0.15 : 0));
+  const replaySessionSampleRate = Number(import.meta.env.VITE_SENTRY_REPLAY_SESSION_SAMPLE_RATE ?? (isProd ? 0.02 : 0));
+  const replayOnErrorSampleRate = Number(import.meta.env.VITE_SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE ?? (isProd ? 0.1 : 0));
+
+  const integrations = [
+    Sentry.browserTracingIntegration(),
+  ];
+
+  if (replaySessionSampleRate > 0 || replayOnErrorSampleRate > 0) {
+    integrations.push(Sentry.replayIntegration());
+  }
+
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration(),
-    ],
-    tracesSampleRate: 1.0,
+    integrations,
+    tracesSampleRate,
+    replaysSessionSampleRate: replaySessionSampleRate,
+    replaysOnErrorSampleRate: replayOnErrorSampleRate,
+    beforeSend(event, hint) {
+      const exceptionMessage = String(
+        hint?.originalException?.message
+        || event?.exception?.values?.[0]?.value
+        || event?.message
+        || ''
+      );
+
+      const isExpectedRowsAuthNoise = /\brows\b/i.test(exceptionMessage)
+        && /(401|forbidden|permission|not authorized|unauthorized)/i.test(exceptionMessage);
+
+      if (isExpectedRowsAuthNoise) {
+        return null;
+      }
+
+      return event;
+    },
   });
 }
 

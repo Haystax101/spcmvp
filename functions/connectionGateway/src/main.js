@@ -527,6 +527,38 @@ async function getProfileById(tables, profileId) {
   return getRowOrNull(tables, PROFILES_TABLE, profileId);
 }
 
+async function getProfilesByIds(tables, profileIds) {
+  const ids = Array.from(new Set(profileIds)).filter(Boolean);
+  if (ids.length === 0) return [];
+
+  const out = await tables.listRows({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    queries: [Query.equal('$id', ids), Query.limit(Math.min(ids.length, MAX_LIMIT))],
+  });
+
+  return out.rows || [];
+}
+
+async function mapWithConcurrency(items, mapper, concurrency = 8) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  const out = new Array(items.length);
+  let idx = 0;
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (idx < items.length) {
+      const current = idx;
+      idx += 1;
+      // eslint-disable-next-line no-await-in-loop
+      out[current] = await mapper(items[current], current);
+    }
+  });
+
+  await Promise.all(workers);
+  return out;
+}
+
 function ensureParticipant(connection, profileId) {
   const initiatorId = relationId(connection.initiator) || normalizeString(connection.initiator_profile_id);
   const responderId = relationId(connection.responder) || normalizeString(connection.responder_profile_id);
@@ -1321,15 +1353,21 @@ async function actionListPendingToMe({ tables, body, currentProfile }) {
     queries,
   });
 
-  const cards = [];
-  for (const connection of out.rows) {
-    const initiatorId = relationId(connection.initiator);
-    const initiator = await getProfileById(tables, initiatorId);
-    if (!initiator) continue;
+  const initiatorIds = out.rows
+    .map((connection) => relationId(connection.initiator) || connection.initiator_profile_id)
+    .filter(Boolean);
+
+  const initiatorRows = await getProfilesByIds(tables, initiatorIds);
+  const initiatorMap = new Map(initiatorRows.map((profile) => [profile.$id, profile]));
+
+  const cards = (await mapWithConcurrency(out.rows, async (connection) => {
+    const initiatorId = relationId(connection.initiator) || connection.initiator_profile_id;
+    const initiator = initiatorMap.get(initiatorId);
+    if (!initiator) return null;
 
     const score = await getCompatibilityScore(tables, currentProfile.user_id, initiator.user_id);
-    cards.push(mapPendingCard(connection, initiator, score));
-  }
+    return mapPendingCard(connection, initiator, score);
+  }, 8)).filter(Boolean);
 
   return {
     success: true,
@@ -1356,20 +1394,26 @@ async function actionListPendingFromMe({ tables, body, currentProfile }) {
     queries,
   });
 
-  const items = [];
-  for (const connection of out.rows) {
-    const responderId = relationId(connection.responder);
-    const responder = await getProfileById(tables, responderId);
-    if (!responder) continue;
+  const responderIds = out.rows
+    .map((connection) => relationId(connection.responder) || connection.responder_profile_id)
+    .filter(Boolean);
 
-    items.push({
+  const responderRows = await getProfilesByIds(tables, responderIds);
+  const responderMap = new Map(responderRows.map((profile) => [profile.$id, profile]));
+
+  const items = out.rows.map((connection) => {
+    const responderId = relationId(connection.responder) || connection.responder_profile_id;
+    const responder = responderMap.get(responderId);
+    if (!responder) return null;
+
+    return {
       connection_id: connection.$id,
       name: normalizeString(responder.full_name) || 'Unknown user',
       role: profileRole(responder),
       initiated_at: connection.initiated_at,
       status: connection.status,
-    });
-  }
+    };
+  }).filter(Boolean);
 
   return {
     success: true,
@@ -1409,13 +1453,22 @@ async function actionListActive({ tables, body, currentProfile }) {
     dedup.set(row.$id, row);
   }
 
-  const cards = [];
-  for (const connection of dedup.values()) {
+  const rows = Array.from(dedup.values());
+  const counterpartyIds = rows.map((connection) => {
+    const initiatorId = relationId(connection.initiator) || connection.initiator_profile_id;
+    const responderId = relationId(connection.responder) || connection.responder_profile_id;
+    return initiatorId === currentProfile.$id ? responderId : initiatorId;
+  }).filter(Boolean);
+
+  const counterpartyRows = await getProfilesByIds(tables, counterpartyIds);
+  const counterpartyMap = new Map(counterpartyRows.map((profile) => [profile.$id, profile]));
+
+  const cards = (await mapWithConcurrency(rows, async (connection) => {
     const initiatorId = relationId(connection.initiator) || connection.initiator_profile_id;
     const responderId = relationId(connection.responder) || connection.responder_profile_id;
     const counterpartyId = initiatorId === currentProfile.$id ? responderId : initiatorId;
-    const counterparty = await getProfileById(tables, counterpartyId);
-    if (!counterparty) continue;
+    const counterparty = counterpartyMap.get(counterpartyId);
+    if (!counterparty) return null;
 
     const conversationId = relationId(connection.conversation) || connection.conversation_row_id;
     let latestMessage = null;
@@ -1423,10 +1476,12 @@ async function actionListActive({ tables, body, currentProfile }) {
     let memberRow = null;
 
     if (conversationId) {
-      latestMessage = await getLatestMessage(tables, conversationId);
-      memberRow = await listOneRow(tables, CONVERSATION_MEMBERS_TABLE, [
-        Query.equal('conversation', conversationId),
-        Query.equal('profile', currentProfile.$id),
+      [latestMessage, memberRow] = await Promise.all([
+        getLatestMessage(tables, conversationId),
+        listOneRow(tables, CONVERSATION_MEMBERS_TABLE, [
+          Query.equal('conversation', conversationId),
+          Query.equal('profile', currentProfile.$id),
+        ]),
       ]);
 
       unreadCount = await getUnreadCount(
@@ -1440,15 +1495,15 @@ async function actionListActive({ tables, body, currentProfile }) {
     const senderId = relationId(latestMessage?.sender);
     const isFromCurrent = senderId === currentProfile.$id;
 
-    cards.push(mapConversationCard(
+    return mapConversationCard(
       connection,
       counterparty,
       latestMessage,
       unreadCount,
       isFromCurrent,
       memberRow?.last_read_at || null
-    ));
-  }
+    );
+  }, 8)).filter(Boolean);
 
   cards.sort((a, b) => {
     if (a.section !== b.section) return a.section === 'attention' ? -1 : 1;
@@ -1628,6 +1683,69 @@ async function actionGetConnection({ tables, body, currentProfile }) {
   };
 }
 
+async function actionGetProfileStats({ tables, currentProfile }) {
+  const sevenDaysAgoIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [initiatedOut, receivedOut, ledgerOut] = await Promise.all([
+    tables.listRows({
+      databaseId: DB_ID,
+      tableId: CONNECTIONS_TABLE,
+      queries: [
+        Query.equal('initiator_profile_id', currentProfile.$id),
+        Query.equal('status', 'accepted'),
+        Query.limit(500),
+      ],
+    }),
+    tables.listRows({
+      databaseId: DB_ID,
+      tableId: CONNECTIONS_TABLE,
+      queries: [
+        Query.equal('responder_profile_id', currentProfile.$id),
+        Query.equal('status', 'accepted'),
+        Query.limit(500),
+      ],
+    }),
+    tables.listRows({
+      databaseId: DB_ID,
+      tableId: VOLTZ_LEDGER_TABLE,
+      queries: [
+        Query.equal('profile_row_id', currentProfile.$id),
+        Query.limit(500),
+      ],
+    }),
+  ]);
+
+  const allConnections = [...(initiatedOut.rows || []), ...(receivedOut.rows || [])];
+  const allLedgerRows = ledgerOut.rows || [];
+
+  return {
+    success: true,
+    stats: {
+      connectionsCount: allConnections.length,
+      connectionsGrowth: allConnections.filter((row) => row.$createdAt > sevenDaysAgoIso).length,
+      voltzBalance: allLedgerRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+      voltzGrowth: allLedgerRows
+        .filter((row) => row.$createdAt > sevenDaysAgoIso)
+        .reduce((sum, row) => sum + Number(row.amount || 0), 0),
+    },
+  };
+}
+
+async function actionBootstrapInbox({ tables, body, currentProfile }) {
+  const [active, pending] = await Promise.all([
+    actionListActive({ tables, body, currentProfile }),
+    actionListPendingToMe({ tables, body, currentProfile }),
+  ]);
+
+  return {
+    success: true,
+    conversations: active.conversations || [],
+    pending: pending.connections || [],
+    total_active: Number(active.total || 0),
+    total_pending: Number(pending.total || 0),
+  };
+}
+
 export default async ({ req, res, log, error }) => {
   const tables = createTables();
 
@@ -1672,6 +1790,12 @@ export default async ({ req, res, log, error }) => {
         break;
       case 'get_connection':
         payload = await actionGetConnection({ tables, body, currentProfile });
+        break;
+      case 'get_profile_stats':
+        payload = await actionGetProfileStats({ tables, currentProfile });
+        break;
+      case 'bootstrap_inbox':
+        payload = await actionBootstrapInbox({ tables, body, currentProfile });
         break;
       default:
         throw new HttpError(400, `Unknown action: ${action}`);
