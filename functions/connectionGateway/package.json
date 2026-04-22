@@ -6,6 +6,7 @@
     "start": "node src/main.js"
   },
   "dependencies": {
+    "@google/genai": "^1.47.0",
     "@sentry/node": "^9.14.0",
     "node-appwrite": "^24.0.0"
   }

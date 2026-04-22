@@ -1,4 +1,5 @@
 import { Client, ID, Query, TablesDB } from 'node-appwrite';
+import { GoogleGenAI } from '@google/genai';
 import * as Sentry from '@sentry/node';
 
 Sentry.init({
@@ -15,6 +16,8 @@ const MESSAGES_TABLE = process.env.APPWRITE_MESSAGES_TABLE || 'messages';
 const CONNECTIONS_TABLE = process.env.APPWRITE_CONNECTIONS_TABLE || 'connections';
 const REL_EVENTS_TABLE = process.env.APPWRITE_REL_EVENTS_TABLE || 'relationship_events';
 const VOLTZ_LEDGER_TABLE = process.env.APPWRITE_VOLTZ_LEDGER_TABLE || 'voltz_ledger';
+
+const PROFILE_PHOTOS_BUCKET_ID = process.env.PROFILE_PHOTOS_BUCKET_ID || 'profilePhotos';
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
@@ -141,6 +144,18 @@ function scoreTier(score) {
   if (score >= 85) return 'high';
   if (score >= 70) return 'mid';
   return 'low';
+}
+
+function getChipKind(key) {
+  if (key === 'college' || key === 'subject') return 'network';
+  if (key === 'goals' || key === 'connection_goals') return 'mutual';
+  if (key === 'career') return 'shared';
+  return 'timing';
+}
+
+function buildPhotoUrl(endpoint, projectId, fileId) {
+  if (!fileId || typeof fileId !== 'string' || !fileId.trim()) return null;
+  return `${endpoint}/storage/buckets/${PROFILE_PHOTOS_BUCKET_ID}/files/${fileId}/view?project=${projectId}`;
 }
 
 function dayDiffFromNow(iso) {
@@ -1406,12 +1421,16 @@ async function actionListPendingFromMe({ tables, body, currentProfile }) {
     const responder = responderMap.get(responderId);
     if (!responder) return null;
 
+    const fullName = normalizeString(responder.full_name) || 'Unknown user';
     return {
       connection_id: connection.$id,
-      name: normalizeString(responder.full_name) || 'Unknown user',
+      name: fullName,
+      initials: initialsFromName(fullName),
+      color: colorFromName(fullName),
       role: profileRole(responder),
       initiated_at: connection.initiated_at,
       status: connection.status,
+      message: normalizeString(connection.opening_message_preview) || 'Awaiting response',
     };
   }).filter(Boolean);
 
@@ -1420,6 +1439,43 @@ async function actionListPendingFromMe({ tables, body, currentProfile }) {
     connections: items,
     total: out.total ?? items.length,
   };
+}
+
+function computeGrowthTrend(items, dateKey, valueKey, periods, totalNow) {
+  const now = new Date();
+  const dayMs = 24 * 60 * 60 * 1000;
+  
+  const getDailyBuckets = (days) => {
+    const buckets = new Array(days).fill(0);
+    
+    items.forEach(item => {
+      const dateStr = item[dateKey];
+      if (!dateStr) return;
+      const date = new Date(dateStr);
+      const diffDays = Math.floor((now.getTime() - date.getTime()) / dayMs);
+      if (diffDays >= 0 && diffDays < days) {
+        buckets[days - 1 - diffDays] += (valueKey ? Number(item[valueKey] || 0) : 1);
+      }
+    });
+
+    const totalChanges = buckets.reduce((a, b) => a + b, 0);
+    let running = totalNow - totalChanges;
+    
+    return buckets.map(change => {
+      running += change;
+      return running;
+    });
+  };
+
+  const results = {};
+  periods.forEach(p => {
+    let days = 7;
+    if (p === '1m') days = 30;
+    if (p === '3m') days = 90;
+    results[p] = getDailyBuckets(days);
+  });
+  
+  return results;
 }
 
 async function actionListActive({ tables, body, currentProfile }) {
@@ -1718,16 +1774,291 @@ async function actionGetProfileStats({ tables, currentProfile }) {
   const allConnections = [...(initiatedOut.rows || []), ...(receivedOut.rows || [])];
   const allLedgerRows = ledgerOut.rows || [];
 
+  const connectionsCount = allConnections.length;
+  const voltzBalance = allLedgerRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+
+  // Build trend data using existing computeGrowthTrend helper.
+  // Returns plain arrays so the frontend's renderChartSVG can spread them directly.
+  const connTrends = computeGrowthTrend(allConnections, 'accepted_at', null, ['1w', '1m', '3m'], connectionsCount);
+  const voltzTrends = computeGrowthTrend(allLedgerRows, '$createdAt', 'amount', ['1w', '1m', '3m'], voltzBalance);
+
   return {
     success: true,
     stats: {
-      connectionsCount: allConnections.length,
+      connectionsCount,
       connectionsGrowth: allConnections.filter((row) => row.$createdAt > sevenDaysAgoIso).length,
-      voltzBalance: allLedgerRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
+      voltzBalance,
       voltzGrowth: allLedgerRows
         .filter((row) => row.$createdAt > sevenDaysAgoIso)
         .reduce((sum, row) => sum + Number(row.amount || 0), 0),
     },
+    trends: {
+      connections: { '1w': connTrends['1w'], '1m': connTrends['1m'], '3m': connTrends['3m'] },
+      voltz:       { '1w': voltzTrends['1w'], '1m': voltzTrends['1m'], '3m': voltzTrends['3m'] },
+    },
+  };
+}
+
+async function actionGetHomeFeed({ tables, body, currentProfile }) {
+  const endpoint = process.env.APPWRITE_FUNCTION_ENDPOINT || process.env.APPWRITE_ENDPOINT || 'https://fra.cloud.appwrite.io/v1';
+  const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.APPWRITE_PROJECT_ID;
+  const now = new Date().toISOString();
+
+  // ── 1. Pending incoming connections ─────────────────────────────────────────
+  const pendingOut = await tables.listRows({
+    databaseId: DB_ID,
+    tableId: CONNECTIONS_TABLE,
+    queries: [
+      Query.equal('responder_profile_id', currentProfile.$id),
+      Query.equal('status', 'pending'),
+      Query.orderDesc('initiated_at'),
+      Query.limit(10),
+    ],
+  });
+
+  const initiatorIds = pendingOut.rows
+    .map((c) => relationId(c.initiator) || c.initiator_profile_id)
+    .filter(Boolean);
+
+  const initiatorProfiles = await getProfilesByIds(tables, initiatorIds);
+  const initiatorMap = new Map(initiatorProfiles.map((p) => [p.$id, p]));
+
+  const pending = (await mapWithConcurrency(pendingOut.rows, async (connection) => {
+    const initiatorId = relationId(connection.initiator) || connection.initiator_profile_id;
+    const initiator = initiatorMap.get(initiatorId);
+    if (!initiator) return null;
+
+    const score = await getCompatibilityScore(tables, currentProfile.user_id, initiator.user_id);
+    const snapshot = buildCompatibilitySnapshot({
+      profileA: currentProfile,
+      profileB: initiator,
+      baseScore: score,
+      generatedAt: now,
+    });
+
+    const photoIds = Array.isArray(initiator.photo_file_ids) ? initiator.photo_file_ids : [];
+    const firstPhotoId = photoIds.find((id) => typeof id === 'string' && id.trim());
+    const photo_url = buildPhotoUrl(endpoint, projectId, firstPhotoId);
+
+    return {
+      id: connection.$id,
+      connection_id: connection.$id,
+      name: normalizeString(initiator.full_name) || 'Unknown user',
+      role: profileRole(initiator),
+      initials: initialsFromName(initiator.full_name),
+      color: colorFromName(initiator.full_name),
+      photo_url,
+      score: snapshot.score,
+      message: normalizeString(connection.opening_message_preview) || 'They would like to connect.',
+      time: relativeTime(connection.initiated_at),
+      compat_chips: snapshot.chips.slice(0, 3).map((c) => ({
+        kind: getChipKind(c.key),
+        label: c.label,
+      })),
+      compat_dims: snapshot.breakdown,
+      initiated_at: connection.initiated_at,
+    };
+  }, 8)).filter(Boolean);
+
+  // ── 2. Stats ─────────────────────────────────────────────────────────────────
+  const [initiatedAccepted, receivedAccepted, declinedByThem] = await Promise.all([
+    tables.listRows({
+      databaseId: DB_ID,
+      tableId: CONNECTIONS_TABLE,
+      queries: [
+        Query.equal('initiator_profile_id', currentProfile.$id),
+        Query.equal('status', 'accepted'),
+        Query.limit(500),
+      ],
+    }),
+    tables.listRows({
+      databaseId: DB_ID,
+      tableId: CONNECTIONS_TABLE,
+      queries: [
+        Query.equal('responder_profile_id', currentProfile.$id),
+        Query.equal('status', 'accepted'),
+        Query.limit(500),
+      ],
+    }),
+    tables.listRows({
+      databaseId: DB_ID,
+      tableId: CONNECTIONS_TABLE,
+      queries: [
+        Query.equal('initiator_profile_id', currentProfile.$id),
+        Query.equal('status', 'declined'),
+        Query.limit(200),
+      ],
+    }),
+  ]);
+
+  const allAccepted = [...(initiatedAccepted.rows || []), ...(receivedAccepted.rows || [])];
+  const active_count = allAccepted.length;
+
+  const compatScores = allAccepted
+    .map((c) => Number(c.compatibility_score_snapshot))
+    .filter((n) => n > 0);
+  const avg_compat = compatScores.length > 0
+    ? Math.round(compatScores.reduce((a, b) => a + b, 0) / compatScores.length)
+    : 0;
+
+  const totalOutbound = (initiatedAccepted.rows || []).length + (declinedByThem.rows || []).length;
+  const response_rate = totalOutbound > 0
+    ? Math.round(((initiatedAccepted.rows || []).length / totalOutbound) * 100)
+    : 0;
+
+  // ── 3. Trends ────────────────────────────────────────────────────────────────
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  
+  const [voltzHistory] = await Promise.all([
+    tables.listRows({
+      databaseId: DB_ID,
+      tableId: VOLTZ_LEDGER_TABLE,
+      queries: [
+        Query.equal('profile_row_id', currentProfile.$id),
+        Query.greaterThanEqual('awarded_at', ninetyDaysAgo),
+        Query.orderAsc('awarded_at'),
+        Query.limit(1000)
+      ]
+    })
+  ]);
+
+  const currentVoltz = Number(currentProfile.current_voltz || 0);
+  const voltzTrends = computeGrowthTrend(voltzHistory.rows || [], 'awarded_at', 'amount', ['1w', '1m', '3m'], currentVoltz);
+  const connTrends = computeGrowthTrend(allAccepted, 'accepted_at', null, ['1w', '1m', '3m'], active_count);
+
+  return {
+    success: true,
+    pending,
+    stats: { active_count, avg_compat, response_rate, current_voltz: currentVoltz },
+    trends: {
+      voltz: voltzTrends,
+      connections: connTrends
+    }
+  };
+}
+
+async function actionAiDraftMessage({ tables, body, currentProfile }) {
+  const recipientProfileId = normalizeString(body.recipient_profile_id || body.recipientProfileId);
+  if (!recipientProfileId) throw new HttpError(400, 'recipient_profile_id is required');
+
+  const recipientProfile = await getProfileById(tables, recipientProfileId);
+  if (!recipientProfile) throw new HttpError(404, 'Recipient profile not found');
+
+  const currentVoltz = Number(currentProfile.current_voltz || 0);
+  const DRAFT_COST = 3;
+  if (currentVoltz < DRAFT_COST) {
+    return { success: false, error: 'insufficient_voltz', current_voltz: currentVoltz };
+  }
+
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) throw new HttpError(500, 'GOOGLE_API_KEY is not configured');
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  const systemPrompt = `You are a master of professional outreach for ambitious early-career people. Write a concise, specific connection request. Rules:
+- Never sound like a template or LinkedIn request
+- Reference something concrete and specific about the recipient
+- End with one clear ask or open question
+- Keep under 80 words
+- No em dashes
+- Don't start with "Hi [name]" — start with substance
+- Match the register of someone sophisticated — never gushing, never stiff`;
+
+  const senderField = normalizeString(currentProfile.career_field) || normalizeString(currentProfile.study_subject);
+  const senderFocus = normalizeString(currentProfile.building_description) || normalizeString(currentProfile.primary_intent);
+  const senderGoals = toUniqueList(currentProfile.goals).slice(0, 3).join(', ');
+  const recipientField = normalizeString(recipientProfile.career_field) || normalizeString(recipientProfile.study_subject);
+  const recipientFocus = normalizeString(recipientProfile.building_description) || normalizeString(recipientProfile.primary_intent);
+  const recipientCollege = normalizeString(recipientProfile.college);
+
+  const userPrompt = `About the sender:
+- Name: ${normalizeString(currentProfile.full_name)}
+- Field: ${senderField}
+- Building/Focus: ${senderFocus}
+- Goals: ${senderGoals}
+
+About the recipient:
+- Name: ${normalizeString(recipientProfile.full_name)}
+- Field: ${recipientField}
+- College: ${recipientCollege}
+- Building/Focus: ${recipientFocus}
+
+Write one outreach message. Return ONLY the message text.`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3.1-flash-lite-preview',
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    config: {
+      systemInstruction: systemPrompt,
+      temperature: 0.7,
+    },
+  });
+
+  const draft = (response?.text || '').trim().replace(/^["']|["']$/g, '');
+  if (!draft) throw new HttpError(500, 'AI draft generation failed');
+
+  const nowIso = new Date().toISOString();
+  await tables.updateRow({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    rowId: currentProfile.$id,
+    data: { current_voltz: currentVoltz - DRAFT_COST },
+  });
+  await tables.createRow({
+    databaseId: DB_ID,
+    tableId: VOLTZ_LEDGER_TABLE,
+    rowId: ID.unique(),
+    data: {
+      profile_row_id: currentProfile.$id,
+      event_type: 'ai_draft_used',
+      amount: -DRAFT_COST,
+      reason: 'AI draft message used',
+      awarded_at: nowIso,
+    },
+  });
+
+  return {
+    success: true,
+    draft,
+    voltz_cost: DRAFT_COST,
+    remaining_voltz: currentVoltz - DRAFT_COST,
+  };
+}
+
+async function actionDeductVoltz({ tables, body, currentProfile }) {
+  const amount = Math.abs(Number(body.amount || 0));
+  const reason = normalizeString(body.reason) || 'Voltz deduction';
+  if (amount <= 0) return { success: true };
+
+  const currentVoltz = Number(currentProfile.current_voltz || 0);
+  if (currentVoltz < amount) {
+    return { success: false, error: 'insufficient_voltz', current_voltz: currentVoltz };
+  }
+
+  const nowIso = new Date().toISOString();
+  await tables.updateRow({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    rowId: currentProfile.$id,
+    data: { current_voltz: currentVoltz - amount },
+  });
+
+  await tables.createRow({
+    databaseId: DB_ID,
+    tableId: VOLTZ_LEDGER_TABLE,
+    rowId: ID.unique(),
+    data: {
+      profile_row_id: currentProfile.$id,
+      event_type: 'voltz_deduction',
+      amount: -amount,
+      reason,
+      awarded_at: nowIso,
+    },
+  });
+
+  return {
+    success: true,
+    remaining_voltz: currentVoltz - amount,
   };
 }
 
@@ -1796,6 +2127,15 @@ export default async ({ req, res, log, error }) => {
         break;
       case 'bootstrap_inbox':
         payload = await actionBootstrapInbox({ tables, body, currentProfile });
+        break;
+      case 'get_home_feed':
+        payload = await actionGetHomeFeed({ tables, body, currentProfile });
+        break;
+      case 'ai_draft_message':
+        payload = await actionAiDraftMessage({ tables, body, currentProfile });
+        break;
+      case 'deduct_voltz':
+        payload = await actionDeductVoltz({ tables, body, currentProfile });
         break;
       default:
         throw new HttpError(400, `Unknown action: ${action}`);

@@ -348,24 +348,40 @@ function getHobbyIcon(name) {
 }
 
 // ─── Chart rendering ─────────────────────────────────────────────────────────
-function renderChartSVG(stat, period) {
-  const d = CHART_DATA[stat][period];
-  const pts = d.pts;
+function renderChartSVG(stat, period, dynamicPts) {
+  const pts = dynamicPts || CHART_DATA[stat][period].pts;
   const W=300, H=80, pad=4;
-  const min = Math.min(...pts), max = Math.max(...pts);
+  const min = Math.min(...pts);
+  const max = Math.max(...pts);
   const range = max - min || 1;
   const coords = pts.map((v,i) => {
-    const x = pad + (i/(pts.length-1))*(W-pad*2);
+    const x = pad + (i/(pts.length-1 || 1))*(W-pad*2);
     const y = (H-pad) - ((v-min)/range)*(H-pad*2);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
   const lineColor = stat==='conn' ? '#1A9E75' : '#E8A020';
   const fillColor = stat==='conn' ? 'rgba(26,158,117,0.08)' : 'rgba(232,160,32,0.10)';
   const polyPts = coords.join(' ');
-  const firstPt = coords[0].split(',');
-  const lastPt = coords[coords.length-1].split(',');
+  const firstPt = (coords[0] || '0,0').split(',');
+  const lastPt = (coords[coords.length-1] || '0,0').split(',');
   const fillPts = `${polyPts} ${lastPt[0]},${H+2} ${firstPt[0]},${H+2}`;
-  return { fillPts, polyPts, lineColor, fillColor, num: d.num, change: d.change, changeColor: d.changeColor };
+  
+  // Growth numbers
+  const current = pts[pts.length - 1] || 0;
+  const previous = pts[0] || 0;
+  const diff = current - previous;
+  const sign = diff >= 0 ? '+' : '';
+  const label = period === '1w' ? 'week' : (period === '1m' ? 'month' : 'quarter');
+  
+  return { 
+    fillPts, 
+    polyPts, 
+    lineColor, 
+    fillColor, 
+    num: current.toLocaleString(), 
+    change: `${sign}${diff.toLocaleString()} this ${label}`, 
+    changeColor: diff >= 0 ? (stat==='conn' ? '#0F6E56' : '#BA7517') : '#E24B4A'
+  };
 }
 
 const DEFAULT_PROFILE_STATE = {
@@ -420,9 +436,9 @@ const deriveIntentHeading = (profileState) => {
 };
 
 const normalizeStats = (stats) => ({
-  connectionsCount: Number(stats?.connectionsCount || 0),
+  connectionsCount: Number(stats?.connectionsCount || stats?.active_count || 0),
   connectionsGrowth: Number(stats?.connectionsGrowth || 0),
-  voltzBalance: Number(stats?.voltzBalance || 0),
+  voltzBalance: Number(stats?.voltzBalance || stats?.current_voltz || 0),
   voltzGrowth: Number(stats?.voltzGrowth || 0),
 });
 
@@ -444,7 +460,10 @@ const fetchProfileStats = async () => {
     throw new Error(body.error);
   }
 
-  return normalizeStats(body?.stats || DEFAULT_STATS);
+  return {
+    stats: normalizeStats(body?.stats || DEFAULT_STATS),
+    trends: body?.trends || null
+  };
 };
 
 const uniqCleanList = (values) => {
@@ -590,9 +609,10 @@ function TagInput({ type, chips, setChips, placeholder }) {
 }
 
 // ─── GrowthCard sub-component ────────────────────────────────────────────────
-function GrowthCard({ stat, titleColor }) {
+function GrowthCard({ stat, titleColor, dynamicTrends }) {
   const [period, setPeriod] = useState('1w');
-  const chart = renderChartSVG(stat, period);
+  const pts = dynamicTrends?.[stat==='conn'?'connections':'voltz']?.[period];
+  const chart = renderChartSVG(stat, period, pts);
   const title = stat==='conn' ? 'Connection growth' : 'Voltz over time';
   return (
     <div className="growth-card">
@@ -650,6 +670,7 @@ export default function SuperchargedProfile() {
   const [stats, setStats] = useState({
     ...DEFAULT_STATS,
   });
+  const [trends, setTrends] = useState(null);
 
   // ── Photos ──
   const [photoFileIds, setPhotoFileIds] = useState([null, null, null]);
@@ -820,11 +841,17 @@ export default function SuperchargedProfile() {
         applyProfileRow(row);
 
         try {
-          const nextStats = await fetchProfileStats();
+          const result = await fetchProfileStats();
+          const { stats: nextStats, trends: nextTrends } = result;
 
           if (isMounted) {
             setStats(nextStats);
-            writeCacheEntry(PROFILE_CACHE_KEY(user.$id), { row, stats: nextStats });
+            setTrends(nextTrends);
+            writeCacheEntry(PROFILE_CACHE_KEY(user.$id), { 
+              row, 
+              stats: nextStats,
+              trends: nextTrends 
+            });
           }
         } catch (statsErr) {
           console.warn('Could not load profile stats, using cached/default values.', statsErr);
@@ -832,6 +859,7 @@ export default function SuperchargedProfile() {
             writeCacheEntry(PROFILE_CACHE_KEY(user.$id), {
               row,
               stats: cachedStats || DEFAULT_STATS,
+              trends: cached?.data?.trends || null
             });
           }
         }
@@ -1332,8 +1360,8 @@ export default function SuperchargedProfile() {
               </div>
             </div>
 
-            <GrowthCard stat="conn"/>
-            <GrowthCard stat="voltz" titleColor="#C49B0A"/>
+            <GrowthCard stat="conn" dynamicTrends={trends}/>
+            <GrowthCard stat="voltz" titleColor="#C49B0A" dynamicTrends={trends}/>
           </div>
         </div>
 

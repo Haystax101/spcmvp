@@ -1,0 +1,2296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supercharged — Natural Language Search Flow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    #root { min-height: 100vh; }
+  </style>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+// ---------------------------------------------------------------------------
+// Supercharged — Natural Language Search Flow
+// Dashboard → Search Takeover → Results → Compatibility Profile
+// ---------------------------------------------------------------------------
+
+const COLORS = {
+  ink: "#1a1a1a",
+  inkMuted: "#6b6b6b",
+  inkFaint: "#a0a0a0",
+  paper: "#ffffff",
+  warmGrey: "#f5f4f0",
+  warmGreyBorder: "#ececea",
+  greenBg: "#C0DD97",
+  greenFill: "#639922",
+  greenText: "#3B6D11",
+  greenChipBg: "#EAF3DE",
+  amberBg: "#fdf3e7",
+  amberFill: "#C88420",
+  amberText: "#8C5A14",
+  coralBg: "#fbe6e1",
+  coralText: "#A63E28",
+  dimIdentity: "#3E66C6",
+  dimIntent: "#2B9A87",
+  dimResonance: "#7C5AC4",
+  dimNetwork: "#C88420",
+};
+
+const AVATAR_PALETTE = [
+  { bg: "#E4D8F3", fg: "#5B3E96" }, // purple
+  { bg: "#D6EDE7", fg: "#23705E" }, // teal
+  { bg: "#F7DCD2", fg: "#A63E28" }, // coral
+  { bg: "#E0EDD0", fg: "#3B6D11" }, // green
+];
+
+// Fixed palette by keyword — same keyword always gets the same colour.
+const KEYWORD_COLOURS_FIXED = {
+  "AI founder": { bg: "#E6F1FB", fg: "#185FA5" },
+  London: { bg: "#EAF3DE", fg: "#3B6D11" },
+  "ex-Oxford": { bg: "#EEEDFE", fg: "#3C3489" },
+  "seed stage": { bg: "#FAEEDA", fg: "#633806" },
+  "causal inference": { bg: "#FAECE7", fg: "#712B13" },
+  researchers: { bg: "#E1F5EE", fg: "#085041" },
+};
+// Rotation pool for unknown keywords — reuses the same palette in order.
+const KEYWORD_COLOUR_POOL = Object.values(KEYWORD_COLOURS_FIXED);
+const keywordColourCache = {};
+function getKeywordColour(kw) {
+  if (KEYWORD_COLOURS_FIXED[kw]) return KEYWORD_COLOURS_FIXED[kw];
+  if (keywordColourCache[kw]) return keywordColourCache[kw];
+  const idx = Object.keys(keywordColourCache).length % KEYWORD_COLOUR_POOL.length;
+  keywordColourCache[kw] = KEYWORD_COLOUR_POOL[idx];
+  return keywordColourCache[kw];
+}
+
+const SUGGESTION_CHIPS = [
+  "AI founders in London",
+  "ex-Oxford builders",
+  "seed stage operators",
+  "people into causal inference",
+  "VCs at Lightspeed",
+  "researchers at DeepMind",
+];
+
+const SAMPLE_RESULTS = [
+  {
+    id: "elena",
+    name: "Elena Popescu",
+    role: "Founder · Meridian AI · London",
+    match: 94,
+    initials: "EP",
+    palette: 0,
+    matched: ["AI founder", "London", "ex-Oxford"],
+    ring: { color: COLORS.greenFill, trackColor: "#e9efe0" },
+    timingSignal:
+      "Elena posted on LinkedIn last week that Meridian is opening a £3M seed round. Her last two raises came together in under six weeks.",
+    opener:
+      "Saw the Meridian post — the framing around latent-space routing is sharper than the GTM crowd gives it credit for. Curious how you're thinking about the eval problem before Series A.",
+    dimensions: [
+      { name: "Identity", desc: "Who you are", score: 91, color: COLORS.dimIdentity },
+      { name: "Intent", desc: "What you want", score: 87, color: COLORS.dimIntent },
+      { name: "Resonance", desc: "How you click", score: 84, color: COLORS.dimResonance },
+      { name: "Network", desc: "Who you both know", score: 79, color: COLORS.dimNetwork },
+    ],
+    shared: [
+      { icon: "👥", label: "3 mutual connections", sub: "Hari Patel, Ava Lindqvist, Tom Reeve" },
+      { icon: "📍", label: "Oxford × LSE overlap", sub: "Same cohort 2022–24" },
+      { icon: "📅", label: "Both at Slush 2025", sub: "Co-attended 2 panels" },
+    ],
+    footnote:
+      "Elena's Network score is held back by geography — you share less of the Bay Area graph than the London one.",
+    gradient: "linear-gradient(160deg, #8B7FE8 0%, #5B4FCF 100%)",
+  },
+  {
+    id: "james",
+    name: "James Wu",
+    role: "Co-founder · Lattice Labs · London",
+    match: 87,
+    initials: "JW",
+    palette: 1,
+    matched: ["AI founder", "London", "seed stage"],
+    ring: { color: COLORS.greenFill, trackColor: "#e9efe0" },
+    timingSignal:
+      "Lattice just closed a £1.8M seed led by LocalGlobe. James is hiring a founding designer and has been vocal about wanting research-adjacent co-conspirators.",
+    opener:
+      "The Lattice raise looked well-shaped — especially the LocalGlobe + angels mix. I'd love to compare notes on the founding design brief before you lock it.",
+    dimensions: [
+      { name: "Identity", desc: "Who you are", score: 85, color: COLORS.dimIdentity },
+      { name: "Intent", desc: "What you want", score: 90, color: COLORS.dimIntent },
+      { name: "Resonance", desc: "How you click", score: 80, color: COLORS.dimResonance },
+      { name: "Network", desc: "Who you both know", score: 78, color: COLORS.dimNetwork },
+    ],
+    shared: [
+      { icon: "👥", label: "2 mutual connections", sub: "Priya Shah, Callum Dawes" },
+      { icon: "📍", label: "Both in Shoreditch orbit", sub: "Overlapping coworking" },
+      { icon: "📅", label: "Both at NeurIPS 2024", sub: "Workshop co-attendance" },
+    ],
+    footnote:
+      "James leans technical-first; the Resonance score reflects overlapping taste but different working tempo.",
+    gradient: "linear-gradient(160deg, #5FBCA7 0%, #1F7A6A 100%)",
+  },
+  {
+    id: "sofia",
+    name: "Sofia Reyes",
+    role: "Founder · Arca · ex-DeepMind",
+    match: 71,
+    initials: "SR",
+    palette: 2,
+    matched: ["AI founder"],
+    ring: { color: COLORS.amberFill, trackColor: "#f3ead9" },
+    timingSignal:
+      "Arca is in stealth but Sofia has been quietly meeting London founders over the past fortnight. She's sourcing, not selling — timing is rare.",
+    opener:
+      "Heard Arca is still in stealth — I'll spare you the pitch. What I'd actually love to swap notes on is the ex-DeepMind → founder transition, which I've been thinking about a lot.",
+    dimensions: [
+      { name: "Identity", desc: "Who you are", score: 72, color: COLORS.dimIdentity },
+      { name: "Intent", desc: "What you want", score: 68, color: COLORS.dimIntent },
+      { name: "Resonance", desc: "How you click", score: 76, color: COLORS.dimResonance },
+      { name: "Network", desc: "Who you both know", score: 65, color: COLORS.dimNetwork },
+    ],
+    shared: [
+      { icon: "👥", label: "1 mutual connection", sub: "Maya Okonkwo" },
+      { icon: "📍", label: "London × Oxford adjacent", sub: "Different cohorts" },
+      { icon: "📅", label: "Both follow LLM-Safety reading group", sub: "Inferred from public activity" },
+    ],
+    footnote:
+      "Mid-range match — strong resonance on research taste, thinner on network and stated intent alignment.",
+    gradient: "linear-gradient(160deg, #E89B85 0%, #B35A3D 100%)",
+  },
+];
+
+// ---------------------------------------------------------------------------
+
+function SuperchargedSearchFlow() {
+  const [screen, setScreen] = useState("dashboard"); // dashboard | search | results | profile | chat | connection_sent
+  const [query, setQuery] = useState("");
+  const [activeChip, setActiveChip] = useState(null);
+  const [selectedPerson, setSelectedPerson] = useState(null);
+  const [chatPerson, setChatPerson] = useState(null);
+  const [connectedPerson, setConnectedPerson] = useState(null);
+  const [searchScope, setSearchScope] = useState("app"); // app | web
+  const [loading, setLoading] = useState(false);
+  const [dashboardExiting, setDashboardExiting] = useState(false);
+  const [searchPulse, setSearchPulse] = useState(false);
+  const inputRef = useRef(null);
+
+  // Font loading
+  useEffect(() => {
+    const id = "sc-fonts";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Sans:wght@400;500;600;700&display=swap";
+    document.head.appendChild(link);
+  }, []);
+
+  // Focus the search input when entering the search screen
+  useEffect(() => {
+    if (screen === "search") {
+      const t = setTimeout(() => inputRef.current?.focus(), 350);
+      return () => clearTimeout(t);
+    }
+  }, [screen]);
+
+  const openSearch = () => {
+    setSearchPulse(true);
+    setDashboardExiting(true);
+    setTimeout(() => setSearchPulse(false), 200);
+    setTimeout(() => {
+      setScreen("search");
+      setDashboardExiting(false);
+    }, 280);
+  };
+
+  const closeSearch = () => {
+    setScreen("dashboard");
+    setQuery("");
+    setActiveChip(null);
+  };
+
+  const runSearch = (text) => {
+    setQuery(text);
+    setActiveChip(text);
+    setLoading(true);
+    setScreen("results");
+    setTimeout(() => setLoading(false), 650);
+  };
+
+  const clearResults = () => {
+    setQuery("");
+    setActiveChip(null);
+    setScreen("search");
+  };
+
+  const openProfile = (person) => {
+    setSelectedPerson(person);
+    setScreen("profile");
+  };
+
+  const backFromProfile = () => {
+    setScreen("results");
+  };
+
+  const openChat = (person) => {
+    setChatPerson(person);
+    setScreen("chat");
+  };
+
+  const backFromChat = () => {
+    setScreen("results");
+  };
+
+  const openConnectionSent = (person) => {
+    setConnectedPerson(person);
+    setScreen("connection_sent");
+  };
+
+  const backToList = () => {
+    setScreen("results");
+    setConnectedPerson(null);
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background:
+          "radial-gradient(circle at 20% 10%, #f0ece3 0%, #e8e3d6 40%, #ddd6c4 100%)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "32px 16px",
+        fontFamily: "'DM Sans', -apple-system, sans-serif",
+      }}
+    >
+      <style>{keyframes}</style>
+
+      <div
+        style={{
+          width: 390,
+          height: 844,
+          background: COLORS.paper,
+          borderRadius: 44,
+          overflow: "hidden",
+          position: "relative",
+          boxShadow:
+            "0 40px 80px rgba(30,20,10,0.25), 0 0 0 10px #1a1a1a, 0 0 0 11px #333",
+          fontFamily: "'DM Sans', sans-serif",
+          color: COLORS.ink,
+        }}
+      >
+        {/* Status bar — always rendered */}
+        <StatusBar />
+
+        {/* Dashboard */}
+        {screen === "dashboard" && (
+          <DashboardScreen
+            onSearch={openSearch}
+            exiting={dashboardExiting}
+            searchPulse={searchPulse}
+          />
+        )}
+
+        {/* Search */}
+        {screen === "search" && (
+          <SearchScreen
+            onBack={closeSearch}
+            onSubmit={runSearch}
+            query={query}
+            setQuery={setQuery}
+            inputRef={inputRef}
+            searchScope={searchScope}
+            setSearchScope={setSearchScope}
+          />
+        )}
+
+        {/* Results */}
+        {screen === "results" && (
+          <ResultsScreen
+            query={query}
+            activeChip={activeChip}
+            loading={loading}
+            onClear={clearResults}
+            onOpenProfile={openProfile}
+            onConnect={openChat}
+            onBack={() => setScreen("search")}
+          />
+        )}
+
+        {/* Profile */}
+        {screen === "profile" && selectedPerson && (
+          <ProfileScreen
+            person={selectedPerson}
+            onBack={backFromProfile}
+            onConnect={openChat}
+          />
+        )}
+
+        {/* Chat */}
+        {screen === "chat" && chatPerson && (
+          <ChatScreen
+            person={chatPerson}
+            onBack={backFromChat}
+            onSend={() => openConnectionSent(chatPerson)}
+          />
+        )}
+
+        {/* Connection sent */}
+        {screen === "connection_sent" && connectedPerson && (
+          <ConnectionSentScreen
+            person={connectedPerson}
+            onBackToList={backToList}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Status bar
+// ---------------------------------------------------------------------------
+
+function StatusBar() {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 54,
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        padding: "0 28px 8px",
+        fontSize: 15,
+        fontWeight: 600,
+        letterSpacing: 0.2,
+        zIndex: 100,
+        pointerEvents: "none",
+      }}
+    >
+      <span>9:41</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        {/* signal */}
+        <svg width="17" height="11" viewBox="0 0 17 11" fill="none">
+          <rect x="0" y="7" width="3" height="4" rx="0.5" fill={COLORS.ink} />
+          <rect x="4.5" y="5" width="3" height="6" rx="0.5" fill={COLORS.ink} />
+          <rect x="9" y="2.5" width="3" height="8.5" rx="0.5" fill={COLORS.ink} />
+          <rect x="13.5" y="0" width="3" height="11" rx="0.5" fill={COLORS.ink} />
+        </svg>
+        {/* wifi */}
+        <svg width="15" height="11" viewBox="0 0 15 11" fill="none">
+          <path
+            d="M7.5 10.5 L5 8 Q7.5 5.5 10 8 Z M7.5 10.5 L2.5 5.5 Q7.5 0.5 12.5 5.5 L10 8"
+            stroke={COLORS.ink}
+            strokeWidth="1.2"
+            fill="none"
+          />
+          <circle cx="7.5" cy="9.5" r="1" fill={COLORS.ink} />
+        </svg>
+        {/* battery */}
+        <svg width="25" height="11" viewBox="0 0 25 11" fill="none">
+          <rect
+            x="0.5"
+            y="0.5"
+            width="21"
+            height="10"
+            rx="2.5"
+            stroke={COLORS.ink}
+            strokeOpacity="0.35"
+            fill="none"
+          />
+          <rect x="2" y="2" width="17.5" height="7" rx="1.5" fill={COLORS.ink} />
+          <rect x="22.5" y="3.5" width="1.5" height="4" rx="0.5" fill={COLORS.ink} fillOpacity="0.4" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard screen
+// ---------------------------------------------------------------------------
+
+function DashboardScreen({ onSearch, exiting, searchPulse }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 54,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        padding: "16px 24px 40px",
+        opacity: exiting ? 0 : 1,
+        transition: "opacity 180ms ease-out",
+        overflowY: "auto",
+      }}
+    >
+      {/* Top bar with icons */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          gap: 14,
+          marginBottom: 24,
+        }}
+      >
+        <button
+          onClick={onSearch}
+          aria-label="Search"
+          style={{
+            background: "transparent",
+            border: "none",
+            padding: 6,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transform: searchPulse ? "scale(1.15)" : "scale(1)",
+            transition: "transform 100ms ease-out",
+          }}
+        >
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <circle cx="10" cy="10" r="7" stroke={COLORS.ink} strokeWidth="1.6" />
+            <path d="M15 15 L20 20" stroke={COLORS.ink} strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <div style={{ position: "relative", padding: 6 }}>
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path
+              d="M11 3 C7.5 3 5.5 5.2 5.5 8.8 V12 L4 14.5 H18 L16.5 12 V8.8 C16.5 5.2 14.5 3 11 3 Z"
+              stroke={COLORS.ink}
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+              fill="none"
+            />
+            <path
+              d="M9 17 Q11 19 13 17"
+              stroke={COLORS.ink}
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </svg>
+          <span
+            style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              width: 8,
+              height: 8,
+              background: COLORS.amberFill,
+              borderRadius: "50%",
+              border: `1.5px solid ${COLORS.paper}`,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Greeting */}
+      <h1
+        style={{
+          fontFamily: "'Cormorant Garamond', serif",
+          fontSize: 38,
+          fontWeight: 500,
+          letterSpacing: -0.5,
+          lineHeight: 1.05,
+          margin: 0,
+          marginBottom: 8,
+        }}
+      >
+        Good morning, Pui
+      </h1>
+      <p
+        style={{
+          fontSize: 14,
+          color: COLORS.inkMuted,
+          margin: 0,
+          marginBottom: 36,
+        }}
+      >
+        3 people are waiting for you
+      </p>
+
+      {/* Section label */}
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: "0.07em",
+          color: COLORS.inkMuted,
+          textTransform: "uppercase",
+          marginBottom: 14,
+        }}
+      >
+        Network Pulse
+      </div>
+
+      {/* Metric cards */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 32 }}>
+        <MetricCard value="47" label="Connections" delta="+12 this month" deltaTone="pos" />
+        <MetricCard value="89%" label="Avg compatibility" delta="+3 pts" deltaTone="pos" />
+        <MetricCard value="68%" label="Response rate" delta="–4 pts" deltaTone="neg" />
+      </div>
+
+      {/* Filler sections — sub-visual anchors that feel native to the screen */}
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: "0.07em",
+          color: COLORS.inkMuted,
+          textTransform: "uppercase",
+          marginBottom: 14,
+        }}
+      >
+        Waiting for you
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <QueueCard
+          initials="EP"
+          palette={0}
+          name="Elena Popescu"
+          preview="Replied to your intro · 2h ago"
+        />
+        <QueueCard
+          initials="HP"
+          palette={1}
+          name="Hari Patel"
+          preview="Opened compatibility profile · 4h ago"
+        />
+        <QueueCard
+          initials="MO"
+          palette={3}
+          name="Maya Okonkwo"
+          preview="Accepted your request · Yesterday"
+        />
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ value, label, delta, deltaTone }) {
+  const deltaBg = deltaTone === "pos" ? COLORS.greenChipBg : COLORS.coralBg;
+  const deltaFg = deltaTone === "pos" ? COLORS.greenText : COLORS.coralText;
+  return (
+    <div
+      style={{
+        flex: 1,
+        background: COLORS.warmGrey,
+        borderRadius: 14,
+        padding: "16px 14px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "'Cormorant Garamond', serif",
+          fontSize: 28,
+          fontWeight: 500,
+          lineHeight: 1,
+          letterSpacing: -0.5,
+        }}
+      >
+        {value}
+      </div>
+      <div style={{ fontSize: 11, color: COLORS.inkMuted, lineHeight: 1.2 }}>
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: 8,
+          alignSelf: "flex-start",
+          background: deltaBg,
+          color: deltaFg,
+          fontSize: 9.5,
+          fontWeight: 600,
+          padding: "3px 7px",
+          borderRadius: 20,
+          letterSpacing: 0.1,
+        }}
+      >
+        {delta}
+      </div>
+    </div>
+  );
+}
+
+function QueueCard({ initials, palette, name, preview }) {
+  const p = AVATAR_PALETTE[palette];
+  return (
+    <div
+      style={{
+        background: COLORS.paper,
+        border: "0.5px solid rgba(0,0,0,0.1)",
+        borderRadius: 14,
+        padding: "12px 14px",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      <div
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: "50%",
+          background: p.bg,
+          color: p.fg,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        {initials}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 500 }}>{name}</div>
+        <div
+          style={{
+            fontSize: 12,
+            color: COLORS.inkMuted,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {preview}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Search screen
+// ---------------------------------------------------------------------------
+
+function SearchScreen({ onBack, onSubmit, query, setQuery, inputRef, searchScope, setSearchScope }) {
+  const [selectedChips, setSelectedChips] = useState([]);
+
+  const toggleChip = (chip) => {
+    setSelectedChips((prev) => {
+      const next = prev.includes(chip) ? prev.filter((c) => c !== chip) : [...prev, chip];
+      setQuery(next.join(", "));
+      // Reset textarea height since the input is controlled
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (el) {
+          el.style.height = "auto";
+          el.style.height = el.scrollHeight + "px";
+        }
+      });
+      return next;
+    });
+  };
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 54,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: COLORS.paper,
+        animation: "sc-circle-in 280ms ease-in-out forwards",
+        clipPath: "circle(0% at calc(100% - 40px) 0%)",
+        padding: "16px 24px 32px",
+        overflowY: "auto",
+      }}
+    >
+      {/* Back */}
+      <button
+        onClick={onBack}
+        style={{
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          marginBottom: 18,
+          fontSize: 14,
+          fontWeight: 500,
+          color: COLORS.ink,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          animation: "sc-fade-slide-in 220ms ease-out 100ms both",
+        }}
+      >
+        <span style={{ fontSize: 18, lineHeight: 1 }}>‹</span> Back
+      </button>
+
+      {/* Search bar */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          background: COLORS.paper,
+          border: `1.5px solid ${COLORS.ink}`,
+          borderRadius: 24,
+          padding: "13px 16px",
+          animation: "sc-fade-slide-in 220ms ease-out 150ms both",
+        }}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 22 22"
+          fill="none"
+          style={{ flexShrink: 0, marginTop: 2 }}
+        >
+          <circle cx="10" cy="10" r="7" stroke={COLORS.ink} strokeWidth="1.6" />
+          <path d="M15 15 L20 20" stroke={COLORS.ink} strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        <textarea
+          ref={inputRef}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            const el = e.target;
+            el.style.height = "auto";
+            el.style.height = el.scrollHeight + "px";
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && query.trim()) {
+              e.preventDefault();
+              onSubmit(query.trim());
+            }
+          }}
+          rows={1}
+          placeholder="Who are you looking for?"
+          style={{
+            flex: 1,
+            border: "none",
+            background: "transparent",
+            outline: "none",
+            fontSize: 15,
+            fontFamily: "inherit",
+            color: COLORS.ink,
+            resize: "none",
+            overflow: "hidden",
+            lineHeight: 1.4,
+            padding: 0,
+            minHeight: 21,
+            maxHeight: 180,
+            display: "block",
+          }}
+        />
+      </div>
+
+      {/* Scope toggle */}
+      <div
+        style={{
+          marginTop: 14,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          animation: "sc-fade-slide-in 220ms ease-out 180ms both",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+          }}
+        >
+          {["app", "web"].map((scope) => {
+            const active = searchScope === scope;
+            const label = scope === "app" ? "App" : "Web";
+            return (
+              <button
+                key={scope}
+                onClick={() => setSearchScope(scope)}
+                style={{
+                  background: active ? COLORS.ink : COLORS.paper,
+                  border: `1.5px solid ${COLORS.ink}`,
+                  borderRadius: 999,
+                  padding: "8px 22px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  fontFamily: "inherit",
+                  color: active ? COLORS.paper : COLORS.ink,
+                  cursor: "pointer",
+                  transition: "all 160ms ease-out",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {searchScope === "web" && (
+          <div
+            style={{
+              alignSelf: "flex-start",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              background: "#FEF3C7",
+              color: "#92400E",
+              fontSize: 11,
+              fontWeight: 500,
+              padding: "5px 11px",
+              borderRadius: 999,
+              animation: "sc-fade-up 220ms ease-out both",
+            }}
+          >
+            <span style={{ fontSize: 11 }}>⚡</span> 2 voltz per search
+          </div>
+        )}
+      </div>
+
+      {/* Label */}
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: "0.07em",
+          color: COLORS.inkMuted,
+          textTransform: "uppercase",
+          marginTop: 28,
+          marginBottom: 14,
+          animation: "sc-fade-slide-in 220ms ease-out 220ms both",
+        }}
+      >
+        Try searching for
+      </div>
+
+      {/* Chips */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {SUGGESTION_CHIPS.map((chip, i) => {
+          const selected = selectedChips.includes(chip);
+          return (
+            <button
+              key={chip}
+              onClick={() => toggleChip(chip)}
+              style={{
+                background: selected ? COLORS.ink : COLORS.paper,
+                border: `1.5px solid ${COLORS.ink}`,
+                color: selected ? COLORS.paper : COLORS.ink,
+                fontSize: 13,
+                fontWeight: 500,
+                fontFamily: "inherit",
+                padding: "7px 14px",
+                borderRadius: 999,
+                cursor: "pointer",
+                transition: "all 140ms ease-out",
+                animation: `sc-fade-up 150ms ease-out ${250 + i * 30}ms both`,
+              }}
+            >
+              {chip}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Results screen
+// ---------------------------------------------------------------------------
+
+function ResultsScreen({ query, activeChip, loading, onClear, onOpenProfile, onConnect, onBack }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 54,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: COLORS.paper,
+        padding: "16px 14px 32px",
+        overflowY: "auto",
+      }}
+    >
+      <button
+        onClick={onBack}
+        style={{
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          marginBottom: 14,
+          fontSize: 14,
+          fontWeight: 500,
+          color: COLORS.ink,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        <span style={{ fontSize: 18, lineHeight: 1 }}>‹</span> Back
+      </button>
+
+      {/* Search bar with query */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          background: COLORS.warmGrey,
+          border: `1px solid ${COLORS.warmGreyBorder}`,
+          borderRadius: 999,
+          padding: "11px 16px",
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 22 22" fill="none">
+          <circle cx="10" cy="10" r="7" stroke={COLORS.ink} strokeWidth="1.6" />
+          <path d="M15 15 L20 20" stroke={COLORS.ink} strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        <span style={{ flex: 1, fontSize: 15, color: COLORS.ink }}>{query}</span>
+        <button
+          onClick={onClear}
+          aria-label="Clear"
+          style={{
+            background: COLORS.ink,
+            color: COLORS.paper,
+            border: "none",
+            borderRadius: "50%",
+            width: 18,
+            height: 18,
+            fontSize: 11,
+            lineHeight: 1,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Active filter pill */}
+      {activeChip && (
+        <div style={{ marginTop: 14, display: "flex" }}>
+          <span
+            style={{
+              background: COLORS.ink,
+              color: COLORS.paper,
+              fontSize: 12,
+              fontWeight: 500,
+              padding: "6px 13px",
+              borderRadius: 999,
+              animation: "sc-pulse-in 300ms ease-out",
+            }}
+          >
+            {activeChip}
+          </span>
+        </div>
+      )}
+
+      {/* Count label */}
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          letterSpacing: "0.07em",
+          color: COLORS.inkMuted,
+          textTransform: "uppercase",
+          marginTop: 22,
+          marginBottom: 14,
+          paddingLeft: 10,
+        }}
+      >
+        {SAMPLE_RESULTS.length} people · ranked by compatibility
+      </div>
+
+      {/* Loading skeleton or cards */}
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              style={{
+                height: 130,
+                background: COLORS.warmGrey,
+                borderRadius: 16,
+                animation: "sc-shimmer 1s ease-in-out infinite",
+              }}
+            />
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {SAMPLE_RESULTS.map((person, i) => (
+            <ResultCard
+              key={person.id}
+              person={person}
+              index={i}
+              onOpenProfile={() => onOpenProfile(person)}
+              onConnect={() => onConnect(person)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResultCard({ person, index, onOpenProfile, onConnect }) {
+  const [topActive, setTopActive] = useState(false);
+  const p = AVATAR_PALETTE[person.palette];
+  let matchBg, matchFg;
+  if (person.match >= 85) {
+    matchBg = COLORS.greenBg;
+    matchFg = "#2a4f0a";
+  } else if (person.match >= 70) {
+    matchBg = "#f3e1bd";
+    matchFg = COLORS.amberText;
+  } else {
+    matchBg = COLORS.coralBg;
+    matchFg = COLORS.coralText;
+  }
+
+  return (
+    <div
+      style={{
+        background: COLORS.paper,
+        border: "0.5px solid rgba(0,0,0,0.1)",
+        borderRadius: 16,
+        padding: 14,
+        animation: `sc-card-in 180ms ease-out ${index * 80}ms both`,
+        boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+      }}
+    >
+      {/* Tappable top section — avatar + name + role + match badge */}
+      <div
+        onClick={onOpenProfile}
+        onMouseDown={() => setTopActive(true)}
+        onMouseUp={() => setTopActive(false)}
+        onMouseLeave={() => setTopActive(false)}
+        onTouchStart={() => setTopActive(true)}
+        onTouchEnd={() => setTopActive(false)}
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
+          cursor: "pointer",
+          opacity: topActive ? 0.85 : 1,
+          transition: "opacity 120ms ease-out",
+          userSelect: "none",
+        }}
+      >
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: "50%",
+            background: p.bg,
+            color: p.fg,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 13,
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          {person.initials}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 500 }}>{person.name}</div>
+          <div style={{ fontSize: 12, color: COLORS.inkMuted, marginTop: 2 }}>
+            {person.role}
+          </div>
+        </div>
+        <div
+          style={{
+            background: matchBg,
+            color: matchFg,
+            fontSize: 12,
+            fontWeight: 600,
+            padding: "4px 10px",
+            borderRadius: 999,
+          }}
+        >
+          {person.match}%
+        </div>
+      </div>
+
+      {/* Matched keywords — colour-varied */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
+        {person.matched.map((kw) => {
+          const c = getKeywordColour(kw);
+          return (
+            <span
+              key={kw}
+              style={{
+                background: c.bg,
+                color: c.fg,
+                fontSize: 11,
+                fontWeight: 500,
+                padding: "3px 9px 3px 7px",
+                borderRadius: 999,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <span
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: c.fg,
+                }}
+              />
+              {kw}
+            </span>
+          );
+        })}
+      </div>
+
+      {/* CTAs */}
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <button
+          onClick={onOpenProfile}
+          style={{
+            flex: 1,
+            background: "transparent",
+            border: `1px solid ${COLORS.ink}`,
+            color: COLORS.ink,
+            fontSize: 13,
+            fontWeight: 500,
+            fontFamily: "inherit",
+            padding: "9px 12px",
+            borderRadius: 999,
+            cursor: "pointer",
+          }}
+        >
+          View compatibility
+        </button>
+        <button
+          onClick={onConnect}
+          style={{
+            flex: 1,
+            background: COLORS.ink,
+            border: "none",
+            color: COLORS.paper,
+            fontSize: 13,
+            fontWeight: 500,
+            fontFamily: "inherit",
+            padding: "9px 12px",
+            borderRadius: 999,
+            cursor: "pointer",
+          }}
+        >
+          Connect
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Profile screen
+// ---------------------------------------------------------------------------
+
+function ProfileScreen({ person, onBack, onConnect }) {
+  const [ringPct, setRingPct] = useState(0);
+  const [displayedPct, setDisplayedPct] = useState(0);
+
+  // Ring animation
+  useEffect(() => {
+    const t = setTimeout(() => setRingPct(person.match), 100);
+    return () => clearTimeout(t);
+  }, [person.match]);
+
+  // Count-up
+  useEffect(() => {
+    const start = performance.now();
+    const duration = 800;
+    let raf;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplayedPct(Math.round(eased * person.match));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    const delay = setTimeout(() => {
+      raf = requestAnimationFrame(tick);
+    }, 100);
+    return () => {
+      clearTimeout(delay);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [person.match]);
+
+  const ringR = 44;
+  const ringC = 2 * Math.PI * ringR;
+  const dashOffset = ringC - (ringC * ringPct) / 100;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 54,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: COLORS.paper,
+        animation: "sc-push-in 300ms ease-out",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          overflowY: "auto",
+          paddingBottom: 88,
+        }}
+      >
+      {/* Header */}
+      <div
+        style={{
+          padding: "14px 24px 18px",
+          display: "grid",
+          gridTemplateColumns: "24px 1fr 24px",
+          alignItems: "center",
+          gap: 8,
+          animation: "sc-fade-up 400ms ease-out 50ms both",
+        }}
+      >
+        <button
+          onClick={onBack}
+          style={{
+            background: "transparent",
+            border: "none",
+            padding: 0,
+            fontSize: 22,
+            lineHeight: 1,
+            color: COLORS.ink,
+            cursor: "pointer",
+            justifySelf: "start",
+          }}
+        >
+          ‹
+        </button>
+        <div style={{ textAlign: "center", minWidth: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 600 }}>{person.name}</div>
+          <div style={{ fontSize: 12, color: COLORS.inkMuted, marginTop: 2 }}>
+            {person.role}
+          </div>
+        </div>
+        <span />
+      </div>
+
+      {/* Match ring */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          marginTop: 6,
+          marginBottom: 14,
+          animation: "sc-fade-up 400ms ease-out 150ms both",
+        }}
+      >
+        <div style={{ position: "relative", width: 110, height: 110 }}>
+          <svg width="110" height="110" viewBox="0 0 110 110">
+            <circle
+              cx="55"
+              cy="55"
+              r={ringR}
+              stroke={person.ring.trackColor}
+              strokeWidth="7"
+              fill="none"
+            />
+            <circle
+              cx="55"
+              cy="55"
+              r={ringR}
+              stroke={person.ring.color}
+              strokeWidth="7"
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray={ringC}
+              strokeDashoffset={dashOffset}
+              transform="rotate(-90 55 55)"
+              style={{ transition: "stroke-dashoffset 800ms cubic-bezier(0.22, 1, 0.36, 1)" }}
+            />
+          </svg>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "'Cormorant Garamond', serif",
+                fontStyle: "italic",
+                fontSize: 32,
+                fontWeight: 500,
+                color: person.ring.color,
+                lineHeight: 1,
+              }}
+            >
+              {displayedPct}
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: COLORS.inkMuted,
+                marginTop: 4,
+              }}
+            >
+              match
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search context */}
+      <div style={{ padding: "0 24px", animation: "sc-fade-up 400ms ease-out 250ms both" }}>
+        <div
+          style={{
+            background: COLORS.warmGrey,
+            borderRadius: 12,
+            padding: "12px 14px",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+            fontSize: 12.5,
+            lineHeight: 1.5,
+            color: COLORS.ink,
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 22 22" fill="none" style={{ flexShrink: 0, marginTop: 2 }}>
+            <circle cx="10" cy="10" r="7" stroke={COLORS.inkMuted} strokeWidth="1.6" />
+            <path d="M15 15 L20 20" stroke={COLORS.inkMuted} strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          <div>
+            <span style={{ color: COLORS.inkMuted }}>Matched on: </span>
+            {person.matched.map((kw, i) => (
+              <React.Fragment key={kw}>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    background: COLORS.greenChipBg,
+                    color: COLORS.greenText,
+                    padding: "2px 8px 2px 6px",
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    marginRight: i < person.matched.length - 1 ? 4 : 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: "50%",
+                      background: COLORS.greenFill,
+                    }}
+                  />
+                  {kw}
+                </span>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Why Now */}
+      <Section label="Why now" delay={350}>
+        <div
+          style={{
+            background: COLORS.amberBg,
+            borderLeft: "3px solid #E9A23B",
+            borderRadius: 10,
+            padding: "12px 14px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: "0.07em",
+              color: COLORS.amberText,
+              textTransform: "uppercase",
+              marginBottom: 6,
+            }}
+          >
+            <span style={{ fontSize: 13 }}>⚡</span> Timing signal
+          </div>
+          <div style={{ fontSize: 14, lineHeight: 1.5, color: COLORS.ink }}>
+            {person.timingSignal}
+          </div>
+        </div>
+      </Section>
+
+      {/* Lead with */}
+      <Section
+        label="Lead with"
+        rightLabel="Suggested opener"
+        delay={450}
+      >
+        <div
+          style={{
+            border: "1.5px solid #1a1a1a",
+            borderRadius: 12,
+            padding: "14px 16px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 500,
+              letterSpacing: "0.07em",
+              color: COLORS.inkMuted,
+              textTransform: "uppercase",
+              marginBottom: 8,
+            }}
+          >
+            Supercharged AI
+          </div>
+          <div
+            style={{
+              fontFamily: "'Cormorant Garamond', serif",
+              fontStyle: "italic",
+              fontSize: 16,
+              lineHeight: 1.4,
+              color: COLORS.ink,
+            }}
+          >
+            "{person.opener}"
+          </div>
+        </div>
+      </Section>
+
+      {/* Compatibility Breakdown */}
+      <Section
+        label="Compatibility breakdown"
+        rightLabel="4 dimensions"
+        delay={550}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {person.dimensions.map((d, i) => (
+            <DimensionBar key={d.name} dim={d} delay={600 + i * 100} />
+          ))}
+        </div>
+      </Section>
+
+      {/* Shared Context */}
+      <Section label="Shared context" delay={900}>
+        <div
+          style={{
+            border: "0.5px solid rgba(0,0,0,0.1)",
+            borderRadius: 12,
+            overflow: "hidden",
+          }}
+        >
+          {person.shared.map((row, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 12,
+                padding: "12px 14px",
+                borderTop: i === 0 ? "none" : "0.5px solid rgba(0,0,0,0.1)",
+              }}
+            >
+              <span style={{ fontSize: 15, lineHeight: 1.3 }}>{row.icon}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{row.label}</div>
+                <div style={{ fontSize: 12, color: COLORS.inkMuted, marginTop: 2 }}>
+                  {row.sub}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            background: COLORS.warmGrey,
+            borderRadius: 10,
+            padding: "10px 12px",
+            marginTop: 10,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 12, color: COLORS.inkMuted }}>ⓘ</span>
+          <div
+            style={{
+              fontStyle: "italic",
+              fontSize: 11.5,
+              color: COLORS.inkMuted,
+              lineHeight: 1.5,
+            }}
+          >
+            {person.footnote}
+          </div>
+        </div>
+      </Section>
+      </div>
+
+      {/* Connect (pinned sibling — true bottom bar) */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: COLORS.paper,
+          padding: "16px 20px 28px",
+          boxShadow: "0 -12px 24px rgba(255,255,255,0.95)",
+        }}
+      >
+        <button
+          onClick={() => onConnect(person)}
+          style={{
+            width: "100%",
+            height: 52,
+            background: COLORS.ink,
+            color: COLORS.paper,
+            border: "none",
+            borderRadius: 999,
+            padding: "0 20px",
+            fontSize: 15,
+            fontWeight: 500,
+            fontFamily: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          Connect
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Chat screen
+// ---------------------------------------------------------------------------
+
+const CHAT_CONTEXT_CHIPS = ["Both LSE", "AI infra focus", "Mutual at Index", "Seed stage"];
+const PROGRESS_STAGES = ["First reply", "Intro", "Call booked"];
+const SUGGESTED_ACTIONS = [
+  { label: "Confirm time", icon: "⚡", tone: "amber" },
+  { label: "Ask about the B2B angle", tone: "outline" },
+  { label: "Share the deck", tone: "outline" },
+  { label: "Propose a coffee", tone: "outline" },
+];
+
+function ChatScreen({ person, onBack, onSend }) {
+  const p = AVATAR_PALETTE[person.palette];
+
+  // First message of the thread — derived from the person's suggested opener,
+  // framed as them accepting the conversation rather than you opening it.
+  const firstMessage =
+    "Hey — happy this came through. Saw your note on the Meridian framing and I'd love to hear what you're building. Free for 20 mins on Thursday?";
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 54,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: COLORS.paper,
+        animation: "sc-push-in 300ms ease-out",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          padding: "10px 16px 12px",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          borderBottom: "0.5px solid rgba(0,0,0,0.08)",
+        }}
+      >
+        <button
+          onClick={onBack}
+          aria-label="Back"
+          style={{
+            background: "transparent",
+            border: "none",
+            padding: 4,
+            fontSize: 22,
+            lineHeight: 1,
+            color: COLORS.ink,
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          ‹
+        </button>
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            background: p.bg,
+            color: p.fg,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 13,
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          {person.initials}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.2 }}>
+            {person.name}
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: COLORS.inkMuted,
+              lineHeight: 1.3,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {person.role}
+          </div>
+        </div>
+        <button
+          aria-label="Menu"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "6px 10px",
+            border: "1px solid rgba(0,0,0,0.15)",
+            borderRadius: 999,
+            background: "transparent",
+            color: COLORS.ink,
+            fontSize: 13,
+            fontFamily: "inherit",
+            cursor: "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1 }}>—</span>
+          <span style={{ fontSize: 13, lineHeight: 1 }}>›</span>
+        </button>
+      </div>
+
+      {/* Progress track */}
+      <div style={{ padding: "14px 20px 10px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            marginBottom: 8,
+          }}
+        >
+          {PROGRESS_STAGES.map((_, i) => (
+            <div
+              key={i}
+              style={{
+                flex: 1,
+                height: 3,
+                borderRadius: 999,
+                background: i === 0 ? COLORS.ink : "#e6e4de",
+              }}
+            />
+          ))}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 10.5,
+            fontWeight: 500,
+            letterSpacing: "0.04em",
+            color: COLORS.inkMuted,
+            textTransform: "uppercase",
+          }}
+        >
+          <span style={{ color: COLORS.ink }}>{PROGRESS_STAGES[0]}</span>
+          <span>{PROGRESS_STAGES[PROGRESS_STAGES.length - 1]}</span>
+        </div>
+      </div>
+
+      {/* Context chips — horizontal scroll */}
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          overflowX: "auto",
+          padding: "4px 16px 14px",
+          scrollbarWidth: "none",
+        }}
+        className="sc-no-scrollbar"
+      >
+        {CHAT_CONTEXT_CHIPS.map((chip) => (
+          <span
+            key={chip}
+            style={{
+              border: "1px solid rgba(0,0,0,0.12)",
+              background: "transparent",
+              color: COLORS.ink,
+              fontSize: 11,
+              fontWeight: 500,
+              padding: "5px 11px",
+              borderRadius: 999,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            {chip}
+          </span>
+        ))}
+      </div>
+
+      {/* Message thread */}
+      <div
+        style={{
+          flex: 1,
+          padding: "12px 16px 0",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <div
+          style={{
+            alignSelf: "center",
+            fontSize: 11,
+            color: COLORS.inkMuted,
+            letterSpacing: "0.03em",
+          }}
+        >
+          Earlier today
+        </div>
+
+        {/* Received message */}
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8, maxWidth: "85%" }}>
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              background: p.bg,
+              color: p.fg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 10,
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            {person.initials}
+          </div>
+          <div
+            style={{
+              background: "#f0ede8",
+              borderRadius: "18px 18px 18px 4px",
+              padding: "10px 14px",
+              fontSize: 14.5,
+              lineHeight: 1.45,
+              color: COLORS.ink,
+            }}
+          >
+            {firstMessage}
+          </div>
+        </div>
+
+        <div
+          style={{
+            alignSelf: "center",
+            fontSize: 11,
+            fontStyle: "italic",
+            color: COLORS.inkMuted,
+            marginTop: 4,
+          }}
+        >
+          Conversation accepted · Just now
+        </div>
+      </div>
+
+      {/* Bottom action area */}
+      <div
+        style={{
+          borderTop: "0.5px solid rgba(0,0,0,0.08)",
+          padding: "10px 12px 14px",
+          background: COLORS.paper,
+        }}
+      >
+        {/* Suggested actions row */}
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            overflowX: "auto",
+            paddingBottom: 8,
+            scrollbarWidth: "none",
+          }}
+          className="sc-no-scrollbar"
+        >
+          {SUGGESTED_ACTIONS.map((action, i) => {
+            const isAmber = action.tone === "amber";
+            return (
+              <button
+                key={i}
+                onClick={onSend}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  background: isAmber ? "#F5A623" : "transparent",
+                  border: isAmber
+                    ? "1px solid #F5A623"
+                    : "1px solid rgba(0,0,0,0.15)",
+                  color: isAmber ? "#fff" : COLORS.ink,
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  fontFamily: "inherit",
+                  padding: "7px 12px",
+                  borderRadius: 999,
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                  cursor: "pointer",
+                }}
+              >
+                {action.icon && (
+                  <span style={{ fontSize: 12, lineHeight: 1 }}>{action.icon}</span>
+                )}
+                {action.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Reply bar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+          <button
+            aria-label="AI compose"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: "50%",
+              border: "1px solid rgba(0,0,0,0.15)",
+              background: "transparent",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              flexShrink: 0,
+              fontSize: 15,
+              color: COLORS.ink,
+            }}
+          >
+            ⚡
+          </button>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: COLORS.warmGrey,
+              border: "1px solid rgba(0,0,0,0.08)",
+              borderRadius: 999,
+              padding: "9px 14px",
+            }}
+          >
+            <input
+              placeholder="Reply..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                  e.preventDefault();
+                  onSend();
+                }
+              }}
+              style={{
+                flex: 1,
+                border: "none",
+                background: "transparent",
+                outline: "none",
+                fontSize: 14,
+                fontFamily: "inherit",
+                color: COLORS.ink,
+                minWidth: 0,
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                color: COLORS.inkMuted,
+                flexShrink: 0,
+              }}
+            >
+              {/* mic */}
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-label="Voice">
+                <rect
+                  x="7"
+                  y="2"
+                  width="6"
+                  height="10"
+                  rx="3"
+                  stroke={COLORS.inkMuted}
+                  strokeWidth="1.4"
+                  fill="none"
+                />
+                <path
+                  d="M4 10 C4 13.3 6.7 16 10 16 C13.3 16 16 13.3 16 10"
+                  stroke={COLORS.inkMuted}
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+                <path d="M10 16 L10 18" stroke={COLORS.inkMuted} strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              {/* image */}
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-label="Image">
+                <rect
+                  x="2"
+                  y="3.5"
+                  width="16"
+                  height="13"
+                  rx="2"
+                  stroke={COLORS.inkMuted}
+                  strokeWidth="1.4"
+                  fill="none"
+                />
+                <circle cx="7" cy="8" r="1.4" fill={COLORS.inkMuted} />
+                <path d="M3 14 L8 10 L12 13 L17 9" stroke={COLORS.inkMuted} strokeWidth="1.4" fill="none" strokeLinejoin="round" />
+              </svg>
+              {/* plus */}
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-label="More">
+                <path d="M10 4 L10 16 M4 10 L16 10" stroke={COLORS.inkMuted} strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Connection sent screen
+// ---------------------------------------------------------------------------
+
+function ConnectionSentScreen({ person, onBackToList }) {
+  const firstName = person.name.split(" ")[0];
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 54,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: COLORS.paper,
+        animation: "sc-fade-in 250ms ease-out both",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Top gradient zone */}
+      <div
+        style={{
+          height: "45%",
+          background: person.gradient || "linear-gradient(160deg, #8B7FE8 0%, #5B4FCF 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "'Cormorant Garamond', serif",
+            fontSize: 180,
+            fontWeight: 500,
+            letterSpacing: "-0.02em",
+            color: "rgba(255,255,255,0.25)",
+            lineHeight: 1,
+            userSelect: "none",
+          }}
+        >
+          {person.initials}
+        </div>
+      </div>
+
+      {/* White card */}
+      <div
+        style={{
+          flex: 1,
+          background: COLORS.paper,
+          borderRadius: "28px 28px 0 0",
+          marginTop: -20,
+          padding: "36px 24px 28px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          position: "relative",
+          animation: "sc-fade-up 400ms ease-out 100ms both",
+        }}
+      >
+        <h1
+          style={{
+            fontFamily: "'Cormorant Garamond', serif",
+            fontSize: 28,
+            fontWeight: 500,
+            color: COLORS.ink,
+            margin: 0,
+            marginBottom: 12,
+            textAlign: "center",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          Connection sent
+        </h1>
+        <p
+          style={{
+            fontSize: 14,
+            color: COLORS.ink,
+            margin: 0,
+            marginBottom: 36,
+            textAlign: "center",
+            maxWidth: 260,
+            lineHeight: 1.6,
+          }}
+        >
+          {firstName} will be notified. Once they accept, you can message each other.
+        </p>
+
+        <div style={{ width: "100%", marginTop: "auto" }}>
+          <button
+            onClick={onBackToList}
+            style={{
+              width: "100%",
+              height: 52,
+              background: COLORS.ink,
+              color: COLORS.paper,
+              border: "none",
+              borderRadius: 999,
+              padding: "0 20px",
+              fontSize: 15,
+              fontWeight: 500,
+              fontFamily: "inherit",
+              cursor: "pointer",
+            }}
+          >
+            Back to list
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ label, rightLabel, children, delay }) {
+  return (
+    <div
+      style={{
+        padding: "20px 24px 0",
+        animation: `sc-fade-up 400ms ease-out ${delay}ms both`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: 10,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 500,
+            letterSpacing: "0.07em",
+            color: COLORS.inkMuted,
+            textTransform: "uppercase",
+          }}
+        >
+          {label}
+        </span>
+        {rightLabel && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: COLORS.inkFaint,
+              textTransform: "uppercase",
+              letterSpacing: "0.07em",
+            }}
+          >
+            {rightLabel}
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DimensionBar({ dim, delay }) {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setW(dim.score), delay);
+    return () => clearTimeout(t);
+  }, [dim.score, delay]);
+
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          marginBottom: 6,
+        }}
+      >
+        <div style={{ fontSize: 13 }}>
+          <span style={{ fontWeight: 600 }}>{dim.name}</span>
+          <span style={{ color: COLORS.inkMuted, marginLeft: 6 }}>· {dim.desc}</span>
+        </div>
+        <div
+          style={{
+            fontFamily: "'Cormorant Garamond', serif",
+            fontStyle: "italic",
+            fontSize: 20,
+            fontWeight: 500,
+            color: dim.color,
+          }}
+        >
+          {dim.score}
+        </div>
+      </div>
+      <div
+        style={{
+          height: 4,
+          background: COLORS.warmGrey,
+          borderRadius: 999,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${w}%`,
+            background: dim.color,
+            borderRadius: 999,
+            transition: "width 600ms cubic-bezier(0.22, 1, 0.36, 1)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Keyframes
+// ---------------------------------------------------------------------------
+
+const keyframes = `
+  @keyframes sc-circle-in {
+    from { clip-path: circle(0% at calc(100% - 40px) 0%); }
+    to { clip-path: circle(150% at calc(100% - 40px) 0%); }
+  }
+  @keyframes sc-fade-slide-in {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sc-fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sc-blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+  @keyframes sc-pulse-in {
+    0% { opacity: 0; transform: scale(0.9); }
+    60% { opacity: 1; transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+  @keyframes sc-shimmer {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+  }
+  @keyframes sc-card-in {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sc-push-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes sc-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .sc-no-scrollbar::-webkit-scrollbar { display: none; }
+`;
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(SuperchargedSearchFlow));
+  </script>
+</body>
+</html>

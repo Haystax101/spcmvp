@@ -1,18 +1,22 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion as Motion, AnimatePresence } from 'framer-motion'
-import { 
+import {
   ChevronRight,
   ChevronLeft,
   ArrowRight,
   LogOut,
   Search,
+  Home as HomeIcon,
   Inbox as InboxIcon,
   UserCircle
 } from 'lucide-react'
 import { tables, account, functions, DB_ID, PROFILES_TABLE, DISCOVERY_FUNCTION_ID, ID, Query } from './lib/appwrite'
+import SearchScreen from './components/SearchScreen'
 import NewOnboarding from './NewOnboarding'
 import SuperchargedInbox from './SuperchargedInbox'
 import SuperchargedProfile from './supercharged_v18'
+import HomeScreen from './HomeScreen'
+import { VoltzWallet, VoltzPurchaseModal } from './components/VoltzSystem'
 
 const OXFORD_COLLEGES = [
   'All Souls', 'Balliol', 'Brasenose', 'Christ Church', 'Corpus Christi', 'Exeter', 
@@ -1298,161 +1302,55 @@ function MatchCard({ match, rank }) {
   )
 }
 
-// ─── Discovery Screen ─────────────────────────────────────────────────────────
-function DiscoveryScreen({ profile }) {
-  const [matches, setMatches] = useState([])
-  const [searchResults, setSearchResults] = useState(null)
-  const [loadingMatches, setLoadingMatches] = useState(true)
-  const [searching, setSearching] = useState(false)
-  const [query, setQuery] = useState('')
-  const [activeQuery, setActiveQuery] = useState('')
+// ─── Main App Navigation ─────────────────────────────────────────────────────────
+function MainApp({ profile, user }) {
   const [activeScreen, setActiveScreen] = useState('home')
+  const [showVoltzModal, setShowVoltzModal] = useState(false)
 
-  const callDiscovery = async (body) => {
-    const exec = await functions.createExecution(DISCOVERY_FUNCTION_ID, JSON.stringify(body), false)
-    return JSON.parse(exec.responseBody)
-  }
-
-  useEffect(() => {
-    const loadMatches = async () => {
-      try {
-        const data = await callDiscovery({ action: 'recommend', docId: profile.$id })
-        if (data.error) throw new Error(data.error)
-        setMatches(data.matches || [])
-      } catch (e) {
-        console.error(e)
-      } finally {
-        setLoadingMatches(false)
-      }
-    }
-    loadMatches()
-  }, [profile.$id])
-
-  const handleSearch = async (e) => {
-    e?.preventDefault()
-    const q = query.trim()
-    if (!q) {
-      setSearchResults(null)
-      setActiveQuery('')
-      return
-    }
-    setSearching(true)
-    setActiveQuery(q)
-    try {
-      const data = await callDiscovery({ action: 'search', query: q, variant: 'hybrid_filtered' })
-      setSearchResults(data.matches || [])
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setSearching(false)
-    }
-  }
-
-  const handleLogout = async () => {
-    try {
-      await account.deleteSession('current')
-    } catch {
-      try {
-        await account.deleteSessions()
-      } catch {
-        // Ignore cleanup failures and force app reset below.
-      }
-    } finally {
-      window.location.reload()
-    }
-  }
-
-  const displayMatches = searchResults !== null ? searchResults : matches
-  const isSearchMode = searchResults !== null
   const navItems = [
-    { key: 'home', label: 'Search', Icon: Search },
+    { key: 'home', label: 'Home', Icon: HomeIcon },
     { key: 'inbox', label: 'Inbox', Icon: InboxIcon },
     { key: 'profile', label: 'Profile', Icon: UserCircle }
   ]
 
-  const renderHome = () => (
-    <div className="h-full lg:px-4 lg:py-4">
-      <div className="h-full flex flex-col bg-bg/95 w-full max-w-6xl mx-auto relative overflow-hidden lg:rounded-[28px] lg:border lg:border-border-light lg:shadow-[0_18px_50px_rgba(0,0,0,0.08)]">
-        <TopoBackground />
-
-        <header className="px-6 sm:px-8 pt-8 sm:pt-10 pb-5 sm:pb-6 flex items-center justify-between border-b border-border-light/50 bg-bg/75 backdrop-blur-md sticky top-0 z-20">
-          <div>
-            <h1 className="font-playfair text-2xl font-light tracking-tight">Supercharged</h1>
-            <p className="font-jetbrains text-[10px] text-text3 uppercase tracking-widest mt-1">DISCOVERY ENGINE V3.1</p>
-          </div>
-          <button onClick={handleLogout} className="p-2 text-text3 hover:text-text transition-colors" aria-label="Log out">
-            <LogOut size={20} />
-          </button>
-        </header>
-
-        <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 sm:py-8 space-y-12 pb-8">
-          <section>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="font-playfair text-3xl font-light">
-                {isSearchMode ? `Searching for "${activeQuery}"` : 'Your matches'}
-              </h2>
-              <div className="flex gap-1">
-                {[1, 2, 3].map(i => <div key={i} className="w-1 h-1 rounded-full bg-border-light" />)}
-              </div>
-            </div>
-
-            {(loadingMatches || searching) ? (
-              <div className="grid gap-6 xl:grid-cols-2">
-                {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="h-48 bg-white border border-border-light animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              <div className="grid gap-6 xl:grid-cols-2">
-                {displayMatches.length === 0 ? (
-                  <div className="text-center py-20 border border-dashed border-border-light bg-white/60 xl:col-span-2">
-                    <p className="text-text3 italic">No connections found in this dimensional space.</p>
-                  </div>
-                ) : (
-                  displayMatches.map((match, i) => (
-                    <MatchCard key={match.user_id || i} match={match} rank={i} />
-                  ))
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <div className="px-6 sm:px-8 py-4 sm:py-6 bg-gradient-to-t from-bg via-bg/95 to-bg/80 backdrop-blur-md border-t border-border-light/40">
-          <form onSubmit={handleSearch} className="relative group">
-            <input
-              type="text"
-              placeholder="Search by interest, goal, or field..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full bg-white border-2 border-border-light rounded-full px-8 py-5 text-sm focus:border-text focus:outline-none transition-all pr-16 shadow-[0_12px_30px_rgba(0,0,0,0.06)]"
-            />
-            <button
-              type="submit"
-              disabled={searching || !query.trim()}
-              className="absolute right-3 top-2.5 w-10 h-10 rounded-full bg-text text-white flex items-center justify-center hover:bg-black transition-all disabled:opacity-20"
-            >
-              {searching ? <div className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> : <ArrowRight size={18} />}
-            </button>
-          </form>
-          <div className="mt-4 flex justify-center gap-6 text-[10px] font-mono text-text3 uppercase tracking-widest">
-            <span>Press Enter to scout</span>
-            <span>•</span>
-            <span>Clear to reset</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
   return (
     <div
-      className="h-[100dvh] relative overflow-hidden bg-[radial-gradient(circle_at_15%_20%,rgba(245,200,66,0.12),transparent_35%),radial-gradient(circle_at_88%_12%,rgba(26,26,26,0.06),transparent_28%),#f7f4ef]"
+      className="h-[100dvh] relative overflow-hidden bg-bg"
       style={{ '--sc-nav-clearance': 'calc(env(safe-area-inset-bottom, 0px) + 112px)' }}
     >
-      {activeScreen === 'home' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}>{renderHome()}</div>}
-      {activeScreen === 'inbox' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedInbox currentUserProfile={profile} /></div>}
+      {activeScreen === 'home' && (
+        <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}>
+          <HomeScreen
+            profile={profile}
+            onNavigateToInbox={() => setActiveScreen('inbox')}
+            onNavigateToSearch={() => setActiveScreen('search')}
+            voltzBalance={profile?.current_voltz ?? 0}
+            onOpenVoltzModal={() => setShowVoltzModal(true)}
+          />
+        </div>
+      )}
+      {activeScreen === 'search' && (
+        <div className="h-full min-h-0 box-border bg-bg" style={{ paddingBottom: 'var(--sc-nav-clearance)', zIndex: 100, position: 'relative' }}>
+          <SearchScreen 
+            profile={profile} 
+            onClose={() => setActiveScreen('home')} 
+            onConnect={(p) => { 
+               // Pass to HomeScreen somehow or implement internally, for now navigating to inbox
+               setActiveScreen('inbox')
+            }}
+            onCompatTap={(p, kind) => {}}
+          />
+        </div>
+      )}
+      {activeScreen === 'inbox' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedInbox currentUserProfile={profile} voltzBalance={profile?.current_voltz ?? 0} onOpenVoltzModal={() => setShowVoltzModal(true)} /></div>}
       {activeScreen === 'profile' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedProfile /></div>}
+
+      <VoltzPurchaseModal
+        open={showVoltzModal}
+        onClose={() => setShowVoltzModal(false)}
+        currentBalance={profile?.current_voltz ?? 0}
+        userId={profile?.user_id ?? profile?.$id}
+      />
 
       <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-3">
         <div className="pointer-events-auto w-[min(92vw,430px)] rounded-[22px] border border-border-light bg-white/88 p-2 shadow-[0_14px_40px_rgba(0,0,0,0.15)] backdrop-blur-xl">
@@ -1466,7 +1364,7 @@ function DiscoveryScreen({ profile }) {
                   onClick={() => setActiveScreen(item.key)}
                   aria-current={isActive ? 'page' : undefined}
                   className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2 text-[11px] font-medium transition-colors ${
-                    isActive ? 'text-text bg-white border border-border-light shadow-sm' : 'text-text3 hover:text-text'
+                    (isActive || (item.key === 'home' && activeScreen === 'search')) ? 'text-text bg-white border border-border-light shadow-sm' : 'text-text3 hover:text-text'
                   }`}
                 >
                   <item.Icon size={18} />
@@ -1489,6 +1387,27 @@ function App() {
   const [step, setStep] = useState('checking')
   const [docId, setDocId] = useState(null)
   const [profile, setProfile] = useState(null)
+
+  // Verify a pending Stripe session on return from checkout
+  const verifyPendingPayment = useCallback(async (currentProfile) => {
+    const sessionId = localStorage.getItem('sc_pending_stripe_session')
+    if (!sessionId || !currentProfile) return null
+    localStorage.removeItem('sc_pending_stripe_session')
+    try {
+      const execution = await functions.createExecution(
+        'stripeGateway',
+        JSON.stringify({ action: 'verify_session', session_id: sessionId }),
+        false
+      )
+      const data = JSON.parse(execution.responseBody || '{}')
+      if (data.verified && (data.credited || data.already_credited) && typeof data.current_voltz === 'number') {
+        return data.current_voltz
+      }
+    } catch (err) {
+      console.warn('Payment verification failed:', err)
+    }
+    return null
+  }, [])
 
   const checkSession = async () => {
     let authenticatedUser = null
@@ -1538,6 +1457,20 @@ function App() {
     checkSession()
   }, [])
 
+  // After discovery step loads: verify any pending Stripe payment
+  useEffect(() => {
+    if (step !== 'discovery' || !profile) return
+    const params = new URLSearchParams(window.location.search)
+    if (!params.get('payment')) return
+    // Clear the query param
+    window.history.replaceState({}, '', window.location.pathname)
+    verifyPendingPayment(profile).then(newBalance => {
+      if (newBalance !== null) {
+        setProfile(prev => prev ? { ...prev, current_voltz: newBalance } : prev)
+      }
+    })
+  }, [step, profile, verifyPendingPayment])
+
   const handleAuth = () => { checkSession() }
   const handleOnboardingComplete = (id) => { setDocId(id); setStep('loading') }
   const handleSynced = (doc) => { setProfile(doc); setStep('discovery') }
@@ -1551,7 +1484,7 @@ function App() {
       )}
       {step === 'onboarding' && <NewOnboarding user={user} onAuth={handleAuth} onComplete={handleOnboardingComplete} />}
       {step === 'loading' && <LoadingScreen docId={docId} onReady={handleSynced} />}
-      {step === 'discovery' && <DiscoveryScreen profile={profile} user={user} />}
+      {step === 'discovery' && <MainApp profile={profile} user={user} />}
     </div>
   )
 }

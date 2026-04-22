@@ -68,7 +68,7 @@ async function actionCreateCheckoutSession({ stripe, tablesDB, dbId, profileTabl
     }
   });
 
-  return { url: session.url };
+  return { url: session.url, session_id: session.id };
 }
 
 
@@ -150,6 +150,54 @@ async function actionHandleWebhook({ stripe, tablesDB, dbId, profileTable, ledge
   return { received: true };
 }
 
+/**
+ * Stripe Gateway Action: verify_session
+ * Client-side fallback — verifies a completed session and credits Voltz if not already done.
+ */
+async function actionVerifySession({ stripe, tablesDB, dbId, profileTable, ledgerTable, sessionId }) {
+  if (!sessionId) throw new Error('session_id is required');
+
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+  if (session.payment_status !== 'paid' && session.status !== 'complete') {
+    return { verified: false, reason: 'payment_not_complete' };
+  }
+
+  const userId = session.client_reference_id || session.metadata?.user_id;
+  const voltzToAdd = parseInt(session.metadata?.voltz_to_add || '0');
+  const packageName = session.metadata?.package;
+
+  if (!userId || voltzToAdd <= 0) return { verified: false, reason: 'missing_metadata' };
+
+  const found = await tablesDB.listRows({
+    databaseId: dbId, tableId: profileTable,
+    queries: [Query.equal('user_id', [userId]), Query.limit(1)],
+  });
+  const profile = found.rows[0];
+  if (!profile) throw new Error('Profile not found');
+
+  const existing = await tablesDB.listRows({
+    databaseId: dbId, tableId: ledgerTable,
+    queries: [Query.equal('stripe_session_id', [session.id]), Query.limit(1)],
+  });
+  if (existing.total > 0) return { verified: true, already_credited: true, current_voltz: profile.current_voltz };
+
+  const nextBalance = (profile.current_voltz || 0) + voltzToAdd;
+  const updates = { current_voltz: nextBalance };
+  if (packageName === 'pro') updates.stripe_subscription_id = session.subscription || '';
+
+  await tablesDB.updateRow({ databaseId: dbId, tableId: profileTable, rowId: profile.$id, data: updates });
+  await tablesDB.createRow({
+    databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(),
+    data: {
+      profile_row_id: profile.$id, amount: voltzToAdd,
+      event_type: 'purchase', reason: `Stripe Purchase (verified): ${packageName}`,
+      awarded_at: new Date().toISOString(), stripe_session_id: session.id,
+    },
+  });
+
+  return { verified: true, credited: true, amount: voltzToAdd, current_voltz: nextBalance };
+}
+
 export default async ({ req, res, log, error }) => {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
     apiVersion: '2026-02-25.preview' // Strict Blueprint Version
@@ -177,6 +225,14 @@ export default async ({ req, res, log, error }) => {
         successUrl: payload.successUrl,
         cancelUrl: payload.cancelUrl,
         quantity: payload.quantity
+      });
+      return res.json(result);
+    }
+
+    if (action === 'verify_session') {
+      const result = await actionVerifySession({
+        stripe, tablesDB, dbId, profileTable, ledgerTable,
+        sessionId: payload.session_id,
       });
       return res.json(result);
     }

@@ -8,6 +8,7 @@
   "dependencies": {
     "@google/genai": "^1.0.1",
     "@qdrant/js-client-rest": "^1.13.0",
-    "@sentry/node": "^9.14.0"
+    "@sentry/node": "^9.14.0",
+    "node-appwrite": "^24.0.0"
   }
 }

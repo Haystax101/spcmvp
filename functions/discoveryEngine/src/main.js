@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { QdrantClient } from '@qdrant/js-client-rest';
+import { Client, TablesDB, Query } from 'node-appwrite';
 import crypto from 'crypto';
 import * as Sentry from "@sentry/node";
 
@@ -12,11 +13,20 @@ const COLLECTION = 'profiles';
 const SEMANTIC_WEIGHT = 0.6;
 const INTENT_WEIGHT = 0.4;
 
+const DB_ID = process.env.APPWRITE_DB_ID || 'supercharged';
+const PROFILES_TABLE = process.env.APPWRITE_PROFILES_TABLE || 'profiles';
+const PEOPLE_TABLE = process.env.APPWRITE_PEOPLE_TABLE || 'people';
+const PEOPLE_SOCIETIES_TABLE = process.env.APPWRITE_PEOPLE_SOCIETIES_TABLE || 'people_societies';
+const PEOPLE_SPORTS_TABLE = process.env.APPWRITE_PEOPLE_SPORTS_TABLE || 'people_sports';
+const SOCIETIES_TABLE = process.env.APPWRITE_SOCIETIES_TABLE || 'societies';
+const SPORTS_TABLE = process.env.APPWRITE_SPORTS_TABLE || 'sports';
+
 const SEARCH_VARIANTS = new Set([
   'semantic_only',
   'intent_only',
   'hybrid_unfiltered',
   'hybrid_filtered',
+  'external',
 ]);
 
 const OXFORD_COLLEGES = [
@@ -990,7 +1000,80 @@ export default async ({ req, res, log, error }) => {
       const retrievalStart = Date.now();
       let matches = [];
 
-      if (variant === 'semantic_only') {
+      if (variant === 'external') {
+        const userId = normalizeString(body.userId || body.user_id || '');
+        let currentProfile = null;
+        const appwrite = new Client()
+          .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
+          .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
+          .setKey(process.env.APPWRITE_API_KEY);
+        const tables = new TablesDB(appwrite);
+
+        if (userId) {
+          const profileRes = await tables.listRows({
+            databaseId: DB_ID,
+            tableId: PROFILES_TABLE,
+            queries: [Query.equal('user_id', userId), Query.limit(1)]
+          });
+          currentProfile = profileRes.rows?.[0] || null;
+        }
+
+        const traitPrompt = `You are an expert at identifying the ideal persona a user is looking for.
+Query: "${query}"
+${currentProfile ? `About the searcher:
+- Name: ${currentProfile.full_name}
+- Field: ${currentProfile.career_field}
+- Goals: ${(currentProfile.goals || []).join(', ')}` : ''}
+
+Identify:
+1. Target keywords for their name, society, or experience.
+2. Target primary intent (professional, social, romantic, academic).
+3. Societies or sports they might be in.
+
+Return JSON:
+{
+  "keywords": ["string"],
+  "intent": "string",
+  "groups": ["society name or sport name"]
+}`;
+
+        const traitResponse = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite-preview',
+          contents: [{ role: 'user', parts: [{ text: traitPrompt }] }],
+          config: { responseMimeType: 'application/json', temperature: 0.1 },
+        });
+        const traits = safeParseJson(traitResponse.text || '{}') || {};
+        const keywords = traits.keywords || extractKeywords(query);
+
+        // 1. Search people by full_name or description contains keywords
+        const peopleQueries = [Query.limit(20)];
+        if (keywords.length > 0) {
+          peopleQueries.push(Query.contains('description', keywords[0]));
+        }
+
+        const peopleRes = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: PEOPLE_TABLE,
+          queries: peopleQueries
+        });
+
+        matches = peopleRes.rows.map(p => {
+          const description = p.description || '';
+          let score = 50;
+          const hits = keywords.filter(k => description.toLowerCase().includes(k.toLowerCase()));
+          score += (hits.length * 10);
+          
+          return {
+            ...p,
+            is_on_app: false,
+            source: 'people_db',
+            score: Math.min(99, score),
+            reason: `Discovered via expanded network search. ${hits.length > 0 ? `Matches interests: ${hits.slice(0,2).join(', ')}` : ''}`,
+            affiliation: p.source || 'Oxford Network'
+          };
+        }).sort((a,b) => b.score - a.score).slice(0, 8);
+
+      } else if (variant === 'semantic_only') {
         const embeddingResult = await ai.models.embedContent({
           model: 'gemini-embedding-001',
           contents: translated.semantic_query,

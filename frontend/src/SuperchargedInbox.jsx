@@ -3,6 +3,7 @@ import {
   account,
   functions,
   tables,
+  client,
   DB_ID,
   PROFILES_TABLE,
   CONNECTION_GATEWAY_FUNCTION_ID,
@@ -10,6 +11,7 @@ import {
   Query,
 } from "./lib/appwrite";
 import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
+import { VoltzWallet } from "./components/VoltzSystem";
 
 // ============================================================================
 // DATA
@@ -387,6 +389,23 @@ const mapNewConnectionFromBackend = (row) => {
   };
 };
 
+const mapSentConnectionFromBackend = (row) => {
+  if (!row) return null;
+  const id = row.connection_id || row.id;
+  if (!id) return null;
+  const name = row.name || 'Unknown user';
+  return {
+    id,
+    name,
+    role: row.role || 'Oxford member',
+    initials: row.initials || name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+    color: row.color || '#7B5CF0',
+    message: row.message || 'Awaiting response',
+    time: row.initiated_at ? new Date(row.initiated_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '',
+    status: row.status || 'pending',
+  };
+};
+
 const mapMessagesToThread = (rows, currentProfileId) => {
   if (!Array.isArray(rows) || rows.length === 0) return [];
 
@@ -484,7 +503,8 @@ const FilterChips = ({ active, counts, onChange }) => {
   const items = [
     { key: "all",    label: "All",    count: counts.all,    tone: "red" },
     { key: "unread", label: "Unread", count: counts.unread, tone: "red" },
-    { key: "new",    label: "New",    count: counts.new,    tone: "green" }
+    { key: "new",    label: "New",    count: counts.new,    tone: "green" },
+    { key: "sent",   label: "Sent",   count: counts.sent,   tone: "purple" }
   ];
   return (
     <div className="sc-filter-wrap">
@@ -497,7 +517,7 @@ const FilterChips = ({ active, counts, onChange }) => {
           >
             {it.label}
             {it.count > 0 && (
-              <span className={`sc-chip-badge ${it.tone === "green" ? "green" : ""}`}>{it.count}</span>
+              <span className={`sc-chip-badge ${it.tone === "green" ? "green" : it.tone === "purple" ? "purple" : ""}`}>{it.count}</span>
             )}
           </button>
         ))}
@@ -559,6 +579,35 @@ const ConvoRow = ({ c, onOpen }) => (
 );
 
 const EmptyState = ({ children }) => <div className="sc-empty-state">{children}</div>;
+
+const SentCard = ({ conn }) => (
+  <div className="sc-new-card">
+    <div className="sc-new-card-top">
+      <Avatar initials={conn.initials} color={conn.color} />
+      <div className="sc-new-card-info">
+        <div className="sc-new-card-name">{conn.name}</div>
+        <div className="sc-new-card-role">{conn.role}</div>
+      </div>
+      <div className="sc-timestamp">{conn.time}</div>
+    </div>
+    <div className="sc-new-card-msg">{conn.message}</div>
+    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: 11, color: conn.status === 'declined' ? '#C0392B' : '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {conn.status === 'pending' ? '⏳ Awaiting reply' : conn.status === 'declined' ? '✗ Declined' : conn.status}
+      </span>
+    </div>
+  </div>
+);
+
+const SentFeed = ({ connections }) => (
+  <div className="sc-inbox-scroll">
+    {connections.length === 0 ? (
+      <EmptyState>No sent requests yet</EmptyState>
+    ) : (
+      connections.map(c => <SentCard key={c.id} conn={c} />)
+    )}
+  </div>
+);
 
 const LoadingState = ({ label = "Loading inbox..." }) => (
   <div className="sc-loading-state" role="status" aria-live="polite">
@@ -664,10 +713,11 @@ const NotifPanel = ({ open, items, onItemClick, onMarkAllRead, markingAllRead, p
 // ============================================================================
 
 const Inbox = ({
-  conversations, newConnections, notifications, filter, onFilter, loading, error,
+  conversations, newConnections, sentConnections, notifications, filter, onFilter, loading, error,
   notifOpen, setNotifOpen,
   onOpenConvo, onOpenMove, onOpenNewPreview, onOpenNewPreviewWithSheet,
-  onNotifClick, onMarkAllRead, markingAllRead
+  onNotifClick, onMarkAllRead, markingAllRead,
+  voltzBalance, onOpenVoltzModal
 }) => {
   const notifRef = useRef(null);
   const bellRef = useRef(null);
@@ -711,7 +761,8 @@ const Inbox = ({
   const counts = {
     all: conversations.reduce((s, c) => s + (c.unread > 0 ? 1 : 0), 0),
     unread: conversations.reduce((s, c) => s + (c.unread > 0 ? 1 : 0), 0),
-    new: newConnections.length
+    new: newConnections.length,
+    sent: (sentConnections || []).length,
   };
 
   const todaysMoves = useMemo(() => {
@@ -741,11 +792,16 @@ const Inbox = ({
       <div className="sc-inbox-header">
         <div className="sc-inbox-title-row">
           <h1 className="sc-inbox-title">Inbox</h1>
-          <div ref={bellRef} style={{ position: "relative" }}>
-            <BellButton
-              onClick={(e) => { e.stopPropagation(); setNotifOpen(o => !o); }}
-              hasPip={notifications.length > 0}
-            />
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div ref={bellRef} style={{ position: "relative" }}>
+              <BellButton
+                onClick={(e) => { e.stopPropagation(); setNotifOpen(o => !o); }}
+                hasPip={notifications.length > 0}
+              />
+            </div>
+            {onOpenVoltzModal && (
+              <VoltzWallet balance={voltzBalance ?? 0} onBuyMore={onOpenVoltzModal} />
+            )}
           </div>
         </div>
         <Search value={searchQuery} onChange={setSearchQuery} />
@@ -762,6 +818,8 @@ const Inbox = ({
           onOpen={onOpenNewPreview}
           onReplyAI={onOpenNewPreviewWithSheet}
         />
+      ) : filter === "sent" ? (
+        <SentFeed connections={sentConnections || []} />
       ) : filter === "unread" && visibleConvos.length === 0 ? (
         <EmptyState>{normalizedSearch ? "No unread matches for your search" : "You're all caught up"}</EmptyState>
       ) : visibleConvos.length === 0 ? (
@@ -1378,7 +1436,7 @@ const Chat = ({
 // ROOT
 // ============================================================================
 
-export default function SuperchargedInbox({ currentUserProfile = null }) {
+export default function SuperchargedInbox({ currentUserProfile = null, voltzBalance = 0, onOpenVoltzModal }) {
   // --- data state ---
   const [conversations, setConversations] = useState([]);
   const [newConnections, setNewConnections] = useState([]);
@@ -1413,6 +1471,9 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
   const [previewCardId, setPreviewCardId] = useState(null);
   const [declined, setDeclined] = useState(false);
   const declineTimerRef = useRef(null);
+
+  // --- sent connections ---
+  const [sentConnections, setSentConnections] = useState([]);
 
   // --- voltz ---
   const [voltzTotal, setVoltzTotal] = useState(43);
@@ -1551,10 +1612,11 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
       setMessages(nextMessages);
       writeCacheEntry(cacheKey, { messages: nextMessages });
 
-      await executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
+      // Fire mark-read in background — don't block the chat opening
+      executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
         action: "mark_conversation_read",
         conversation_id: conversationId,
-      });
+      }).catch(err => console.warn('mark_read background:', err));
     };
 
     if (cached?.data?.messages) {
@@ -1625,6 +1687,12 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
       let activeData;
       let pendingData;
 
+      // Fetch sent connections in parallel with everything else
+      const sentDataPromise = executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
+        action: "list_pending_from_me",
+        limit: 50,
+      }).catch(() => ({ connections: [] }));
+
       try {
         const bootstrapData = await executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
           action: "bootstrap_inbox",
@@ -1649,6 +1717,10 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
           }),
         ]);
       }
+
+      const sentData = await sentDataPromise;
+      const mappedSent = (sentData?.connections || []).map(mapSentConnectionFromBackend).filter(Boolean);
+      setSentConnections(mappedSent);
 
       const mappedConversations = (activeData?.conversations || [])
         .map(mapConversationFromBackend)
@@ -1736,6 +1808,31 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
     clearTimeout(declineTimerRef.current);
   }, []);
 
+  // Appwrite Realtime: push new messages into the open conversation without polling
+  useEffect(() => {
+    if (!activeConversationId || !backendProfile?.$id) return;
+
+    const channel = `databases.${DB_ID}.collections.messages.documents`;
+    const unsubscribe = client.subscribe(channel, (response) => {
+      if (!response.events?.some(e => e.endsWith('.create'))) return;
+      const doc = response.payload;
+      const docConvId = typeof doc.conversation === 'string' ? doc.conversation : doc.conversation?.$id;
+      if (docConvId !== activeConversationId) return;
+      const senderId = typeof doc.sender === 'string' ? doc.sender : doc.sender?.$id;
+      const isOutgoing = senderId === backendProfile.$id;
+      const sentAt = doc.sent_at || new Date().toISOString();
+      setMessages(prev => {
+        if (prev.some(m => m.id === doc.$id)) return prev;
+        const newMsg = isOutgoing
+          ? { id: doc.$id, type: 'out', text: doc.body, time: formatChatTime(sentAt), read: false }
+          : { id: doc.$id, type: 'in', text: doc.body };
+        return [...prev, newMsg];
+      });
+    });
+
+    return () => unsubscribe();
+  }, [activeConversationId, backendProfile, DB_ID]);
+
   // --- handlers ---
   const openChat = () => { setChatActive(true); };
   const closeChat = () => {
@@ -1784,19 +1881,18 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
       setRelationshipContext(getDefaultRelationshipContext());
     }
 
+    // Open the chat panel immediately — messages fill in after
+    openChat();
+
     if (backendReady && backendProfile?.$id && conversationId) {
       setMessages([{ type: "sep", text: "Loading conversation..." }]);
-      try {
-        await loadConversationMessages(conversationId, backendProfile.$id);
-      } catch (err) {
+      loadConversationMessages(conversationId, backendProfile.$id).catch(err => {
         console.error("Failed loading conversation messages:", err);
         setMessages(SARAH_MESSAGES);
-      }
+      });
     } else {
       setMessages(SARAH_MESSAGES);
     }
-
-    openChat();
   };
 
   const handleOpenMove = (convoId, alsoOpenSheet) => {
@@ -2078,6 +2174,7 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
             <Inbox
               conversations={conversations}
               newConnections={newConnections}
+              sentConnections={sentConnections}
               notifications={notifications}
               filter={filter}
               onFilter={setFilter}
@@ -2092,6 +2189,8 @@ export default function SuperchargedInbox({ currentUserProfile = null }) {
               onNotifClick={handleNotifClick}
               onMarkAllRead={handleMarkAllRead}
               markingAllRead={markingAllRead}
+              voltzBalance={voltzBalance}
+              onOpenVoltzModal={onOpenVoltzModal}
             />
             <Chat
               active={chatActive}
@@ -2197,6 +2296,7 @@ const StyleBlock = () => (
 .sc-chip.active { background:var(--sc-text); color:var(--sc-bg); }
 .sc-chip-badge { position:absolute; top:-8px; right:-8px; min-width:20px; height:20px; border-radius:999px; background:#D84040; color:#FFFFFF; border:2.5px solid var(--sc-bg); font-weight:600; font-size:11px; display:flex; align-items:center; justify-content:center; padding:0 5px; line-height:1; }
 .sc-chip-badge.green { background:var(--sc-success); }
+.sc-chip-badge.purple { background:#7B5CF0; }
 
 .sc-inbox-scroll { flex:1; overflow-y:auto; overflow-x:hidden; }
 .sc-inbox-scroll::-webkit-scrollbar { width:0; }

@@ -548,17 +548,14 @@ async function actionMarkRead({ tables, body, currentProfile }) {
       ],
     });
 
-    for (const row of unread.rows) {
-      // eslint-disable-next-line no-await-in-loop
-      await tables.updateRow({
+    await Promise.all(unread.rows.map(row =>
+      tables.updateRow({
         databaseId: DB_ID,
         tableId: MESSAGES_TABLE,
         rowId: row.$id,
-        data: {
-          delivery_status: 'read',
-        },
-      });
-    }
+        data: { delivery_status: 'read' },
+      })
+    ));
   }
 
   await tables.updateRow({

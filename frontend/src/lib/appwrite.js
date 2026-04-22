@@ -17,3 +17,4 @@ export const PROFILE_PHOTOS_BUCKET_ID = import.meta.env.VITE_APPWRITE_PROFILE_PH
 export const CONNECTIONS_TABLE = import.meta.env.VITE_APPWRITE_TABLE_CONNECTIONS || 'connections';
 export const VOLTZ_LEDGER_TABLE = import.meta.env.VITE_APPWRITE_TABLE_VOLTZ_LEDGER || 'voltz_ledger';
 export { ID, Query, Permission, Role };
+export { client };

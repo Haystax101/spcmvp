@@ -295,6 +295,9 @@ export default async ({ req, res, log, error }) => {
           music:                  profile.music                  || "",
           societies:              profile.societies              || "",
 
+          // Photos
+          photo_file_ids: Array.isArray(profile.photo_file_ids) ? profile.photo_file_ids : [],
+
           // Derived / utility
           has_cv: !!profile.cv_file_id,
           payload_version: 2,

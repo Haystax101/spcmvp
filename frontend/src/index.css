@@ -14,6 +14,13 @@
   --radius-pill: 999px;
   --error: #D84040;
   --success: #22A85A;
+  --bubble: #F0EDE8;
+  --bubble-soft: #F7F4F0;
+  --panel-bg: #F7F4F0;
+  --dim-identity: #5B8CF5;
+  --dim-intent: #3DAA82;
+  --dim-resonance: #9B7CF6;
+  --dim-network: #E8A94A;
 }
 
 @theme {

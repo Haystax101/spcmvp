@@ -7,7 +7,7 @@ const STRIPE_GATEWAY_ID = 'stripeGateway';
 
 export function VoltzWallet({ balance, onBuyMore }) {
   return (
-    <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-full pl-3 pr-1 py-1 backdrop-blur-sm">
+    <div className="flex items-center gap-3 bg-white/90 border border-border-light rounded-full pl-3 pr-1 py-1 shadow-sm backdrop-blur-sm">
       <div className="flex items-center gap-1.5">
         <Zap size={14} className="text-accent fill-accent" />
         <span className="font-playfair text-sm font-semibold tracking-tight">{balance}</span>
@@ -79,6 +79,8 @@ export function VoltzPurchaseModal({ open, onClose, userId, currentBalance }) {
       }
 
       if (data.url) {
+        // Store session ID so App.jsx can verify on return from Stripe
+        if (data.session_id) localStorage.setItem('sc_pending_stripe_session', data.session_id);
         window.location.href = data.url;
       } else {
         throw new Error(data.error || "Failed to create checkout session");
