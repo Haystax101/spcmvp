@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { Client, TablesDB, Query } from 'node-appwrite';
+import OpenAI from 'openai';
 import crypto from 'crypto';
 import * as Sentry from "@sentry/node";
 
@@ -20,6 +21,8 @@ const PEOPLE_SOCIETIES_TABLE = process.env.APPWRITE_PEOPLE_SOCIETIES_TABLE || 'p
 const PEOPLE_SPORTS_TABLE = process.env.APPWRITE_PEOPLE_SPORTS_TABLE || 'people_sports';
 const SOCIETIES_TABLE = process.env.APPWRITE_SOCIETIES_TABLE || 'societies';
 const SPORTS_TABLE = process.env.APPWRITE_SPORTS_TABLE || 'sports';
+
+const KIMI_DEPLOYMENT = process.env.AZURE_FOUNDRY_DEPLOYMENT || 'Kimi-K2.6-1';
 
 const SEARCH_VARIANTS = new Set([
   'semantic_only',
@@ -81,14 +84,12 @@ const ALLOWED_FILTER_KEYS = new Set([
   'career_field',
   'career_subfield',
   'relationship_intent',
-  'networking_style',
   'intellectual_venue',
   'relationship_status',
   'sexuality',
   'has_cv',
   'goals',
   'desired_connections',
-  'startup_connections',
   'social_circles',
   'friendship_values',
   'dating_appearance',
@@ -101,7 +102,6 @@ const WEIGHTABLE_FILTER_KEYS = new Set([...ALLOWED_FILTER_KEYS]);
 const ARRAY_FILTER_KEYS = new Set([
   'goals',
   'desired_connections',
-  'startup_connections',
   'social_circles',
   'friendship_values',
   'dating_appearance',
@@ -152,72 +152,108 @@ const YEAR_SYNONYMS = {
 };
 
 const QUERY_TRANSLATION_SYSTEM_PROMPT = `
-You are a query translator for an Oxford student discovery engine.
-Convert a natural-language search query into strict JSON for hybrid retrieval.
+You are a search filter generator for an Oxford student discovery engine.
+Your job is to analyse a search query and produce structured filters using ONLY the exact string values listed below, plus two free-text query strings for semantic vector search.
 
-Return JSON only with this schema:
+──────────────────────────────────────────────
+VALID VALUES FOR STRUCTURED FIELDS
+──────────────────────────────────────────────
+
+career_field — use exact string:
+  "Finance and investing" | "Consulting and strategy" | "Technology and engineering" |
+  "Startups and entrepreneurship" | "Law" | "Medicine and healthcare" |
+  "Academia and research" | "Policy and public sector" |
+  "Creative industries and media" | "Social impact and NGOs" | "Other"
+
+career_subfield — use exact string (depends on career_field):
+  Finance: "Investment banking" | "Private equity" | "Hedge funds" | "Venture capital" | "Asset management" | "Corporate finance" | "Financial consulting" | "Fintech" | "Trading" | "Impact investing" | "Not sure yet"
+  Consulting: "Strategy consulting (MBB)" | "Big 4 consulting" | "Boutique or specialist" | "In-house strategy" | "Public sector consulting" | "Tech consulting" | "Not sure yet"
+  Technology: "Software engineering" | "Machine learning and AI" | "Cybersecurity" | "Hardware and embedded" | "Data engineering" | "DevOps and infrastructure" | "Biotech or deep tech" | "Not sure yet"
+  Startups: "I am already building something" | "Consumer app or platform" | "B2B SaaS" | "Deep tech or science-based" | "Social enterprise" | "Marketplace" | "Media or content" | "Hardware or physical product" | "Not sure yet"
+  Law: "Corporate and M&A" | "Litigation" | "Criminal" | "Human rights and public law" | "IP and tech" | "International law" | "Barrister route" | "Not sure yet"
+  Medicine: "Clinical medicine" | "Research and academia" | "Health policy" | "Biotech or pharma" | "Global health" | "Mental health" | "Medical technology" | "Not sure yet"
+  Academia: "Theoretical or pure research" | "Applied research" | "Interdisciplinary" | "Policy-facing research" | "Commercialising research" | "Not sure yet"
+  Policy: "Civil service" | "Think tanks" | "International institutions" | "Political advisory" | "Local government" | "Regulatory bodies" | "Not sure yet"
+  Creative: "Journalism and writing" | "Film and television" | "Music" | "Architecture and design" | "Advertising and branding" | "Publishing" | "Digital content" | "Not sure yet"
+  Social impact: "International development" | "Climate and environment" | "Education" | "Economic empowerment" | "Human rights" | "Effective altruism" | "Not sure yet"
+
+primary_intent — use exact string:
+  "professional" | "social" | "romantic" | "academic"
+
+goals (array) — use exact strings:
+  "professional" | "social" | "romantic" | "academic"
+
+year_of_study — use exact string:
+  "First year" | "Second year" | "Third year" | "Fourth year or above" | "Postgraduate"
+
+college — use exact Oxford college name, e.g.:
+  "All Souls" | "Balliol" | "Brasenose" | "Christ Church" | "Corpus Christi" | "Exeter" |
+  "Green Templeton" | "Harris Manchester" | "Hertford" | "Jesus" | "Keble" | "Kellogg" |
+  "Lady Margaret Hall" | "Linacre" | "Lincoln" | "Magdalen" | "Mansfield" | "Merton" |
+  "New College" | "Oriel" | "Pembroke" | "Queen's" | "Regent's Park" | "Reuben" |
+  "St Anne's" | "St Antony's" | "St Catherine's" | "St Cross" | "St Edmund Hall" |
+  "St Hilda's" | "St Hugh's" | "St John's" | "St Peter's" | "Somerville" | "Trinity" |
+  "University" | "Wadham" | "Wolfson" | "Worcester" | "Wycliffe Hall"
+
+relationship_intent — use exact string:
+  "Something serious" | "Keeping it casual" | "Friendship first, maybe something later" | "Not sure yet, open to seeing"
+
+relationship_status — use exact string:
+  "Single" | "In a relationship" | "It's complicated" | "Prefer not to say"
+
+intellectual_venue — use exact string:
+  "At tutorials or seminars" | "At dinner" | "At society talks or panels" |
+  "One on one, on a walk or over coffee" | "Honestly, I'm still looking for those conversations"
+
+social_circles (array) — use exact strings:
+  "College events and bops" | "Cafe culture and one-on-ones" | "Sports and fitness" |
+  "Society dinners and formals" | "House parties" | "Arts and cultural events" |
+  "Nights out in town" | "Mostly off-campus" | "Quiet and low-key"
+
+desired_connections (array) — use exact strings:
+  "Someone 2-5 years ahead of me on this exact path" | "A peer who is as driven as I am to push me" |
+  "Someone already inside who can give me honest, unfiltered advice" |
+  "Someone from a completely different background who can open unexpected doors" |
+  "A technical co-founder who can build what I can't" | "A commercial brain to own growth and revenue" |
+  "A creative partner for product and brand" | "A domain expert who knows the space deeply" |
+  "An accountability partner to keep me honest" | "An investor or someone who can open funding doors" |
+  "A first customer or design partner"
+
+dating_personality (array) — use exact strings:
+  "Ambition" | "Wit and humour" | "Emotional depth" | "Confidence" | "Kindness" |
+  "Curiosity" | "Independence" | "Warmth" | "Playfulness" | "Directness" | "Creativity" | "Drive"
+
+dating_hobbies (array) — use exact strings:
+  "Go to exhibitions or galleries" | "Cook or eat out" | "Hike or be outdoors" |
+  "Go to gigs or festivals" | "Travel spontaneously" | "Stay in and watch films" |
+  "Work out together" | "Talk for hours over coffee" | "Go out and socialise" | "Do creative things together"
+
+dating_appearance (array) — use exact strings:
+  "Tall" | "Petite" | "Athletic build" | "Slim" | "Curvy" | "Well-dressed" |
+  "Natural look" | "Put-together" | "Edgy or alternative" | "Preppy" | "No strong preference"
+
+──────────────────────────────────────────────
+OUTPUT SCHEMA
+──────────────────────────────────────────────
+Return JSON only:
 {
-  "semantic_query": "string",
-  "intent_query": "string",
-  "filters": {
-    "college": "string",
-    "primary_intent": "professional|social|romantic|academic",
-    "year_of_study": "string",
-    "study_subject": "string",
-    "career_field": "string",
-    "career_subfield": "string",
-    "relationship_intent": "string",
-    "networking_style": "string",
-    "intellectual_venue": "string",
-    "relationship_status": "string",
-    "sexuality": "string",
-    "has_cv": true,
-    "goals": ["string"],
-    "desired_connections": ["string"],
-    "startup_connections": ["string"],
-    "social_circles": ["string"],
-    "friendship_values": ["string"],
-    "dating_appearance": ["string"],
-    "dating_personality": ["string"],
-    "dating_hobbies": ["string"]
-  },
-  "must_not": {
-    "college": "string",
-    "primary_intent": "professional|social|romantic|academic"
-  },
-  "attribute_weights": {
-    "college": 0.0,
-    "primary_intent": 0.0,
-    "year_of_study": 0.0,
-    "study_subject": 0.0,
-    "career_field": 0.0,
-    "career_subfield": 0.0,
-    "relationship_intent": 0.0,
-    "networking_style": 0.0,
-    "intellectual_venue": 0.0,
-    "relationship_status": 0.0,
-    "sexuality": 0.0,
-    "has_cv": 0.0,
-    "goals": 0.0,
-    "desired_connections": 0.0,
-    "startup_connections": 0.0,
-    "social_circles": 0.0,
-    "friendship_values": 0.0,
-    "dating_appearance": 0.0,
-    "dating_personality": 0.0,
-    "dating_hobbies": 0.0
-  },
-  "strict_key": "one filter key from filters with the highest weight"
+  "semantic_query": "rich paragraph on the ideal match's background, interests, and context",
+  "intent_query": "2-3 sentences on what the ideal match wants to do or achieve",
+  "filters": { /* only fields with high confidence, using exact strings above */ },
+  "must_not": { "college": "string", "primary_intent": "string" },
+  "attribute_weights": { /* keys must match filters, values sum to 1.0 */ },
+  "strict_key": "the single highest-confidence filter key"
 }
 
-Rules:
-- Keep "semantic_query" focused on abstract meaning and interests.
-- Keep "intent_query" focused on goals, connection intent, and practical intent.
-- Extract only explicit constraints from the query into filters.
-- If a field is not present in query, omit it.
-- Include "attribute_weights" only for keys present in "filters".
-- Weight values must be numeric, non-negative, and sum to 1.0.
-- "strict_key" must be the highest-weight filter key.
+──────────────────────────────────────────────
+RULES
+──────────────────────────────────────────────
+- Use ONLY the exact strings listed above for structured fields. Do not paraphrase or invent values.
+- If the query doesn't clearly map to a value, OMIT that filter entirely — false positives destroy results.
+- "semantic_query": focus on abstract meaning, personality, interests.
+- "intent_query": focus on goals, connection intent, practical purpose.
+- "strict_key" must be the single highest-confidence filter key.
+- Weights must sum to 1.0; include only keys present in filters.
 - Do not invent people, names, or unsupported fields.
 `;
 
@@ -296,12 +332,21 @@ function normalizeFilterValue(key, value) {
 function normalizeFilters(raw) {
   if (!raw || typeof raw !== 'object') return {};
   const cleaned = {};
+  const rawKeys = Object.keys(raw);
+  const disallowedKeys = rawKeys.filter(k => !ALLOWED_FILTER_KEYS.has(k));
 
   for (const [key, value] of Object.entries(raw)) {
     if (!ALLOWED_FILTER_KEYS.has(key)) continue;
     const normalized = normalizeFilterValue(key, value);
     if (normalized === null) continue;
     cleaned[key] = normalized;
+  }
+
+  if (disallowedKeys.length > 0) {
+    console.log(`[normalizeFilters] Filtered out disallowed keys: ${disallowedKeys.join(', ')}`);
+  }
+  if (Object.keys(cleaned).length > 0) {
+    console.log(`[normalizeFilters] Kept filters: ${JSON.stringify(cleaned)}`);
   }
 
   return cleaned;
@@ -461,6 +506,122 @@ async function translateSearchQuery(query, ai, log) {
   } catch (err) {
     log(`Query translation fallback due to error: ${err.message}`);
     return fallback;
+  }
+}
+
+async function buildIdealProfile(query, userId, kimi, tables, ai, log) {
+  const fallback = {
+    semantic_query: query,
+    intent_query: query,
+    filters: {},
+    must_not: {},
+    attribute_weights: {},
+    strict_key: null,
+    translator: 'fallback',
+  };
+
+  try {
+    log(`[buildIdealProfile] Starting with query="${query}", userId="${userId}", hasKimi=${!!kimi}, hasTables=${!!tables}`);
+
+    let searcherContext = '';
+    if (userId && tables) {
+      log(`[buildIdealProfile] Fetching searcher profile for userId: ${userId}`);
+
+      const profileRes = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: PROFILES_TABLE,
+        queries: [Query.equal('user_id', userId), Query.limit(1)]
+      });
+      const profile = profileRes.rows?.[0];
+      if (profile) {
+        const ctx = {};
+        const fields = [
+          'college', 'career_field', 'career_subfield', 'primary_intent',
+          'goals', 'study_subject', 'year_of_study', 'desired_connections',
+          'social_circles', 'building_description', 'intellectual_venue',
+          'relationship_intent', 'project_stage', 'hobby', 'societies',
+        ];
+        for (const f of fields) {
+          const v = profile[f];
+          if (v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && v.length === 0)) {
+            ctx[f] = v;
+          }
+        }
+        if (Object.keys(ctx).length > 0) {
+          searcherContext = JSON.stringify(ctx);
+          log(`[buildIdealProfile] Searcher context (${Object.keys(ctx).length} fields): ${searcherContext.slice(0, 300)}...`);
+        }
+      }
+    }
+
+    const userPrompt = `Search query: "${query}"
+${searcherContext ? `Searcher's own profile (use this to personalise results):\n${searcherContext}\n` : ''}
+Using the valid values provided in your instructions, generate a structured ideal-match profile. Return JSON:
+{
+  "semantic_query": "...",
+  "intent_query": "...",
+  "filters": { },
+  "attribute_weights": { },
+  "strict_key": "..."
+}
+Only include filters you are confident about. Use exact strings from the valid values list.`;
+
+    log(`[buildIdealProfile] Calling Grok with deployment: ${KIMI_DEPLOYMENT}`);
+    const response = await kimi.chat.completions.create({
+      model: KIMI_DEPLOYMENT,
+      messages: [{
+        role: 'system',
+        content: QUERY_TRANSLATION_SYSTEM_PROMPT
+      }, {
+        role: 'user',
+        content: userPrompt
+      }],
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+      max_tokens: 512,
+    });
+
+    log(`[buildIdealProfile] Grok response received, choices: ${response.choices?.length || 0}`);
+    const kimiContent = response.choices?.[0]?.message?.content || '';
+    log(`[buildIdealProfile] Grok FULL content: ${kimiContent}`);
+
+    const parsed = safeParseJson(kimiContent);
+    if (!parsed || typeof parsed !== 'object') {
+      log(`[buildIdealProfile] Grok response invalid (parsed=${!!parsed}, type=${typeof parsed}), content="${kimiContent.slice(0, 500)}"`);
+      log(`[buildIdealProfile] Falling back to Gemini`);
+      return await translateSearchQuery(query, ai, log);
+    }
+    log(`[buildIdealProfile] Grok response parsed successfully`);
+
+    const semanticQuery = normalizeString(parsed.semantic_query) || query;
+    const intentQuery = normalizeString(parsed.intent_query) || semanticQuery;
+    const llmFilters = normalizeFilters(parsed.filters || {});
+    const filters = Object.keys(llmFilters).length > 0 ? llmFilters : inferQueryIntentFilters(query);
+    const mustNot = normalizeFilters(parsed.must_not || {});
+    const attributeWeights = normalizeAttributeWeights(parsed.attribute_weights || parsed.weights || {}, filters);
+    const strictKey = determineStrictKey(parsed.strict_key, attributeWeights, filters);
+
+    if (Object.keys(filters).length > 0 && !strictKey) {
+      log('Kimi filters parsed but no strict key, falling back to Gemini');
+      return await translateSearchQuery(query, ai, log);
+    }
+
+    return {
+      semantic_query: semanticQuery,
+      intent_query: intentQuery,
+      filters,
+      must_not: mustNot,
+      attribute_weights: attributeWeights,
+      strict_key: strictKey,
+      translator: Object.keys(llmFilters).length > 0 ? 'grok' : 'heuristic',
+    };
+  } catch (err) {
+    log(`[buildIdealProfile] ERROR: ${err.message}`);
+    log(`[buildIdealProfile] Error code: ${err.code}, status: ${err.status}`);
+    log(`[buildIdealProfile] Full error: ${JSON.stringify(err).slice(0, 500)}`);
+    Sentry.captureException(err, { tags: { context: 'buildIdealProfile' }, level: 'warning' });
+    log(`[buildIdealProfile] Falling back to Gemini`);
+    return await translateSearchQuery(query, ai, log);
   }
 }
 
@@ -926,9 +1087,16 @@ export default async ({ req, res, log, error }) => {
 
   const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
 
+  const kimi = new OpenAI({
+    baseURL: process.env.AZURE_FOUNDRY_ENDPOINT,
+    apiKey: process.env.AZURE_FOUNDRY_API_KEY,
+  });
+
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     const { action } = body;
+    log(`[discoveryEngine] Received action: "${action}", body keys: ${Object.keys(body).join(', ')}`);
+    log(`[discoveryEngine] Body: ${JSON.stringify(body).slice(0, 200)}...`);
 
     // ─── RECOMMEND: find matches based on the user's own vectors ───────────────
     if (action === 'recommend') {
@@ -978,6 +1146,7 @@ export default async ({ req, res, log, error }) => {
       const { query } = body;
       const requestedVariant = normalizeString(body.variant);
       const variant = SEARCH_VARIANTS.has(requestedVariant) ? requestedVariant : 'hybrid_filtered';
+      const userId = normalizeString(body.userId || body.user_id || '');
 
       if (!query || query.trim().length < 2) {
         return res.json({ matches: [] });
@@ -986,14 +1155,31 @@ export default async ({ req, res, log, error }) => {
       const startedAt = Date.now();
       log(`Searching for: "${query}" (variant=${variant})`);
 
+      // Initialize Appwrite tables only if needed (userId provided or external search)
+      let tables = null;
+      if (userId || variant === 'external') {
+        const appwrite = new Client()
+          .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
+          .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
+          .setKey(process.env.APPWRITE_API_KEY);
+        tables = new TablesDB(appwrite);
+      }
+
       const parseStart = Date.now();
-      const translated = await translateSearchQuery(query, ai, log);
+      const translated = await buildIdealProfile(query, userId, kimi, tables, ai, log);
       const parseMs = Date.now() - parseStart;
 
+      log(`[search] Translated filters: ${JSON.stringify(translated.filters)}`);
+      log(`[search] Translated must_not: ${JSON.stringify(translated.must_not)}`);
+
       const strictFilters = strictOnlyFilters(translated);
+      log(`[search] Strict filters: ${JSON.stringify(strictFilters)}`);
+
       const qdrantFilter = variant === 'hybrid_filtered'
         ? buildQdrantFilter(strictFilters, translated.must_not)
         : null;
+
+      log(`[search] Final Qdrant filter: ${JSON.stringify(qdrantFilter)}`);
 
       const filterForSearch = qdrantFilter || {};
 
@@ -1001,77 +1187,181 @@ export default async ({ req, res, log, error }) => {
       let matches = [];
 
       if (variant === 'external') {
-        const userId = normalizeString(body.userId || body.user_id || '');
-        let currentProfile = null;
-        const appwrite = new Client()
-          .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
-          .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
-          .setKey(process.env.APPWRITE_API_KEY);
-        const tables = new TablesDB(appwrite);
+        try {
+          log(`[external] Starting external search for query="${query}"`);
+          let currentProfile = null;
+          if (userId) {
+            log(`[external] Fetching profile for userId: ${userId}`);
+            const profileRes = await tables.listRows({
+              databaseId: DB_ID,
+              tableId: PROFILES_TABLE,
+              queries: [Query.equal('user_id', userId), Query.limit(1)]
+            });
+            currentProfile = profileRes.rows?.[0] || null;
+            log(`[external] Profile found: ${currentProfile ? currentProfile.full_name : 'none'}`);
+          }
 
-        if (userId) {
-          const profileRes = await tables.listRows({
-            databaseId: DB_ID,
-            tableId: PROFILES_TABLE,
-            queries: [Query.equal('user_id', userId), Query.limit(1)]
-          });
-          currentProfile = profileRes.rows?.[0] || null;
-        }
-
-        const traitPrompt = `You are an expert at identifying the ideal persona a user is looking for.
-Query: "${query}"
-${currentProfile ? `About the searcher:
-- Name: ${currentProfile.full_name}
-- Field: ${currentProfile.career_field}
-- Goals: ${(currentProfile.goals || []).join(', ')}` : ''}
-
-Identify:
-1. Target keywords for their name, society, or experience.
-2. Target primary intent (professional, social, romantic, academic).
-3. Societies or sports they might be in.
+          // Phase 1: Identify relevant societies and sports via Kimi
+          log(`[external] Phase 1: Identifying societies/sports via Kimi`);
+          const groupPrompt = `Query: "${query}"
+${currentProfile ? `Searcher: ${currentProfile.career_field || ''}, goals: ${(currentProfile.goals || []).join(', ')}` : ''}
 
 Return JSON:
 {
-  "keywords": ["string"],
-  "intent": "string",
-  "groups": ["society name or sport name"]
-}`;
+  "societies": ["society name fragments to match against"],
+  "sports": ["sport name fragments to match against"]
+}
+Keep lists to 3–5 items max. Use short fragments (e.g. "Entrepreneurs" not full name).`;
 
-        const traitResponse = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-lite-preview',
-          contents: [{ role: 'user', parts: [{ text: traitPrompt }] }],
-          config: { responseMimeType: 'application/json', temperature: 0.1 },
-        });
-        const traits = safeParseJson(traitResponse.text || '{}') || {};
-        const keywords = traits.keywords || extractKeywords(query);
+          log(`[external] Calling Kimi for group identification`);
+          const groupResponse = await kimi.chat.completions.create({
+            model: KIMI_DEPLOYMENT,
+            messages: [{
+              role: 'system',
+              content: 'You identify Oxford university societies and sports clubs relevant to a search query. Output only valid JSON.'
+            }, {
+              role: 'user',
+              content: groupPrompt
+            }],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+            max_tokens: 256,
+          });
+          log(`[external] Kimi grouping response received`);
+          const groups = safeParseJson(groupResponse.choices?.[0]?.message?.content || '{}') || {};
+          const targetSocieties = groups.societies || [];
+          const targetSports = groups.sports || [];
+          log(`[external] Identified societies: ${targetSocieties.join(', ') || 'none'}, sports: ${targetSports.join(', ') || 'none'}`);
 
-        // 1. Search people by full_name or description contains keywords
-        const peopleQueries = [Query.limit(20)];
-        if (keywords.length > 0) {
-          peopleQueries.push(Query.contains('description', keywords[0]));
+          // Phase 2: Fetch all societies and sports, match by name
+          const [allSocietiesRes, allSportsRes] = await Promise.all([
+            tables.listRows({ databaseId: DB_ID, tableId: SOCIETIES_TABLE, queries: [Query.limit(200)] }),
+            tables.listRows({ databaseId: DB_ID, tableId: SPORTS_TABLE, queries: [Query.limit(200)] }),
+          ]);
+
+          const matchedSocietyIds = allSocietiesRes.rows
+            .filter(s => targetSocieties.some(t => s.name.toLowerCase().includes(t.toLowerCase())))
+            .map(s => s.$id);
+          const matchedSportIds = allSportsRes.rows
+            .filter(s => targetSports.some(t => s.name.toLowerCase().includes(t.toLowerCase())))
+            .map(s => s.$id);
+
+          // Phase 3: Join to people via join tables
+          const [societyMembersRes, sportMembersRes] = await Promise.all([
+            matchedSocietyIds.length > 0
+              ? tables.listRows({ databaseId: DB_ID, tableId: PEOPLE_SOCIETIES_TABLE,
+                  queries: [Query.equal('society_id', matchedSocietyIds), Query.limit(60)] })
+              : Promise.resolve({ rows: [] }),
+            matchedSportIds.length > 0
+              ? tables.listRows({ databaseId: DB_ID, tableId: PEOPLE_SPORTS_TABLE,
+                  queries: [Query.equal('sport_id', matchedSportIds), Query.limit(60)] })
+              : Promise.resolve({ rows: [] }),
+          ]);
+
+          const personIdSet = new Set([
+            ...societyMembersRes.rows.map(r => r.person_id).filter(Boolean),
+            ...sportMembersRes.rows.map(r => r.person_id).filter(Boolean),
+          ]);
+
+          // Phase 4: Fetch people and filter to those with descriptions
+          const personIds = [...personIdSet].slice(0, 50);
+          const peopleRes = personIds.length > 0
+            ? await tables.listRows({ databaseId: DB_ID, tableId: PEOPLE_TABLE,
+                queries: [Query.equal('$id', personIds), Query.limit(50)] })
+            : { rows: [] };
+
+          const withDescriptions = peopleRes.rows.filter(p => p.description?.trim().length > 0);
+
+          if (withDescriptions.length === 0 || (matchedSocietyIds.length === 0 && matchedSportIds.length === 0)) {
+            // Fallback to simple keyword search
+            const keywords = extractKeywords(query);
+            const peopleQueries = [Query.limit(20)];
+            if (keywords.length > 0) {
+              peopleQueries.push(Query.contains('description', keywords[0]));
+            }
+            const fallbackRes = await tables.listRows({
+              databaseId: DB_ID,
+              tableId: PEOPLE_TABLE,
+              queries: peopleQueries
+            });
+            matches = fallbackRes.rows.map(p => {
+              const description = p.description || '';
+              let score = 50;
+              const hits = keywords.filter(k => description.toLowerCase().includes(k.toLowerCase()));
+              score += (hits.length * 10);
+              return {
+                ...p,
+                is_on_app: false,
+                source: 'people_db',
+                score: Math.min(99, score),
+                reason: `Found via keyword search`,
+                affiliation: p.source || 'Oxford Network'
+              };
+            }).sort((a,b) => b.score - a.score).slice(0, 8);
+          } else {
+            // Phase 5: Rank candidates via Kimi
+            log(`[external] Phase 5: Ranking ${withDescriptions.length} candidates via Kimi`);
+            const candidates = withDescriptions.slice(0, 10);
+            const rankPrompt = `Query: "${query}"
+
+Candidates:
+${candidates.map((p, i) => `${i}: ${p.full_name} — ${p.description.slice(0, 300)}`).join('\n')}
+
+Return JSON array:
+[{ "index": 0, "score": 85, "reason": "..." }, ...]
+Score 0–100. Include all ${candidates.length} candidates.`;
+
+            log(`[external] Calling Kimi for ranking`);
+            const rankResponse = await kimi.chat.completions.create({
+              model: KIMI_DEPLOYMENT,
+              messages: [{
+                role: 'system',
+                content: 'You rank candidates by relevance to a search query. Output only valid JSON.'
+              }, {
+                role: 'user',
+                content: rankPrompt
+              }],
+              response_format: { type: 'json_object' },
+              temperature: 0.1,
+              max_tokens: 512,
+            });
+            log(`[external] Kimi ranking response received`);
+
+            let rankings = safeParseJson(rankResponse.choices?.[0]?.message?.content || '[]') || [];
+            if (!Array.isArray(rankings) && rankings.rankings) {
+              rankings = rankings.rankings;
+            }
+            log(`[external] Parsed ${rankings.length} rankings`);
+
+            matches = (Array.isArray(rankings) ? rankings : [])
+              .filter(r => r.index >= 0 && r.index < candidates.length)
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 5)
+              .map(r => ({
+                ...candidates[r.index],
+                is_on_app: false,
+                source: 'people_db',
+                score: r.score || 50,
+                reason: r.reason || 'Matched via network search',
+                affiliation: 'Oxford Network',
+              }));
+
+            if (matches.length === 0) {
+              matches = candidates.slice(0, 5).map(p => ({
+                ...p,
+                is_on_app: false,
+                source: 'people_db',
+                score: 60,
+                reason: 'Selected from network',
+                affiliation: 'Oxford Network',
+              }));
+            }
+          }
+        } catch (err) {
+          log(`External search error: ${err.message}`);
+          Sentry.captureException(err, { tags: { context: 'external_search' }, level: 'warning' });
+          matches = [];
         }
-
-        const peopleRes = await tables.listRows({
-          databaseId: DB_ID,
-          tableId: PEOPLE_TABLE,
-          queries: peopleQueries
-        });
-
-        matches = peopleRes.rows.map(p => {
-          const description = p.description || '';
-          let score = 50;
-          const hits = keywords.filter(k => description.toLowerCase().includes(k.toLowerCase()));
-          score += (hits.length * 10);
-          
-          return {
-            ...p,
-            is_on_app: false,
-            source: 'people_db',
-            score: Math.min(99, score),
-            reason: `Discovered via expanded network search. ${hits.length > 0 ? `Matches interests: ${hits.slice(0,2).join(', ')}` : ''}`,
-            affiliation: p.source || 'Oxford Network'
-          };
-        }).sort((a,b) => b.score - a.score).slice(0, 8);
 
       } else if (variant === 'semantic_only') {
         const embeddingResult = await ai.models.embedContent({
@@ -1087,7 +1377,6 @@ Return JSON:
           with_payload: true,
           score_threshold: 0.3,
         };
-        if (qdrantFilter) request.filter = qdrantFilter;
 
         const results = await qdrant.search(COLLECTION, request);
 
@@ -1115,7 +1404,6 @@ Return JSON:
           with_payload: true,
           score_threshold: 0.2,
         };
-        if (qdrantFilter) request.filter = qdrantFilter;
 
         const results = await qdrant.search(COLLECTION, request);
 
@@ -1130,6 +1418,7 @@ Return JSON:
           match_reason: buildMatchReason(r.payload || {}, translated, query),
         })), { type: 'search', translated, originalQuery: query });
       } else {
+        log(`[hybrid] Embedding both semantic and intent queries with Gemini`);
         const [semanticEmbedding, intentEmbedding] = await Promise.all([
           ai.models.embedContent({
             model: 'gemini-embedding-001',
@@ -1145,6 +1434,7 @@ Return JSON:
 
         const semanticVector = semanticEmbedding.embeddings[0].values.slice(0, 1536);
         const intentVector = intentEmbedding.embeddings[0].values.slice(0, 1536);
+        log(`[hybrid] Embeddings created: semantic dim=${semanticVector.length}, intent dim=${intentVector.length}`);
 
         const semanticRequest = {
           vector: { name: 'semantic', vector: semanticVector },
@@ -1159,15 +1449,23 @@ Return JSON:
           score_threshold: variant === 'hybrid_filtered' ? 0.12 : 0.18,
         };
 
-        if (qdrantFilter) {
-          semanticRequest.filter = filterForSearch;
-          intentRequest.filter = filterForSearch;
-        }
+        // Don't apply filters directly to Qdrant — rely on structured scoring instead
+        // This avoids Bad Request errors when filter values don't exist in the collection
+        // qdrantFilter is still used by applyStructuredScoring for ranking
+
+        log(`[hybrid] Qdrant requests: semantic_threshold=${semanticRequest.score_threshold}, intent_threshold=${intentRequest.score_threshold}, hasFilter=${!!qdrantFilter}`);
+        log(`[hybrid] Filters applied to scoring (not Qdrant): ${JSON.stringify(translated.filters)}`);
+        log(`[hybrid] Qdrant will return all results; structured scoring will rank them`);
+        log(`[hybrid] Semantic request keys: ${Object.keys(semanticRequest).join(', ')}`);
+        log(`[hybrid] Intent request keys: ${Object.keys(intentRequest).join(', ')}`);
+        log(`[hybrid] Semantic request: ${JSON.stringify(semanticRequest).slice(0, 300)}...`);
+        log(`[hybrid] Intent request: ${JSON.stringify(intentRequest).slice(0, 300)}...`);
 
         const [semanticRes, intentRes] = await Promise.all([
           qdrant.search(COLLECTION, semanticRequest),
           qdrant.search(COLLECTION, intentRequest),
         ]);
+        log(`[hybrid] Qdrant search completed: semantic results=${semanticRes.length}, intent results=${intentRes.length}`);
 
         matches = applyStructuredScoring(fuseResults(intentRes, semanticRes, null, {
           limit: 8,
@@ -1193,7 +1491,10 @@ Return JSON:
         resultCount: matches.length,
       });
 
-      log(`Search returned ${matches.length} results in ${metadata.total_ms}ms`);
+      log(`[search] Returned ${matches.length} results, variant=${variant}, translator=${translated.translator}, elapsed=${metadata.total_ms}ms`);
+      if (matches.length === 0) {
+        log(`[search] WARNING: No matches found for query="${query}"`);
+      }
       return res.json({ matches, metadata });
     }
 
