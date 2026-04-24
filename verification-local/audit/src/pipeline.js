@@ -20,6 +20,8 @@ const cfg = {
   peopleTable: process.env.APPWRITE_PEOPLE_TABLE || 'people',
   peopleSocietiesTable: process.env.APPWRITE_PEOPLE_SOCIETIES_TABLE || 'people_societies',
   peopleSportsTable: process.env.APPWRITE_PEOPLE_SPORTS_TABLE || 'people_sports',
+  societiesTable: process.env.APPWRITE_SOCIETIES_TABLE || 'societies',
+  sportsTable: process.env.APPWRITE_SPORTS_TABLE || 'sports',
   searxngUrl: process.env.SEARXNG_URL || 'http://127.0.0.1:8080',
   ollamaUrl: process.env.OLLAMA_URL || 'http://127.0.0.1:11434',
   model: process.env.DEFAULT_AUDIT_MODEL || 'gemma4:e2b-it-q4_K_M',
@@ -402,27 +404,38 @@ async function runPhase3and4(tables, apply) {
       }
 
       try {
-        // Phase 3: Single-shot query
-        const query = `"${name}" oxford uni`;
-        await logMessage(3, 'DEBUG', `[${name}] Initiating search: ${query}`);
-        const results = await searchSearxng(query);
-        await logMessage(3, 'DEBUG', `[${name}] Search returned ${results.length} results.`);
+        // Phase 3: Two queries — username and name
+        const queries = [
+          `"${person.username}" oxford`,
+          `"${name}" oxford uni`
+        ];
 
-        // Phase 3.5: Pre-parsing heuristic (No AI)
-        const combinedResultsText = results.map(r => `${r.title} ${r.content} ${r.url}`).join(' ').toLowerCase();
-        const hasOxford = combinedResultsText.includes('oxford');
-        const nameParts = name.toLowerCase().split(/\s+/).filter(p => p.length > 2);
-        const hasNamePart = nameParts.length === 0 || nameParts.some(part => combinedResultsText.includes(part));
+        let allResults = [];
+        const seenUrls = new Set();
 
-        if (!hasOxford || !hasNamePart) {
-          await logMessage(3, 'DEBUG', `[${name}] ⏩ Pre-parse failed (hasOxford: ${hasOxford}, hasName: ${hasNamePart}). Skipping completely.`);
+        for (const query of queries) {
+          await logMessage(3, 'DEBUG', `[${name}] Searching: ${query}`);
+          const results = await searchSearxng(query);
+          for (const r of results) {
+            if (!seenUrls.has(r.url)) {
+              seenUrls.add(r.url);
+              allResults.push(r);
+            }
+          }
+        }
+
+        await logMessage(3, 'DEBUG', `[${name}] Search returned ${allResults.length} total unique results.`);
+
+        // Phase 3.5: Skip if no results found
+        if (allResults.length === 0) {
+          await logMessage(3, 'DEBUG', `[${name}] ⏩ No search results found. Skipping.`);
           processed++;
           return;
         }
 
         // Phase 4: Heavyweight verification
-        await logMessage(3, 'DEBUG', `[${name}] 🔍 Pre-parse passed. Sending to LLM for profiling...`);
-        const auditRes = await auditWithOllama(cfg.model, name, results);
+        await logMessage(3, 'DEBUG', `[${name}] 🔍 Sending to LLM for profiling...`);
+        const auditRes = await auditWithOllama(cfg.model, name, allResults);
 
         const decisionEmoji = auditRes.decision === 'keep' ? '✅' : (auditRes.decision === 'delete_candidate' ? '⚠️' : '❓');
         await logMessage(3, 'AUDIT', `[${name}] Decision: ${decisionEmoji} ${auditRes.decision.toUpperCase()}`);
@@ -476,6 +489,116 @@ async function runPhase3and4(tables, apply) {
   }
 
   await clearState(3, apply);
+}
+
+// ============================================
+// Phase 4: Build Society/Sport Descriptions
+// ============================================
+async function runPhase4(tables, apply) {
+  await logMessage(4, 'INFO', `Starting Phase 4: Society/Sport Description Builder`);
+  await logMessage(4, 'INFO', `Mode: ${apply ? 'EXECUTE (APPLY)' : 'DRY RUN'}`);
+
+  let people = await fetchAllPeople(tables);
+  await logMessage(4, 'INFO', `Fetched ${people.length} users.`);
+
+  // Fetch memberships
+  const [socRows, sportRows, societyMeta, sportMeta] = await Promise.all([
+    fetchAllRows(tables, cfg.peopleSocietiesTable),
+    fetchAllRows(tables, cfg.peopleSportsTable),
+    fetchAllRows(tables, cfg.societiesTable || 'societies'),
+    fetchAllRows(tables, cfg.sportsTable || 'sports'),
+  ]);
+
+  await logMessage(4, 'INFO', `Fetched ${socRows.length} society memberships, ${sportRows.length} sport memberships.`);
+  await logMessage(4, 'INFO', `Fetched ${societyMeta.length} societies, ${sportMeta.length} sports metadata.`);
+
+  // Build lookup maps
+  const societyNameMap = {};
+  const sportNameMap = {};
+  for (const s of societyMeta) {
+    societyNameMap[s.$id] = s.name;
+  }
+  for (const s of sportMeta) {
+    sportNameMap[s.$id] = s.name;
+  }
+
+  const personSocieties = {};
+  const personSports = {};
+  for (const r of socRows) {
+    if (!personSocieties[r.person_id]) personSocieties[r.person_id] = [];
+    if (societyNameMap[r.society_id]) {
+      personSocieties[r.person_id].push(societyNameMap[r.society_id]);
+    }
+  }
+  for (const r of sportRows) {
+    if (!personSports[r.person_id]) personSports[r.person_id] = [];
+    if (sportNameMap[r.sport_id]) {
+      personSports[r.person_id].push(sportNameMap[r.sport_id]);
+    }
+  }
+
+  await logMessage(4, 'INFO', `Built membership lookup maps.`);
+
+  let updated = 0;
+  let skipped = 0;
+
+  for (const person of people) {
+    const societies = personSocieties[person.$id] || [];
+    const sports = personSports[person.$id] || [];
+
+    // Skip if no memberships
+    if (societies.length === 0 && sports.length === 0) {
+      skipped++;
+      continue;
+    }
+
+    // Build templated description
+    const parts = [];
+    if (societies.length > 0) {
+      const societyList = societies.slice(0, 3).join(', ');
+      parts.push(`Active in ${societyList}.`);
+    }
+
+    if (sports.length > 0) {
+      const sportList = sports.slice(0, 2).join(', ');
+      const verb = societies.length > 0 ? 'Also plays' : 'Plays';
+      parts.push(`${verb} ${sportList}.`);
+    }
+
+    const newDescription = parts.join(' ');
+
+    // Append to existing description if present
+    const finalDescription = person.description && person.description.trim().length > 0
+      ? `${person.description.trim()} ${newDescription}`
+      : newDescription;
+
+    const name = person.full_name || person.username || person.$id;
+
+    if (apply) {
+      try {
+        await tables.updateRow({
+          databaseId: cfg.databaseId,
+          tableId: cfg.peopleTable,
+          rowId: person.$id,
+          data: { description: finalDescription }
+        });
+        await logMessage(4, 'SUCCESS', `[${name}] Updated description (${societies.length} societies, ${sports.length} sports).`);
+        updated++;
+      } catch (e) {
+        await logMessage(4, 'ERROR', `[${name}] Failed to update: ${e.message}`);
+      }
+    } else {
+      await logMessage(4, 'DEBUG', `[${name}] Would update: "${finalDescription.slice(0, 80)}..."`);
+      updated++;
+    }
+  }
+
+  await logMessage(4, 'INFO', `Phase 4 Complete. Updated: ${updated}, Skipped (no memberships): ${skipped}.`);
+
+  if (!apply) {
+    await logMessage(4, 'INFO', `Dry run finished. No database changes made.`);
+    await logMessage(4, 'INFO', `Run with --apply to save descriptions to the database.`);
+  }
 }
 
 // Helpers
@@ -553,20 +676,23 @@ async function main() {
     console.log(`
 AUDIT PIPELINE CLI
 ------------------
-Usage: node pipeline.js --phase <1|2|3> [--apply]
+Usage: node pipeline.js --phase <1|2|3|4> [--apply] [--test]
 
 Phases:
   1: Structural Fast-Fail (Delete users with < 2 memberships)
   2: Entity Classifier (Identify and delete non-person entities using LLM)
   3: Heavyweight Audit (Web search & Deep LLM Profiling)
+  4: Society/Sport Description Builder (Populate descriptions from memberships)
 
 Options:
   --phase <n>   Run a specific audit phase
-  --apply       Execute deletions in the database (default: dry-run)
+  --apply       Execute database updates (default: dry-run)
   --test        Run Phase 3 on only the first 10 users for testing
 
-Example:
+Examples:
   node pipeline.js --phase 1 --apply
+  node pipeline.js --phase 3 --test
+  node pipeline.js --phase 4 --apply
     `);
     return;
   }
@@ -577,8 +703,9 @@ Example:
     if (phase === '1') await runPhase1(tables, apply);
     else if (phase === '2') await runPhase2(tables, apply);
     else if (phase === '3') await runPhase3and4(tables, apply);
+    else if (phase === '4') await runPhase4(tables, apply);
     else {
-      console.error(`Unknown phase: ${phase}. Use 1, 2, or 3.`);
+      console.error(`Unknown phase: ${phase}. Use 1, 2, 3, or 4.`);
     }
   } catch (error) {
     console.error(`Pipeline execution failed:`, error);
