@@ -2,6 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Client, Query, TablesDB } from 'node-appwrite';
+import readline from 'readline';
+import { spawn } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,35 +15,54 @@ const STATE_DIR = path.join(ROOT, 'state');
 const cfg = {
   endpoint: process.env.APPWRITE_ENDPOINT || 'https://fra.cloud.appwrite.io/v1',
   projectId: process.env.APPWRITE_PROJECT_ID || '69de7f335c0489352ff1',
-  apiKey: process.env.APPWRITE_API_KEY || '',
+  apiKey: process.env.APPWRITE_API_KEY || 'standard_b09794b2e45415c80266a30fc15c542997e574c3fcbaee2245561b90d2dd1cdbd2a0b8d745445b7e0990f8f14bdd767ba77ac9fa177d83bfa256938d3f511ad4163c78409fb3ad81304400cc83e68d1297b3f3b582247c9a19433d04011057d020bdd0fb0116f851290cc1cf0deb039eacbcad2b95c3912c976ad67867f7c288',
   databaseId: process.env.APPWRITE_DB_ID || 'supercharged',
   peopleTable: process.env.APPWRITE_PEOPLE_TABLE || 'people',
   peopleSocietiesTable: process.env.APPWRITE_PEOPLE_SOCIETIES_TABLE || 'people_societies',
   peopleSportsTable: process.env.APPWRITE_PEOPLE_SPORTS_TABLE || 'people_sports',
-  searxngUrl: process.env.SEARXNG_URL || 'http://localhost:8080',
-  ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+  searxngUrl: process.env.SEARXNG_URL || 'http://127.0.0.1:8080',
+  ollamaUrl: process.env.OLLAMA_URL || 'http://127.0.0.1:11434',
   model: process.env.DEFAULT_AUDIT_MODEL || 'gemma4:e2b-it-q4_K_M',
-  classifierModel: process.env.CLASSIFIER_MODEL || 'qwen2.5:0.5b',
+  classifierModel: process.env.CLASSIFIER_MODEL || 'gemma4:e2b-it-q4_K_M',
+  concurrencyPhase2: parseInt(process.env.CONCURRENCY_P2) || 12, // Optimized for M1 Pro
+  concurrencyPhase3: parseInt(process.env.CONCURRENCY_P3) || 4,  // Limited by Search API
   ollamaTimeoutMs: 180000,
   searxngTimeoutMs: 15000,
   searchResultsLimit: 5,
 };
 
 // Logging
-async function logMessage(phase, msg) {
+async function logMessage(phase, level, msg) {
   const timestamp = new Date().toISOString();
-  const line = `[${timestamp}] [Phase ${phase}] ${msg}`;
+  const levelStr = level.toUpperCase().padEnd(5);
+  const line = `[${timestamp}] [Phase ${phase}] [${levelStr}] ${msg}`;
   console.log(line);
-  
+
   const logFile = path.join(LOGS_DIR, `pipeline_phase_${phase}_run.log`);
   try {
     await fs.appendFile(logFile, line + '\n', 'utf8');
-  } catch (e) {}
+  } catch (e) {
+    console.error(`Failed to write to log file: ${e.message}`);
+  }
 }
 
 async function ensureDirs() {
-  await fs.mkdir(LOGS_DIR, { recursive: true }).catch(() => {});
-  await fs.mkdir(STATE_DIR, { recursive: true }).catch(() => {});
+  await fs.mkdir(LOGS_DIR, { recursive: true }).catch(() => { });
+  await fs.mkdir(STATE_DIR, { recursive: true }).catch(() => { });
+}
+
+async function confirmAction(message) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(`${message} (y/N): `, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y');
+    });
+  });
 }
 
 // Appwrite
@@ -57,8 +78,12 @@ async function fetchAllPeople(tables) {
   const pageSize = 1000;
   while (true) {
     const page = await tables.listRows({
-      databaseId: cfg.databaseId, tableId: cfg.peopleTable, 
-      queries: [Query.limit(pageSize), Query.offset(offset)]
+      databaseId: cfg.databaseId, tableId: cfg.peopleTable,
+      queries: [
+        Query.limit(pageSize),
+        Query.offset(offset),
+        Query.orderAsc('$id') // Ensure consistent order for resuming
+      ]
     });
     out.push(...page.rows);
     if (page.rows.length < pageSize) break;
@@ -67,24 +92,46 @@ async function fetchAllPeople(tables) {
   return out;
 }
 
+// State Management
+async function saveState(phase, lastId, apply) {
+  const stateFile = path.join(STATE_DIR, `phase_${phase}_${apply ? 'apply' : 'dry'}_resume.json`);
+  await fs.mkdir(STATE_DIR, { recursive: true }).catch(() => { });
+  await fs.writeFile(stateFile, JSON.stringify({ lastId, timestamp: new Date().toISOString() }), 'utf8');
+}
+
+async function loadState(phase, apply) {
+  const stateFile = path.join(STATE_DIR, `phase_${phase}_${apply ? 'apply' : 'dry'}_resume.json`);
+  try {
+    const data = await fs.readFile(stateFile, 'utf8');
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
+async function clearState(phase, apply) {
+  const stateFile = path.join(STATE_DIR, `phase_${phase}_${apply ? 'apply' : 'dry'}_resume.json`);
+  await fs.unlink(stateFile).catch(() => { });
+}
+
 // ============================================
 // Phase 1: Structural Fast-Fail
 // ============================================
 async function runPhase1(tables, apply) {
-  await logMessage(1, `Starting Phase 1: Structural DB Filter`);
+  await logMessage(1, 'INFO', `Starting Phase 1: Structural DB Filter`);
+  await logMessage(1, 'INFO', `Mode: ${apply ? 'EXECUTE (APPLY)' : 'DRY RUN'}`);
+
   const people = await fetchAllPeople(tables);
-  await logMessage(1, `Fetched ${people.length} people.`);
+  await logMessage(1, 'INFO', `Fetched ${people.length} people from ${cfg.peopleTable}`);
 
-  let deletedCount = 0;
-
-  // We could optimize by fetching all people_societies/sports, but for safety lets do batched queries.
-  // Actually, fetching all cross-references into memory is much faster.
-  await logMessage(1, `Fetching cross-references in memory...`);
-  
+  await logMessage(1, 'INFO', `Fetching cross-references in memory...`);
   const [socRows, sportRows] = await Promise.all([
-      fetchAllRows(tables, cfg.peopleSocietiesTable),
-      fetchAllRows(tables, cfg.peopleSportsTable)
+    fetchAllRows(tables, cfg.peopleSocietiesTable),
+    fetchAllRows(tables, cfg.peopleSportsTable)
   ]);
+
+  await logMessage(1, 'INFO', `Fetched ${socRows.length} society memberships.`);
+  await logMessage(1, 'INFO', `Fetched ${sportRows.length} sport memberships.`);
 
   const countsMap = new Map();
   const addCount = (pid) => {
@@ -97,31 +144,50 @@ async function runPhase1(tables, apply) {
 
   const toDelete = [];
   for (const person of people) {
-    const total = countsMap.get(person.$id) || 0;
-    if (total < 2) {
-      toDelete.push(person.$id);
+    const count = countsMap.get(person.$id) || 0;
+    if (count < 2) {
+      toDelete.push({ id: person.$id, name: person.full_name || person.username, count });
     }
   }
 
-  await logMessage(1, `Found ${toDelete.length} / ${people.length} users with < 2 memberships.`);
+  await logMessage(1, 'INFO', `Audit Result: Found ${toDelete.length} / ${people.length} users failing structural check (< 2 memberships).`);
+
+  for (const item of toDelete) {
+    await logMessage(1, 'DEBUG', `Candidate for deletion: ID=${item.id}, Name="${item.name}", Total Memberships=${item.count}`);
+  }
+
+  console.log(`\nTOTAL NUMBER OF CANDIDATES FOR DELETION = ${toDelete.length}\n`);
+
+  if (toDelete.length === 0) {
+    await logMessage(1, 'INFO', `No records met deletion criteria. Phase 1 complete.`);
+    return;
+  }
 
   if (apply) {
-    await logMessage(1, `Applying deletions...`);
+    const confirmed = await confirmAction(`Proceed with deleting ${toDelete.length} records?`);
+    if (!confirmed) {
+      await logMessage(1, 'INFO', `Deletion cancelled by user.`);
+      return;
+    }
+
+    await logMessage(1, 'INFO', `Applying deletions for ${toDelete.length} records...`);
     const batchSize = 10;
     for (let i = 0; i < toDelete.length; i += batchSize) {
       const batch = toDelete.slice(i, i + batchSize);
-      await Promise.all(batch.map(async id => {
+      await Promise.all(batch.map(async item => {
         try {
-          await tables.deleteRow({ databaseId: cfg.databaseId, tableId: cfg.peopleTable, rowId: id });
+          await tables.deleteRow({ databaseId: cfg.databaseId, tableId: cfg.peopleTable, rowId: item.id });
+          await logMessage(1, 'SUCCESS', `Deleted record: ${item.id} (${item.name})`);
         } catch (e) {
-          await logMessage(1, `Error deleting ${id}: ${e.message}`);
+          await logMessage(1, 'ERROR', `Error deleting ${item.id}: ${e.message}`);
         }
       }));
-      if (i % 500 === 0) await logMessage(1, `  Deleted ${i}/${toDelete.length}`);
+      if (i % 100 === 0 && i > 0) await logMessage(1, 'INFO', `Progress: Deleted ${i}/${toDelete.length}`);
     }
-    await logMessage(1, `Phase 1 Apply Complete.`);
+    await logMessage(1, 'INFO', `Phase 1 Application Complete.`);
   } else {
-    await logMessage(1, `Dry run complete. Use --apply to execute deletions.`);
+    await logMessage(1, 'INFO', `Dry run complete. No changes made to the database.`);
+    await logMessage(1, 'INFO', `To apply these changes, run with: node pipeline.js --phase 1 --apply`);
   }
 }
 
@@ -131,7 +197,7 @@ async function fetchAllRows(tables, tableId) {
   const pageSize = 1000;
   while (true) {
     const page = await tables.listRows({
-      databaseId: cfg.databaseId, tableId, 
+      databaseId: cfg.databaseId, tableId,
       queries: [Query.limit(pageSize), Query.offset(offset)]
     });
     out.push(...page.rows);
@@ -144,118 +210,330 @@ async function fetchAllRows(tables, tableId) {
 // ============================================
 // Phase 2: Entity Classifier
 // ============================================
-async function runPhase2(tables, apply) {
-  await logMessage(2, `Starting Phase 2: Entity Classifier`);
-  const people = await fetchAllPeople(tables);
-  await logMessage(2, `Processing ${people.length} users.`);
+async function startClassifierApi() {
+  return new Promise((resolve, reject) => {
+    console.log("Starting Python Classification API on MPS...");
+    const py = spawn('python', ['-u', path.join(__dirname, 'classifier_api.py')]);
 
-  let deletedCount = 0;
-  const batchSize = 4; // Concurrency limit
+    py.stdout.on('data', (data) => {
+      const msg = data.toString();
+      process.stdout.write(`[Python] ${msg}`);
+      if (msg.includes('READY')) resolve(py);
+    });
+
+    py.stderr.on('data', (data) => {
+      console.error(`Python API: ${data}`);
+    });
+
+    py.on('close', (code) => {
+      // Silent exit
+    });
+
+    // Timeout if it fails to start (increased for model loading)
+    setTimeout(() => reject(new Error("Python API took too long to start")), 120000);
+  });
+}
+
+async function runPhase2(tables, apply) {
+  await logMessage(2, 'INFO', `Starting Phase 2: Entity Classifier`);
+  await logMessage(2, 'INFO', `Mode: ${apply ? 'EXECUTE (APPLY)' : 'DRY RUN'}`);
+  await logMessage(2, 'INFO', `Using Custom MPS Classifier Model`);
+
+  let people = await fetchAllPeople(tables);
+  await logMessage(2, 'INFO', `Fetched ${people.length} users.`);
+
+  // Resume Logic
+  const state = await loadState(2, apply);
+  if (state && state.lastId) {
+    const lastIndex = people.findIndex(p => p.$id === state.lastId);
+    if (lastIndex !== -1 && lastIndex < people.length - 1) {
+      const resume = await confirmAction(`Found previous ${apply ? 'APPLY' : 'DRY RUN'} progress (last processed ID: ${state.lastId}). Resume?`);
+      if (resume) {
+        people = people.slice(lastIndex + 1);
+        await logMessage(2, 'INFO', `Resuming from record ${lastIndex + 2}. Remaining to process: ${people.length}`);
+      } else {
+        await clearState(2, apply);
+      }
+    }
+  }
+
+  let candidates = [];
+  let errorCount = 0;
+
+  // We can massively increase batch size because python processes vectors simultaneously on MPS
+  const batchSize = 100;
+
+  let pyServer;
+  try {
+    pyServer = await startClassifierApi();
+  } catch (e) {
+    await logMessage(2, 'ERROR', `Failed to start Python API: ${e.message}`);
+    return;
+  }
 
   for (let i = 0; i < people.length; i += batchSize) {
     const batch = people.slice(i, i + batchSize);
-    
-    await Promise.all(batch.map(async person => {
-      const name = (person.full_name || person.username || person.normalized_name || '').trim();
-      if (!name) return;
 
-      const promptText = `Classify if this is a human individual or an organization. Return JSON: {"is_person": true/false}. Entry: ${name}`;
-      
-      try {
-        const res = await classifyWithOllama(cfg.classifierModel, promptText);
-        const isPerson = res.is_person !== false; // Default true on fail
-        
-        if (!isPerson) {
-          await logMessage(2, `Found Non-Person: ${name}`);
-          if (apply) {
-             await tables.deleteRow({ databaseId: cfg.databaseId, tableId: cfg.peopleTable, rowId: person.$id });
-             deletedCount++;
-          }
+    // Ensure no empty strings break the python tokenizer
+    const namesToClassify = batch.map(p => {
+      const n = (p.full_name || p.username || p.normalized_name || '').trim();
+      return n.length > 0 ? n : "Unknown Person";
+    });
+
+    try {
+      const response = await fetch('http://127.0.0.1:8888', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(namesToClassify)
+      });
+
+      const results = await response.json();
+
+      for (let j = 0; j < results.length; j++) {
+        const person = batch[j];
+        const res = results[j];
+
+        if (!res.is_person) {
+          await logMessage(2, 'AUDIT', `Entity Detected: "${res.name}" (ID: ${person.$id}) -> Result: NOT A PERSON`);
+          candidates.push({ id: person.$id, name: res.name });
+        } else {
+          await logMessage(2, 'DEBUG', `Verified Person: "${res.name}" (ID: ${person.$id})`);
         }
-      } catch (err) {
-        // Continue on error
       }
-    }));
-    if (i % 100 === 0) await logMessage(2, `Processed ${i}/${people.length}`);
+    } catch (err) {
+      await logMessage(2, 'ERROR', `Batch classification failed: ${err.message}`);
+      errorCount++;
+    }
+
+    // Save checkpoint
+    const lastProcessedId = batch[batch.length - 1].$id;
+    await saveState(2, lastProcessedId, apply);
+
+    await logMessage(2, 'INFO', `Progress: ${Math.min(i + batchSize, people.length)}/${people.length} processed.`);
   }
 
-  await logMessage(2, `Phase 2 Complete. ${apply ? "Deleted" : "Would delete"} ${deletedCount} orgs.`);
+  console.log(`\nTOTAL NUMBER OF CANDIDATES FOR DELETION = ${candidates.length}\n`);
+
+  if (candidates.length === 0) {
+    if (pyServer) pyServer.kill();
+    await logMessage(2, 'INFO', `Phase 2 Complete. No entities found for deletion.`);
+    await clearState(2, apply);
+    return;
+  }
+
+  if (apply) {
+    const confirmed = await confirmAction(`Proceed with deleting ${candidates.length} identified entities?`);
+    if (!confirmed) {
+      await logMessage(2, 'INFO', `Deletion cancelled by user.`);
+      return;
+    }
+
+    let deletedCount = 0;
+    for (const item of candidates) {
+      try {
+        await tables.deleteRow({ databaseId: cfg.databaseId, tableId: cfg.peopleTable, rowId: item.id });
+        await logMessage(2, 'SUCCESS', `Deleted organization/entity: ${item.name}`);
+        deletedCount++;
+      } catch (e) {
+        await logMessage(2, 'ERROR', `Failed to delete ${item.id}: ${e.message}`);
+      }
+    }
+    await logMessage(2, 'INFO', `Phase 2 Complete. Deleted ${deletedCount} entities.`);
+  } else {
+    await logMessage(2, 'INFO', `Phase 2 Complete. ${candidates.length} entities identified.`);
+    await logMessage(2, 'INFO', `Run with --apply to remove identified entities.`);
+  }
+
+  await clearState(2, apply);
+  if (pyServer) pyServer.kill();
 }
 
 // ============================================
 // Phase 3 & 4: Search + Deep Profiling
 // ============================================
 async function runPhase3and4(tables, apply) {
-  await logMessage(3, `Starting Heavyweight Audit (Phase 3 & 4)`);
-  const people = await fetchAllPeople(tables);
-  await logMessage(3, `Processing ${people.length} users.`);
+  await logMessage(3, 'INFO', `Starting Heavyweight Audit (Phase 3: Web Search & Phase 4: LLM Profiling)`);
+  await logMessage(3, 'INFO', `Mode: ${apply ? 'EXECUTE (APPLY)' : 'DRY RUN'}`);
+  await logMessage(3, 'INFO', `Using Audit Model: ${cfg.model}`);
 
-  const batchSize = 2; // Strict concurrency to avoid RAM explosion
+  let people = await fetchAllPeople(tables);
+  await logMessage(3, 'INFO', `Target Audience: ${people.length} users.`);
+
+  // Test Mode Logic
+  const isTestMode = process.argv.includes('--test');
+  if (isTestMode) {
+    people = people.slice(0, 10);
+    await logMessage(3, 'INFO', `TEST MODE: Limiting execution to ${people.length} users.`);
+  }
+
+  // Resume Logic
+  const state = await loadState(3, apply);
+  if (state && state.lastId) {
+    const lastIndex = people.findIndex(p => p.$id === state.lastId);
+    if (lastIndex !== -1 && lastIndex < people.length - 1) {
+      const resume = await confirmAction(`Found previous ${apply ? 'APPLY' : 'DRY RUN'} progress (last processed ID: ${state.lastId}). Resume?`);
+      if (resume) {
+        people = people.slice(lastIndex + 1);
+        await logMessage(3, 'INFO', `Resuming from record ${lastIndex + 2}. Remaining to process: ${people.length}`);
+      } else {
+        await clearState(3, apply);
+      }
+    }
+  }
+
+  const batchSize = cfg.concurrencyPhase3;
+  let candidates = [];
+  let processed = 0;
 
   for (let i = 0; i < people.length; i += batchSize) {
     const batch = people.slice(i, i + batchSize);
-    
+
     await Promise.all(batch.map(async person => {
       const name = (person.full_name || person.normalized_name || '').trim();
-      if (!name) return;
+      if (!name) {
+        await logMessage(3, 'WARN', `Skipping ID ${person.$id}: Name missing.`);
+        return;
+      }
+
+      // Production Speed Hack: Skip if already processed
+      if (person.description && person.linkedin_url) {
+        // await logMessage(3, 'DEBUG', `[${name}] Already has description/LinkedIn. Skipping.`);
+        return;
+      }
 
       try {
         // Phase 3: Single-shot query
         const query = `"${name}" oxford uni`;
-        await logMessage(3, `[${name}] Searching: ${query}`);
+        await logMessage(3, 'DEBUG', `[${name}] Initiating search: ${query}`);
         const results = await searchSearxng(query);
+        await logMessage(3, 'DEBUG', `[${name}] Search returned ${results.length} results.`);
+
+        // Phase 3.5: Pre-parsing heuristic (No AI)
+        const combinedResultsText = results.map(r => `${r.title} ${r.content} ${r.url}`).join(' ').toLowerCase();
+        const hasOxford = combinedResultsText.includes('oxford');
+        const nameParts = name.toLowerCase().split(/\s+/).filter(p => p.length > 2);
+        const hasNamePart = nameParts.length === 0 || nameParts.some(part => combinedResultsText.includes(part));
+
+        if (!hasOxford || !hasNamePart) {
+          await logMessage(3, 'DEBUG', `[${name}] ⏩ Pre-parse failed (hasOxford: ${hasOxford}, hasName: ${hasNamePart}). Skipping completely.`);
+          processed++;
+          return;
+        }
 
         // Phase 4: Heavyweight verification
+        await logMessage(3, 'DEBUG', `[${name}] 🔍 Pre-parse passed. Sending to LLM for profiling...`);
         const auditRes = await auditWithOllama(cfg.model, name, results);
-        await logMessage(3, `[${name}] Decision: ${auditRes.decision} - LinkedIn: ${auditRes.found_linkedin}`);
 
-        if (apply && auditRes.decision === 'delete_candidate') {
-           await tables.deleteRow({ databaseId: cfg.databaseId, tableId: cfg.peopleTable, rowId: person.$id });
-           await logMessage(3, `[${name}] Deleted.`);
+        const decisionEmoji = auditRes.decision === 'keep' ? '✅' : (auditRes.decision === 'delete_candidate' ? '⚠️' : '❓');
+        await logMessage(3, 'AUDIT', `[${name}] Decision: ${decisionEmoji} ${auditRes.decision.toUpperCase()}`);
+
+        // Only save data if we have high confidence (Decision: KEEP)
+        if (auditRes.decision === 'keep' && (auditRes.description || auditRes.linkedin_url)) {
+          if (auditRes.description) await logMessage(3, 'INFO', `[${name}] 📝 ${auditRes.description}`);
+          if (auditRes.linkedin_url) await logMessage(3, 'INFO', `[${name}] 🔗 ${auditRes.linkedin_url}`);
+
+          if (apply) {
+            try {
+              await tables.updateRow({
+                databaseId: cfg.databaseId,
+                tableId: cfg.peopleTable,
+                rowId: person.$id,
+                data: {
+                  description: auditRes.description || person.description,
+                  linkedin_url: auditRes.linkedin_url || person.linkedin_url
+                }
+              });
+              await logMessage(3, 'SUCCESS', `[${name}] Updated database with description/LinkedIn.`);
+            } catch (e) {
+              await logMessage(3, 'ERROR', `[${name}] Failed to update database: ${e.message}`);
+            }
+          }
+        } else if (auditRes.decision !== 'keep') {
+          await logMessage(3, 'DEBUG', `[${name}] Low confidence. Skipping database enrichment.`);
         }
       } catch (err) {
-        await logMessage(3, `[${name}] Error: ${err.message}`);
+        await logMessage(3, 'ERROR', `[${name}] Pipeline failure: ${err.message}`);
       }
+      processed++;
     }));
+
+    // Save checkpoint
+    const lastProcessedId = batch[batch.length - 1].$id;
+    await saveState(3, lastProcessedId);
+
+    if (i % 10 === 0 && i > 0) {
+      await logMessage(3, 'INFO', `Progress Update: ${i}/${people.length} evaluated.`);
+    }
   }
 
-  await logMessage(3, `Heavyweight Audit Complete.`);
+  await logMessage(3, 'INFO', `Heavyweight Audit Phase Complete.`);
+
+  if (apply) {
+    await logMessage(3, 'INFO', `Production run finished. Database updated with descriptions and LinkedIn URLs.`);
+  } else {
+    await logMessage(3, 'INFO', `Dry run finished. No database changes made.`);
+    await logMessage(3, 'INFO', `Run with --apply to save data to the database.`);
+  }
+
+  await clearState(3, apply);
 }
 
 // Helpers
 async function classifyWithOllama(model, text) {
-   const res = await fetch(`${cfg.ollamaUrl}/api/chat`, {
+  try {
+    const res = await fetch(`${cfg.ollamaUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-         model, stream: false, format: 'json',
-         messages: [{role: 'user', content: text}]
+        model, stream: false, format: 'json',
+        messages: [{ role: 'user', content: text }]
       })
-   });
-   const data = await res.json();
-   try { return JSON.parse(data.message.content); } catch { return { is_person: true }; }
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+      console.error(`[Ollama Error] ${data.error}`);
+      return { is_person: true, reason: `Ollama error: ${data.error}` };
+    }
+
+    if (!data.message || !data.message.content) {
+      console.error(`[Ollama Error] Unexpected response format:`, data);
+      return { is_person: true, reason: "Unexpected API response" };
+    }
+
+    try {
+      return JSON.parse(data.message.content);
+    } catch (e) {
+      console.error(`[Ollama Error] Failed to parse JSON content: ${data.message.content}`);
+      return { is_person: true, reason: "Invalid JSON from model" };
+    }
+  } catch (err) {
+    console.error(`[Ollama Error] Connection failed: ${err.message}`);
+    return { is_person: true, reason: "Connection failure" };
+  }
 }
 
 async function searchSearxng(query) {
-   const res = await fetch(`${cfg.searxngUrl}/search?format=json&language=en&q=${encodeURIComponent(query)}`);
-   const data = await res.json();
-   const results = Array.isArray(data.results) ? data.results : [];
-   return results.slice(0, cfg.searchResultsLimit).map(r => ({title: r.title, content: r.content, url: r.url}));
+  const res = await fetch(`${cfg.searxngUrl}/search?format=json&language=en&q=${encodeURIComponent(query)}`);
+  const data = await res.json();
+  const results = Array.isArray(data.results) ? data.results : [];
+  return results.slice(0, cfg.searchResultsLimit).map(r => ({ title: r.title, content: r.content, url: r.url }));
 }
 
 async function auditWithOllama(model, name, results) {
-   const resultsText = results.map(r => `URL: ${r.url}\nSnippet: ${r.content}`).join('\n\n');
-   const promptText = `Audit this Oxford candidate. Return exactly JSON: {"decision":"keep"|"needs_review"|"delete_candidate", "found_linkedin":true/false, "linkedin_url":""}\n\nCandidate: ${name}\nResults:\n${resultsText}`;
-   const res = await fetch(`${cfg.ollamaUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-         model, stream: false, format: 'json',
-         messages: [{role: 'user', content: promptText}]
-      })
-   });
-   const data = await res.json();
-   try { return JSON.parse(data.message.content); } catch { return { decision: "needs_review" }; }
+  const resultsText = results.map(r => `URL: ${r.url}\nSnippet: ${r.content}`).join('\n\n');
+  const promptText = `Audit this Oxford candidate. Return exactly JSON: {"decision":"keep"|"needs_review"|"delete_candidate", "found_linkedin":true/false, "linkedin_url":"", "description":"[TEXT]"}\n\nCandidate: ${name}\nResults:\n${resultsText}\n\nTask: Provide an oxford-orientated description of the person based on the results. Keep it concise and useful for knowing more about what that person does or did at Oxford, as well as their general interests and achievements.`;
+  const res = await fetch(`${cfg.ollamaUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model, stream: false, format: 'json',
+      messages: [{ role: 'user', content: promptText }]
+    })
+  });
+  const data = await res.json();
+  try { return JSON.parse(data.message.content); } catch { return { decision: "needs_review" }; }
 }
 
 // CLI Engine
@@ -267,17 +545,44 @@ async function main() {
   const phase = phaseIndex !== -1 ? args[phaseIndex + 1] : null;
 
   if (!cfg.apiKey) {
-    console.warn("APPWRITE_API_KEY is not set. Exiting.");
+    console.warn("APPWRITE_API_KEY is not set. Please set the APPWRITE_API_KEY environment variable.");
+    process.exit(1);
+  }
+
+  if (!phase) {
+    console.log(`
+AUDIT PIPELINE CLI
+------------------
+Usage: node pipeline.js --phase <1|2|3> [--apply]
+
+Phases:
+  1: Structural Fast-Fail (Delete users with < 2 memberships)
+  2: Entity Classifier (Identify and delete non-person entities using LLM)
+  3: Heavyweight Audit (Web search & Deep LLM Profiling)
+
+Options:
+  --phase <n>   Run a specific audit phase
+  --apply       Execute deletions in the database (default: dry-run)
+  --test        Run Phase 3 on only the first 10 users for testing
+
+Example:
+  node pipeline.js --phase 1 --apply
+    `);
     return;
   }
 
   const tables = getAppwrite();
-  
-  if (phase === '1') await runPhase1(tables, apply);
-  else if (phase === '2') await runPhase2(tables, apply);
-  else if (phase === '3') await runPhase3and4(tables, apply);
-  else {
-    console.log("Usage: node pipeline.js --phase <1|2|3> [--apply]");
+
+  try {
+    if (phase === '1') await runPhase1(tables, apply);
+    else if (phase === '2') await runPhase2(tables, apply);
+    else if (phase === '3') await runPhase3and4(tables, apply);
+    else {
+      console.error(`Unknown phase: ${phase}. Use 1, 2, or 3.`);
+    }
+  } catch (error) {
+    console.error(`Pipeline execution failed:`, error);
+    process.exit(1);
   }
 }
 

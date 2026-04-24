@@ -447,8 +447,6 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
         college: answers['college'] || '',
         study_subject: studySubject,
         year_of_study: answers['year'] || '',
-        course: studySubject,
-        stage: answers['year'] || '',
         career_subfield: answers['career-sub'] || '',
         building_description: answers['building-desc'] || '',
         free_text_responses: JSON.stringify(answers),
@@ -472,7 +470,8 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
         societies: answers['societies'] || '',
         friend_references: friendInputs.map((friend) => friend.trim()).filter(Boolean),
         is_onboarding_complete: true,
-        is_indexed: false
+        is_indexed: false,
+        referred_by_code: sessionStorage.getItem('sc_referral_code') || null,
       };
 
       const result = await tables.listRows({
@@ -500,6 +499,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
         docId = row.$id;
       }
       
+      sessionStorage.removeItem('sc_referral_code');
       setLoading(false);
       setShowEndScreen(true);
       setTimeout(() => {

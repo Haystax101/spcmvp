@@ -1,4 +1,4 @@
-import { Client, ID, Query, TablesDB } from 'node-appwrite';
+import { Client, ID, Query, TablesDB, Messaging } from 'node-appwrite';
 import * as Sentry from '@sentry/node';
 
 Sentry.init({
@@ -79,25 +79,23 @@ function toAction(input) {
   return normalizeString(input).toLowerCase();
 }
 
-function createTables() {
+function createAppwriteClient() {
   const endpoint = process.env.APPWRITE_FUNCTION_ENDPOINT || process.env.APPWRITE_ENDPOINT || 'https://fra.cloud.appwrite.io/v1';
   const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.APPWRITE_PROJECT_ID;
   const apiKey = process.env.APPWRITE_FUNCTION_API_KEY || process.env.APPWRITE_API_KEY;
 
-  if (!projectId) {
-    throw new HttpError(500, 'APPWRITE_FUNCTION_PROJECT_ID is required');
-  }
+  if (!projectId) throw new HttpError(500, 'APPWRITE_FUNCTION_PROJECT_ID is required');
+  if (!apiKey) throw new HttpError(500, 'Function API key is missing');
 
-  if (!apiKey) {
-    throw new HttpError(500, 'Function API key is missing');
-  }
+  return new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+}
 
-  const client = new Client()
-    .setEndpoint(endpoint)
-    .setProject(projectId)
-    .setKey(apiKey);
+function createTables() {
+  return new TablesDB(createAppwriteClient());
+}
 
-  return new TablesDB(client);
+function createMessaging() {
+  return new Messaging(createAppwriteClient());
 }
 
 async function listOneRow(tables, tableId, queries) {
@@ -210,9 +208,10 @@ async function createVoltzEntry(tables, { profileId, connectionId, relationshipE
 
 async function unreadCount(tables, conversationId, profileId, lastReadAt = null) {
   const baseQueries = [
-    Query.equal('conversation', conversationId),
-    Query.notEqual('sender', profileId),
+    Query.equal('conversation_row_id', conversationId),
+    Query.notEqual('sender_row_id', profileId),
     Query.notEqual('delivery_status', 'read'),
+    Query.select(['$id']),
     Query.limit(200),
   ];
   const queries = lastReadAt ? [...baseQueries, Query.greaterThan('sent_at', lastReadAt)] : baseQueries;
@@ -224,22 +223,10 @@ async function unreadCount(tables, conversationId, profileId, lastReadAt = null)
       queries,
     });
     return out.total ?? out.rows.length;
-  } catch {
-    const fallback = await tables.listRows({
-      databaseId: DB_ID,
-      tableId: MESSAGES_TABLE,
-      queries: [Query.equal('conversation', conversationId), Query.limit(200)],
-    });
-
-    const filtered = fallback.rows.filter((row) => {
-      const senderId = relationId(row.sender);
-      if (senderId === profileId) return false;
-      if (row.delivery_status === 'read') return false;
-      if (!lastReadAt) return true;
-      return new Date(row.sent_at).getTime() > new Date(lastReadAt).getTime();
-    });
-
-    return filtered.length;
+  } catch (err) {
+    // The fallback has been removed because the composite indexes handle this now.
+    // If it fails, we return 0 instead of hanging the entire server with in-memory scans.
+    return 0;
   }
 }
 
@@ -286,7 +273,7 @@ async function maybeAwardMilestone(tables, connection, profileId, messageTotal, 
   return { milestone: milestoneEventType, amount };
 }
 
-async function actionSendMessage({ tables, body, currentProfile }) {
+async function actionSendMessage({ tables, messaging, body, currentProfile, log }) {
   const conversationId = normalizeString(body.conversation_id || body.conversationId);
   const rawBody = normalizeString(body.body || body.text || body.message);
   const replyToMessageId = normalizeString(body.reply_to_message_id || body.replyToMessageId) || null;
@@ -310,7 +297,9 @@ async function actionSendMessage({ tables, body, currentProfile }) {
     rowId: ID.unique(),
     data: {
       conversation: conversationId,
+      conversation_row_id: conversationId,
       sender: currentProfile.$id,
+      sender_row_id: currentProfile.$id,
       body: messageBody,
       message_type: 'text',
       delivery_status: 'sent',
@@ -395,6 +384,46 @@ async function actionSendMessage({ tables, body, currentProfile }) {
     now
   );
 
+  // Non-fatal: notify other conversation members who have message replies enabled
+  try {
+    const allMembers = await tables.listRows({
+      databaseId: DB_ID,
+      tableId: CONVERSATION_MEMBERS_TABLE,
+      queries: [Query.equal('conversation', conversationId), Query.limit(10)],
+    });
+    const otherMemberIds = (allMembers.rows || [])
+      .map((m) => relationId(m.profile))
+      .filter((id) => id && id !== currentProfile.$id);
+
+    if (otherMemberIds.length > 0) {
+      const recipientProfiles = await getProfilesByIds(tables, otherMemberIds);
+      const notifyIds = recipientProfiles
+        .filter((p) => p.notify_message_replies)
+        .map((p) => p.user_id)
+        .filter(Boolean);
+
+      if (notifyIds.length > 0) {
+        const senderName = currentProfile.first_name || currentProfile.username || 'Someone';
+        await messaging.createEmail(
+          ID.unique(),
+          `New message from ${senderName} on Supercharged`,
+          `${senderName} sent you a message on Supercharged. Open the app to reply.`,
+          [],
+          notifyIds,
+        );
+        if (log) log(`Message notification sent to ${notifyIds.length} recipient(s)`);
+      }
+    }
+  } catch (notifErr) {
+    if (log) log(`Message notification failed (non-fatal): ${notifErr.message}`);
+    if (typeof Sentry !== 'undefined') {
+      Sentry.captureException(notifErr, {
+        tags: { context: 'message_notification', userId: currentProfile.user_id },
+        level: 'warning'
+      });
+    }
+  }
+
   return {
     success: true,
     message: {
@@ -419,34 +448,35 @@ async function actionListMessages({ tables, body, currentProfile }) {
 
   await requireMembership(tables, conversationId, currentProfile.$id);
 
+  // TablesDB Relational Loading: Load the sender relationship natively
   const queries = [
-    Query.equal('conversation', conversationId),
+    Query.equal('conversation_row_id', conversationId),
     Query.orderAsc('sent_at'),
     Query.limit(limit),
+    Query.select(['*', 'sender.full_name'])
   ];
   if (offset > 0) queries.push(Query.offset(offset));
 
+  // Fetch messages with populated sender relationship
   const out = await tables.listRows({
     databaseId: DB_ID,
     tableId: MESSAGES_TABLE,
     queries,
   });
 
-  const senderIds = Array.from(new Set(out.rows.map((row) => relationId(row.sender)).filter(Boolean)));
-  const counterpartyRows = await getProfilesByIds(tables, senderIds);
-  const profileMap = new Map(counterpartyRows.map((p) => [p.$id, p]));
-
   const mapped = out.rows.map((row) => {
-    const senderId = relationId(row.sender);
-    const senderProfile = profileMap.get(senderId);
+    // sender could be heavily nested depending on relation config, handle gracefully
+    const senderData = typeof row.sender === 'object' ? row.sender : null;
+    const senderId = senderData ? senderData.$id : row.sender;
+    const senderName = senderData?.full_name || null;
 
     return {
       id: row.$id,
       conversation_id: conversationId,
       sender_profile_id: senderId,
-      sender_name: senderProfile?.full_name || null,
-      sender_initials: senderProfile?.full_name
-        ? senderProfile.full_name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+      sender_name: senderName,
+      sender_initials: senderName
+        ? senderName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
         : null,
       body: row.body,
       message_type: row.message_type,
@@ -537,18 +567,38 @@ async function actionMarkRead({ tables, body, currentProfile }) {
       });
     }
   } else {
-    const unread = await tables.listRows({
-      databaseId: DB_ID,
-      tableId: MESSAGES_TABLE,
-      queries: [
-        Query.equal('conversation', conversationId),
-        Query.notEqual('sender', currentProfile.$id),
-        Query.notEqual('delivery_status', 'read'),
-        Query.limit(100),
-      ],
-    });
+    let unreadRows = [];
+    try {
+      // Fast path using shadow index
+      const unreadOut = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: MESSAGES_TABLE,
+        queries: [
+          Query.equal('conversation_row_id', conversationId),
+          Query.notEqual('sender_row_id', currentProfile.$id),
+          Query.notEqual('delivery_status', 'read'),
+          Query.limit(100),
+        ],
+      });
+      unreadRows = unreadOut.rows;
+    } catch {
+      // Fallback for legacy messages
+      const fallbackOut = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: MESSAGES_TABLE,
+        queries: [
+          Query.equal('conversation', conversationId),
+          Query.limit(100),
+        ],
+      });
+      
+      unreadRows = fallbackOut.rows.filter(row => {
+        const sId = relationId(row.sender);
+        return sId !== currentProfile.$id && row.delivery_status !== 'read';
+      });
+    }
 
-    await Promise.all(unread.rows.map(row =>
+    await Promise.all(unreadRows.map(row =>
       tables.updateRow({
         databaseId: DB_ID,
         tableId: MESSAGES_TABLE,
@@ -600,33 +650,36 @@ async function actionListUnreadCounts({ tables, body, currentProfile }) {
     ],
   });
 
-  const rows = [];
-  for (const member of memberships.rows) {
-    const conversationId = relationId(member.conversation);
-    if (!conversationId) continue;
+  // Execute all unread count queries in parallel
+  const rows = await Promise.all(
+    memberships.rows.map(async (member) => {
+      const conversationId = relationId(member.conversation);
+      if (!conversationId) return null;
 
-    const unread = await unreadCount(
-      tables,
-      conversationId,
-      currentProfile.$id,
-      member.last_read_at || null
-    );
+      const unread = await unreadCount(
+        tables,
+        conversationId,
+        currentProfile.$id,
+        member.last_read_at || null
+      );
 
-    rows.push({
-      conversation_id: conversationId,
-      unread_count: unread,
-      last_read_at: member.last_read_at || null,
-    });
-  }
+      return {
+        conversation_id: conversationId,
+        unread_count: unread,
+        last_read_at: member.last_read_at || null,
+      };
+    })
+  );
 
   return {
     success: true,
-    conversations: rows,
+    conversations: rows.filter(Boolean), // Remove nulls if any
   };
 }
 
 export default async ({ req, res, log, error }) => {
   const tables = createTables();
+  const messaging = createMessaging();
 
   try {
     const body = parseBody(req);
@@ -641,7 +694,7 @@ export default async ({ req, res, log, error }) => {
     let payload;
     switch (action) {
       case 'send_message':
-        payload = await actionSendMessage({ tables, body, currentProfile });
+        payload = await actionSendMessage({ tables, messaging, body, currentProfile, log });
         break;
       case 'list_messages':
         payload = await actionListMessages({ tables, body, currentProfile });

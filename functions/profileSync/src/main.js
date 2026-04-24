@@ -1,4 +1,4 @@
-import { Client, TablesDB } from 'node-appwrite';
+import { Client, TablesDB, ID, Query } from 'node-appwrite';
 import { GoogleGenAI } from '@google/genai';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import crypto from 'crypto';
@@ -200,6 +200,36 @@ export default async ({ req, res, log, error }) => {
       return res.json({ success: true, message: "Skipped - no valid payload" });
     }
 
+    // ── Generate referral code if missing (runs on every sync, even pre-onboarding) ──
+    if (!profile.referral_code) {
+      const base = (profile.username || profile.first_name || '').slice(0, 8).toLowerCase().replace(/[^a-z0-9]/g, '') || crypto.randomBytes(3).toString('hex');
+      const code = base || crypto.randomBytes(4).toString('hex');
+      try {
+        await tables.updateRow({
+          databaseId: 'supercharged', tableId: 'profiles', rowId: profile.$id,
+          data: { referral_code: code }
+        });
+        profile.referral_code = code;
+        log(`Generated referral_code: ${code}`);
+      } catch (refErr) {
+        if (/unique/i.test(refErr.message)) {
+          const uniqueCode = code + crypto.randomBytes(2).toString('hex');
+          await tables.updateRow({
+            databaseId: 'supercharged', tableId: 'profiles', rowId: profile.$id,
+            data: { referral_code: uniqueCode }
+          });
+          profile.referral_code = uniqueCode;
+          log(`Generated unique referral_code: ${uniqueCode}`);
+        } else {
+          log(`referral_code generation failed (non-fatal): ${refErr.message}`);
+          Sentry.captureException(refErr, {
+            tags: { context: 'referral_code_generation', userId: profile.user_id },
+            level: 'warning'
+          });
+        }
+      }
+    }
+
     if (profile.is_onboarding_complete === false) {
       log(`Skipped sync for incomplete onboarding: ${profile.user_id}`);
       return res.json({ success: true, message: "Onboarding not complete." });
@@ -261,8 +291,6 @@ export default async ({ req, res, log, error }) => {
           primary_intent: profile.primary_intent || "",
           study_subject: profile.study_subject || "",
           year_of_study: profile.year_of_study || "",
-          course:      profile.course || "",
-          stage:       profile.stage  || "",
 
           // Professional / goals
           goals:               profile.goals               || [],
@@ -306,6 +334,47 @@ export default async ({ req, res, log, error }) => {
     });
 
     log("Qdrant upsert complete. Updating Appwrite is_indexed...");
+
+    // ── Award referral bonus on first successful sync (if referred) ───────────
+    if (profile.referred_by_code && !profile.referral_bonus_awarded) {
+      try {
+        const referrerResult = await tables.listRows({
+          databaseId: 'supercharged', tableId: 'profiles',
+          queries: [Query.equal('referral_code', [profile.referred_by_code]), Query.limit(1)]
+        });
+        const referrer = referrerResult.rows?.[0];
+        if (referrer) {
+          const BONUS = 100;
+          const now = new Date().toISOString();
+          await Promise.all([
+            tables.updateRow({ databaseId: 'supercharged', tableId: 'profiles', rowId: profile.$id,
+              data: { current_voltz: (profile.current_voltz || 0) + BONUS } }),
+            tables.updateRow({ databaseId: 'supercharged', tableId: 'profiles', rowId: referrer.$id,
+              data: { current_voltz: (referrer.current_voltz || 0) + BONUS } }),
+          ]);
+          const newProfileName = profile.first_name || profile.username || 'Someone';
+          await Promise.all([
+            tables.createRow({ databaseId: 'supercharged', tableId: 'voltz_ledger', rowId: ID.unique(),
+              data: { profile_row_id: profile.$id, event_type: 'referral_bonus', amount: BONUS,
+                reason: 'Referral bonus — joined via referral link', awarded_at: now } }),
+            tables.createRow({ databaseId: 'supercharged', tableId: 'voltz_ledger', rowId: ID.unique(),
+              data: { profile_row_id: referrer.$id, event_type: 'referral_bonus', amount: BONUS,
+                reason: `Referral bonus — ${newProfileName} joined using your link`, awarded_at: now } }),
+          ]);
+          await tables.updateRow({ databaseId: 'supercharged', tableId: 'profiles', rowId: profile.$id,
+            data: { referral_bonus_awarded: true } });
+          log(`Referral bonus awarded: ${BONUS} voltz each to ${profile.user_id} and ${referrer.user_id}`);
+        } else {
+          log(`Referral code ${profile.referred_by_code} not found — bonus skipped`);
+        }
+      } catch (bonusErr) {
+        log(`Referral bonus failed (non-fatal): ${bonusErr.message}`);
+        Sentry.captureException(bonusErr, {
+          tags: { context: 'referral_bonus_award', userId: profile.user_id },
+          extra: { referredByCode: profile.referred_by_code }
+        });
+      }
+    }
 
     await tables.updateRow({
       databaseId: 'supercharged',

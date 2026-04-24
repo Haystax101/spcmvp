@@ -1,4 +1,4 @@
-import { Client, ID, Query, TablesDB } from 'node-appwrite';
+import { Client, ID, Query, TablesDB, Messaging } from 'node-appwrite';
 import { GoogleGenAI } from '@google/genai';
 import * as Sentry from '@sentry/node';
 
@@ -489,25 +489,23 @@ function toAction(input) {
   return normalizeString(input).toLowerCase();
 }
 
-function createTables() {
+function createAppwriteClient() {
   const endpoint = process.env.APPWRITE_FUNCTION_ENDPOINT || process.env.APPWRITE_ENDPOINT || 'https://fra.cloud.appwrite.io/v1';
   const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.APPWRITE_PROJECT_ID;
   const apiKey = process.env.APPWRITE_FUNCTION_API_KEY || process.env.APPWRITE_API_KEY;
 
-  if (!projectId) {
-    throw new HttpError(500, 'APPWRITE_FUNCTION_PROJECT_ID is required');
-  }
+  if (!projectId) throw new HttpError(500, 'APPWRITE_FUNCTION_PROJECT_ID is required');
+  if (!apiKey) throw new HttpError(500, 'Function API key is missing');
 
-  if (!apiKey) {
-    throw new HttpError(500, 'Function API key is missing');
-  }
+  return new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+}
 
-  const client = new Client()
-    .setEndpoint(endpoint)
-    .setProject(projectId)
-    .setKey(apiKey);
+function createTables() {
+  return new TablesDB(createAppwriteClient());
+}
 
-  return new TablesDB(client);
+function createMessaging() {
+  return new Messaging(createAppwriteClient());
 }
 
 async function listOneRow(tables, tableId, queries) {
@@ -653,7 +651,7 @@ async function getLatestMessage(tables, conversationId) {
     databaseId: DB_ID,
     tableId: MESSAGES_TABLE,
     queries: [
-      Query.equal('conversation', conversationId),
+      Query.equal('conversation_row_id', conversationId),
       Query.orderDesc('sent_at'),
       Query.limit(1),
     ],
@@ -665,14 +663,16 @@ async function getLatestMessage(tables, conversationId) {
 async function getUnreadCount(tables, conversationId, currentProfileId, lastReadAt) {
   if (!conversationId) return 0;
 
-  const base = [
-    Query.equal('conversation', conversationId),
-    Query.notEqual('sender', currentProfileId),
+  const queries = [
+    Query.equal('conversation_row_id', conversationId),
+    Query.notEqual('sender_row_id', currentProfileId),
     Query.notEqual('delivery_status', 'read'),
     Query.limit(100),
   ];
 
-  const queries = lastReadAt ? [...base, Query.greaterThan('sent_at', lastReadAt)] : base;
+  if (lastReadAt) {
+    queries.push(Query.greaterThan('sent_at', lastReadAt));
+  }
 
   try {
     const out = await tables.listRows({
@@ -915,7 +915,12 @@ async function actionInitiateRequest({ tables, body, currentProfile }) {
       rowId: ID.unique(),
       data: {
         conversation: null,
+        // Use connection.$id as the pseudo-conversation key so getLatestMessage
+        // can find this message via the conversation_row_id index before the
+        // connection is accepted and a real conversation row is created.
+        conversation_row_id: connection.$id,
         sender: currentProfile.$id,
+        sender_row_id: currentProfile.$id,
         body: openingMessage,
         message_type: 'text',
         delivery_status: 'delivered',
@@ -1000,7 +1005,7 @@ async function actionInitiateRequest({ tables, body, currentProfile }) {
   }
 }
 
-async function actionAcceptConnection({ tables, body, currentProfile }) {
+async function actionAcceptConnection({ tables, messaging, body, currentProfile, log }) {
   const connectionId = normalizeString(body.connection_id || body.connectionId);
   if (!connectionId) throw new HttpError(400, 'connection_id is required');
 
@@ -1111,6 +1116,8 @@ async function actionAcceptConnection({ tables, body, currentProfile }) {
           rowId: opening.$id,
           data: {
             conversation: conversation.$id,
+            conversation_row_id: conversation.$id,
+            sender_row_id: relationId(opening.sender) || currentProfile.$id, // fallback safety
             delivery_status: 'delivered',
           },
         });
@@ -1201,7 +1208,7 @@ async function actionAcceptConnection({ tables, body, currentProfile }) {
       });
     });
 
-    return {
+    const result = {
       success: true,
       connection_id: connection.$id,
       conversation_id: conversation.$id,
@@ -1209,6 +1216,31 @@ async function actionAcceptConnection({ tables, body, currentProfile }) {
       compatibility_snapshot: compatibilitySnapshot,
       stage_progress: buildStageProgress('accepted'),
     };
+
+    // Non-fatal: send email notification to initiator if they opted in
+    try {
+      if (initiatorProfile.notify_new_connections && initiatorProfile.user_id) {
+        const acceptorName = currentProfile.first_name || currentProfile.username || 'Someone';
+        await messaging.createEmail(
+          ID.unique(),
+          `${acceptorName} accepted your connection on Supercharged`,
+          `Great news — ${acceptorName} has accepted your connection request. Head back to Supercharged to start your conversation.`,
+          [],
+          [initiatorProfile.user_id],
+        );
+        if (log) log(`Connection notification sent to ${initiatorProfile.user_id}`);
+      }
+    } catch (notifErr) {
+      if (log) log(`Connection notification failed (non-fatal): ${notifErr.message}`);
+      if (typeof Sentry !== 'undefined') {
+        Sentry.captureException(notifErr, {
+          tags: { context: 'connection_notification', userId: initiatorProfile.user_id },
+          level: 'warning'
+        });
+      }
+    }
+
+    return result;
   } catch (err) {
     for (const task of rollback.reverse()) {
       try {
@@ -1526,7 +1558,7 @@ async function actionListActive({ tables, body, currentProfile }) {
     const counterparty = counterpartyMap.get(counterpartyId);
     if (!counterparty) return null;
 
-    const conversationId = relationId(connection.conversation) || connection.conversation_row_id;
+    const conversationId = relationId(connection.conversation) || connection.conversation_row_id || connection.$id;
     let latestMessage = null;
     let unreadCount = 0;
     let memberRow = null;
@@ -1615,7 +1647,7 @@ async function actionGetConnection({ tables, body, currentProfile }) {
     actor: relationId(row.actor),
   }));
 
-  const conversationId = relationId(connection.conversation) || connection.conversation_row_id;
+  const conversationId = relationId(connection.conversation) || connection.conversation_row_id || connection.$id;
   let messagesTotal = 0;
   let lastContactAt = null;
   let responseRate = 0;
@@ -1824,40 +1856,45 @@ async function actionGetHomeFeed({ tables, body, currentProfile }) {
   const initiatorMap = new Map(initiatorProfiles.map((p) => [p.$id, p]));
 
   const pending = (await mapWithConcurrency(pendingOut.rows, async (connection) => {
-    const initiatorId = relationId(connection.initiator) || connection.initiator_profile_id;
-    const initiator = initiatorMap.get(initiatorId);
-    if (!initiator) return null;
+    try {
+      const initiatorId = relationId(connection.initiator) || connection.initiator_profile_id;
+      const initiator = initiatorMap.get(initiatorId);
+      if (!initiator) return null;
 
-    const score = await getCompatibilityScore(tables, currentProfile.user_id, initiator.user_id);
-    const snapshot = buildCompatibilitySnapshot({
-      profileA: currentProfile,
-      profileB: initiator,
-      baseScore: score,
-      generatedAt: now,
-    });
+      const score = await getCompatibilityScore(tables, currentProfile.user_id, initiator.user_id);
+      const snapshot = buildCompatibilitySnapshot({
+        profileA: currentProfile,
+        profileB: initiator,
+        baseScore: score,
+        generatedAt: now,
+      });
 
-    const photoIds = Array.isArray(initiator.photo_file_ids) ? initiator.photo_file_ids : [];
-    const firstPhotoId = photoIds.find((id) => typeof id === 'string' && id.trim());
-    const photo_url = buildPhotoUrl(endpoint, projectId, firstPhotoId);
+      const photoIds = Array.isArray(initiator.photo_file_ids) ? initiator.photo_file_ids : [];
+      const firstPhotoId = photoIds.find((id) => typeof id === 'string' && id.trim());
+      const photo_url = buildPhotoUrl(endpoint, projectId, firstPhotoId);
 
-    return {
-      id: connection.$id,
-      connection_id: connection.$id,
-      name: normalizeString(initiator.full_name) || 'Unknown user',
-      role: profileRole(initiator),
-      initials: initialsFromName(initiator.full_name),
-      color: colorFromName(initiator.full_name),
-      photo_url,
-      score: snapshot.score,
-      message: normalizeString(connection.opening_message_preview) || 'They would like to connect.',
-      time: relativeTime(connection.initiated_at),
-      compat_chips: snapshot.chips.slice(0, 3).map((c) => ({
-        kind: getChipKind(c.key),
-        label: c.label,
-      })),
-      compat_dims: snapshot.breakdown,
-      initiated_at: connection.initiated_at,
-    };
+      return {
+        id: connection.$id,
+        connection_id: connection.$id,
+        name: normalizeString(initiator.full_name) || 'Unknown user',
+        role: profileRole(initiator),
+        initials: initialsFromName(initiator.full_name),
+        color: colorFromName(initiator.full_name),
+        photo_url,
+        score: snapshot.score,
+        message: normalizeString(connection.opening_message_preview) || 'They would like to connect.',
+        time: relativeTime(connection.initiated_at),
+        compat_chips: snapshot.chips.slice(0, 3).map((c) => ({
+          kind: getChipKind(c.key),
+          label: c.label,
+        })),
+        compat_dims: snapshot.breakdown,
+        initiated_at: connection.initiated_at,
+      };
+    } catch (cardErr) {
+      // Don't let a single malformed connection crash the whole feed
+      return null;
+    }
   }, 8)).filter(Boolean);
 
   // ── 2. Stats ─────────────────────────────────────────────────────────────────
@@ -2079,6 +2116,7 @@ async function actionBootstrapInbox({ tables, body, currentProfile }) {
 
 export default async ({ req, res, log, error }) => {
   const tables = createTables();
+  const messaging = createMessaging();
 
   try {
     const body = parseBody(req);
@@ -2098,7 +2136,7 @@ export default async ({ req, res, log, error }) => {
         payload = await actionInitiateRequest({ tables, body, currentProfile });
         break;
       case 'accept_connection':
-        payload = await actionAcceptConnection({ tables, body, currentProfile });
+        payload = await actionAcceptConnection({ tables, messaging, body, currentProfile, log });
         break;
       case 'decline_connection':
         payload = await actionDeclineConnection({ tables, body, currentProfile });

@@ -156,10 +156,13 @@ export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap }) => {
   }, [index, deck.length, x]);
 
   const handleDragEnd = (_, info) => {
-    if (Math.abs(info.offset.x) > 90 || Math.abs(info.velocity.x) > 500) {
-      advance(info.offset.x < 0 ? 1 : -1);
+    const direction = info.offset.x < 0 ? 1 : -1;
+    const wouldBeOutOfBounds = index + direction < 0 || index + direction >= deck.length;
+
+    if ((Math.abs(info.offset.x) > 90 || Math.abs(info.velocity.x) > 500) && !wouldBeOutOfBounds) {
+      advance(direction);
     } else {
-      animate(x, 0, { type: 'spring', stiffness: 400, damping: 32 });
+      animate(x, 0, { type: 'spring', stiffness: 500, damping: 40, mass: 1 });
     }
   };
 

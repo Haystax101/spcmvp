@@ -4,6 +4,7 @@ import {
   functions,
   tables,
   client,
+  realtime,
   DB_ID,
   PROFILES_TABLE,
   CONNECTION_GATEWAY_FUNCTION_ID,
@@ -12,6 +13,7 @@ import {
 } from "./lib/appwrite";
 import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
 import { VoltzWallet } from "./components/VoltzSystem";
+import NotificationsPanel from "./components/NotificationsPanel";
 
 // ============================================================================
 // DATA
@@ -677,36 +679,77 @@ const NewFeed = ({ connections, onOpen, onReplyAI }) => (
 // NOTIFICATIONS PANEL
 // ============================================================================
 
-const NotifPanel = ({ open, items, onItemClick, onMarkAllRead, markingAllRead, panelRef }) => (
-  <div ref={panelRef} className={`sc-notif-panel ${open ? "visible" : ""}`}>
-    <div className="sc-notif-header">
-      <span className="sc-notif-title">Notifications</span>
-      <button className="sc-notif-mark" onClick={onMarkAllRead} disabled={markingAllRead}>
-        {markingAllRead ? "Marking..." : "Mark all read"}
-      </button>
+const NotifPanel = ({ open, items, onItemClick, onMarkAllRead, markingAllRead, panelRef, setNotifOpen }) => {
+  if (!open) return null;
+
+  // Transform legacy notification format to new format
+  const transformedNotifications = items.map((n) => ({
+    id: n.id || n.initials,
+    type: "initials",
+    initials: n.initials,
+    avatarBg: {
+      "red": "#E5484D",
+      "orange": "#F97316",
+      "amber": "#F5B800",
+      "green": "#22B37A",
+      "teal": "#14B8A6",
+      "blue": "#3B82F6",
+      "purple": "#7C6BF2",
+      "pink": "#F87171"
+    }[n.color] || "#7C6BF2",
+    body: n.text || n.body,
+    time: n.time || "now",
+    draft: false,
+    read: false,
+  }));
+
+  return (
+    <div
+      ref={panelRef}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 2000, // Ensure it's above everything
+        background: "rgba(0, 0, 0, 0.4)",
+        display: "flex",
+        alignItems: "flex-end", // Align to bottom
+        justifyContent: "center",
+        backdropFilter: "blur(4px)",
+        transition: "opacity 300ms ease",
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          setNotifOpen(false);
+        }
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 500, // Slightly wider for mobile comfort
+          maxHeight: "85vh",
+          animation: "slideUp 320ms cubic-bezier(0.16, 1, 0.3, 1)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <style>{`
+          @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+          }
+        `}</style>
+        <NotificationsPanel
+          notifications={transformedNotifications}
+          onNotificationPress={onItemClick}
+          onDraftPress={() => {}}
+          onMarkAllRead={onMarkAllRead}
+        />
+      </div>
     </div>
-    <div className="sc-notif-list">
-      {items.length === 0 ? (
-        <div className="sc-notif-empty">No new nudges — you're on top of it</div>
-      ) : (
-        items.map(n => {
-          const ctaLabel = n.kind === NOTIF_KIND_PENDING ? "Open request ›" : "Open chat ›";
-          return (
-          <div key={n.id} className="sc-notif-item" onClick={() => onItemClick(n)}>
-            <Avatar initials={n.initials} color={n.color} size={36} fontSize={12} />
-            <div className="sc-notif-body">
-              <div className="sc-notif-text">{n.text}</div>
-              <button className="sc-notif-cta" onClick={(e) => { e.stopPropagation(); onItemClick(n); }}>
-                {ctaLabel}
-              </button>
-            </div>
-            <div className="sc-notif-time">{n.time}</div>
-          </div>
-        )})
-      )}
-    </div>
-  </div>
-);
+  );
+};
 
 // ============================================================================
 // INBOX (assembled)
@@ -787,6 +830,41 @@ const Inbox = ({
     }));
   }, [conversations]);
 
+  if (notifOpen) {
+    // Transform legacy notification format to new format
+    const transformedNotifications = notifications.map((n) => ({
+      id: n.id || n.initials,
+      type: "initials",
+      initials: n.initials,
+      avatarBg: {
+        "red": "#E5484D",
+        "orange": "#F97316",
+        "amber": "#F5B800",
+        "green": "#22B37A",
+        "teal": "#14B8A6",
+        "blue": "#3B82F6",
+        "purple": "#7C6BF2",
+        "pink": "#F87171"
+      }[n.color] || "#7C6BF2",
+      body: n.text || n.body,
+      time: n.time || "now",
+      draft: false,
+      read: false,
+    }));
+
+    return (
+      <div className="sc-screen sc-screen-inbox" style={{ background: "#FFFFFF" }}>
+        <NotificationsPanel
+          notifications={transformedNotifications}
+          onNotificationPress={onNotifClick}
+          onDraftPress={() => {}}
+          onMarkAllRead={onMarkAllRead}
+          onBack={() => setNotifOpen(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="sc-screen sc-screen-inbox">
       <div className="sc-inbox-header">
@@ -832,15 +910,6 @@ const Inbox = ({
           ))}
         </div>
       )}
-
-      <NotifPanel
-        panelRef={notifRef}
-        open={notifOpen}
-        items={notifications}
-        onItemClick={onNotifClick}
-        onMarkAllRead={onMarkAllRead}
-        markingAllRead={markingAllRead}
-      />
     </div>
   );
 };
@@ -1652,7 +1721,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
   }, [backendReady, executeFunction]);
 
   const refreshInboxData = useCallback(async (profileOverride = null, options = {}) => {
-    const { showLoading = false } = options;
+    const { showLoading = false, forceRefresh = false } = options;
     if (!backendReady) {
       setInboxLoading(false);
       return;
@@ -1678,7 +1747,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
       setNotifications(cachedNotifications);
       setHasHydratedInbox(true);
       setInboxLoading(false);
-      if (Date.now() - (cached.savedAt || 0) < INBOX_CACHE_TTL_MS) {
+      if (!forceRefresh && Date.now() - (cached.savedAt || 0) < INBOX_CACHE_TTL_MS) {
         return true;
       }
     }
@@ -1808,26 +1877,82 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     clearTimeout(declineTimerRef.current);
   }, []);
 
+  // Keep a stable ref to refreshInboxData so the global realtime listener
+  // doesn't re-subscribe every time the callback reference changes.
+  const refreshInboxDataRef = useRef(refreshInboxData);
+  useEffect(() => {
+    refreshInboxDataRef.current = refreshInboxData;
+  }, [refreshInboxData]);
+
+  // Appwrite Realtime: Global listener for inbox updates
+  // Uses tablesdb.* channel prefix (TablesDB API) not databases.* (legacy Collections).
+  useEffect(() => {
+    if (!backendProfile?.$id) return;
+
+    const profileId = backendProfile.$id;
+    const channels = [
+      `tablesdb.${DB_ID}.tables.messages.rows`,
+      `tablesdb.${DB_ID}.tables.connections.rows`,
+    ];
+
+    const unsubscribe = realtime.subscribe(channels, (response) => {
+      const isCreate = response.events?.some(e => e.endsWith('.create'));
+      const isUpdate = response.events?.some(e => e.endsWith('.update'));
+      if (!isCreate && !isUpdate) return;
+
+      removeCacheEntry(INBOX_CACHE_KEY(profileId));
+      refreshInboxDataRef.current(null, { forceRefresh: true })
+        .catch(err => console.warn('Global realtime inbox refresh err:', err));
+    });
+
+    return () => unsubscribe();
+  }, [backendProfile, DB_ID]);
+
   // Appwrite Realtime: push new messages into the open conversation without polling
+  // Uses tablesdb.* channel prefix (TablesDB API) not databases.* (legacy Collections).
   useEffect(() => {
     if (!activeConversationId || !backendProfile?.$id) return;
 
-    const channel = `databases.${DB_ID}.collections.messages.documents`;
-    const unsubscribe = client.subscribe(channel, (response) => {
-      if (!response.events?.some(e => e.endsWith('.create'))) return;
+    const channel = `tablesdb.${DB_ID}.tables.messages.rows`;
+    const unsubscribe = realtime.subscribe(channel, (response) => {
+      const isCreate = response.events?.some(e => e.endsWith('.create'));
+      const isUpdate = response.events?.some(e => e.endsWith('.update'));
+      
+      if (!isCreate && !isUpdate) return;
+      
       const doc = response.payload;
       const docConvId = typeof doc.conversation === 'string' ? doc.conversation : doc.conversation?.$id;
       if (docConvId !== activeConversationId) return;
+      
       const senderId = typeof doc.sender === 'string' ? doc.sender : doc.sender?.$id;
       const isOutgoing = senderId === backendProfile.$id;
       const sentAt = doc.sent_at || new Date().toISOString();
-      setMessages(prev => {
-        if (prev.some(m => m.id === doc.$id)) return prev;
-        const newMsg = isOutgoing
-          ? { id: doc.$id, type: 'out', text: doc.body, time: formatChatTime(sentAt), read: false }
-          : { id: doc.$id, type: 'in', text: doc.body };
-        return [...prev, newMsg];
-      });
+
+      if (isCreate) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === doc.$id)) return prev;
+          const newMsg = isOutgoing
+            ? { id: doc.$id, type: 'out', text: doc.body, time: formatChatTime(sentAt), read: doc.delivery_status === 'read' }
+            : { id: doc.$id, type: 'in', text: doc.body };
+          return [...prev, newMsg];
+        });
+
+        // Automatically mark incoming messages as read if we have the chat open
+        if (!isOutgoing) {
+          executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
+            action: "mark_conversation_read",
+            conversation_id: activeConversationId,
+          }).catch(err => console.warn('Realtime mark read err:', err));
+        }
+      } else if (isUpdate) {
+        // Handle read receipts
+        setMessages(prev => prev.map(m => {
+          if (m.id === doc.$id && m.type === 'out') {
+            return { ...m, read: doc.delivery_status === 'read' };
+          }
+          return m;
+        }));
+      }
     });
 
     return () => unsubscribe();
@@ -2118,13 +2243,6 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     const fromDraft = nextSendFromDraft;
     setNextSendFromDraft(false);
 
-    const optimisticIndex = messages.length;
-    setTimeout(() => {
-      setMessages((curr) => curr.map((m, i) => (
-        i === optimisticIndex && m.type === "out" ? { ...m, read: true } : m
-      )));
-    }, 2000);
-
     if (fromDraft) earnVoltz("ai_draft_used");
 
     if (!backendReady || !backendProfile?.$id || !activeConversationId || previewMode) {
@@ -2148,9 +2266,10 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
 
       if (backendProfile?.$id && activeConversationId) {
         removeCacheEntry(THREAD_CACHE_KEY(backendProfile.$id, activeConversationId));
+        removeCacheEntry(INBOX_CACHE_KEY(backendProfile.$id));
       }
 
-      await refreshInboxData();
+      await refreshInboxData(null, { forceRefresh: true });
     } catch (err) {
       console.error("Send message failed:", err);
       earnVoltz("message_sent");

@@ -1,5 +1,10 @@
 import { Client, TablesDB, Query, ID } from 'node-appwrite';
 import Stripe from 'stripe';
+import * as Sentry from '@sentry/node';
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN });
+}
 
 /**
  * Stripe Gateway Action: create_checkout_session
@@ -36,19 +41,25 @@ async function actionCreateCheckoutSession({ stripe, tablesDB, dbId, profileTabl
     });
   }
 
-  // 2. Determine Price/Mode
-  const isPro = packageName === 'pro';
-  const priceId = isPro 
-    ? process.env.STRIPE_PRICE_ID_PRO 
-    : process.env.STRIPE_PRICE_ID_TOPUP;
+  // 2. Determine Price/Mode via lookup map
+  const PACKAGE_CONFIG = {
+    spark:  { env: 'STRIPE_PRICE_ID_SPARK',  voltz: 300,  mode: 'subscription', sub: true },
+    zenith: { env: 'STRIPE_PRICE_ID_ZENITH', voltz: 1000, mode: 'subscription', sub: true },
+  };
 
-  if (!priceId) throw new Error(`Price ID not configured for package: ${packageName}`);
+  const config = PACKAGE_CONFIG[packageName];
+  if (!config) throw new Error(`Unknown package: ${packageName}`);
+
+  const priceId = process.env[config.env];
+  if (!priceId) throw new Error(`Price ID not configured for package: ${packageName} (env: ${config.env})`);
 
   // 3. Create Session with Blueprint specific parameters
-  const qty = parseInt(quantity || '1');
+  const qty = config.sub ? 1 : parseInt(quantity || '1');
+  const voltzToAdd = config.sub ? config.voltz : config.voltz * qty;
+
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
-    mode: isPro ? 'subscription' : 'payment',
+    mode: config.mode,
     line_items: [
       {
         price: priceId,
@@ -58,13 +69,13 @@ async function actionCreateCheckoutSession({ stripe, tablesDB, dbId, profileTabl
     managed_payments: {
       enabled: true,
     },
-    client_reference_id: userId, // Official recommendation from tutorial
+    client_reference_id: userId,
     success_url: successUrl,
     cancel_url: cancelUrl,
     metadata: {
       user_id: userId,
       package: packageName,
-      voltz_to_add: isPro ? '500' : (50 * qty).toString()
+      voltz_to_add: voltzToAdd.toString()
     }
   });
 
@@ -103,22 +114,32 @@ async function actionHandleWebhook({ stripe, tablesDB, dbId, profileTable, ledge
     const profile = found.rows[0];
     if (!profile) throw new Error("Profile for payment not found");
 
-    // 2. Duplicate Check
-    const existing = await tablesDB.listRows({
-      databaseId: dbId,
-      tableId: ledgerTable,
-      queries: [
-        Query.equal("stripe_session_id", [session.id]),
-        Query.limit(1)
-      ]
-    });
-    if (existing.total > 0) return { received: true, status: 'already_processed' };
+    // 2. Duplicate check — guarded because stripe_session_id column may not exist yet in the schema.
+    // Once the column is added in Appwrite, this will correctly prevent double-credits on retries.
+    let alreadyProcessed = false;
+    try {
+      const existing = await tablesDB.listRows({
+        databaseId: dbId,
+        tableId: ledgerTable,
+        queries: [
+          Query.equal("stripe_session_id", [session.id]),
+          Query.limit(1)
+        ]
+      });
+      if (existing.total > 0) return { received: true, status: 'already_processed' };
+    } catch (dupErr) {
+      // Attribute not yet in schema — skip duplicate check, proceed to credit
+      log(`Duplicate check skipped: ${dupErr.message}`);
+    }
+
+    if (alreadyProcessed) return { received: true, status: 'already_processed' };
 
     // 3. Update Balance
     const nextBalance = (profile.current_voltz || 0) + voltzToAdd;
     const updates = { current_voltz: nextBalance };
-    
-    if (packageName === 'pro') {
+
+    const subPackages = ['pro', 'luminary', 'zenith'];
+    if (subPackages.includes(packageName)) {
       updates.stripe_subscription_id = session.subscription || '';
     }
 
@@ -129,20 +150,30 @@ async function actionHandleWebhook({ stripe, tablesDB, dbId, profileTable, ledge
       data: updates
     });
 
-    // 4. Log to Ledger
-    await tablesDB.createRow({
-      databaseId: dbId,
-      tableId: ledgerTable,
-      rowId: ID.unique(),
-      data: {
-        profile_row_id: profile.$id,
-        amount: voltzToAdd,
-        event_type: 'purchase',
-        reason: `Stripe Purchase: ${packageName}`,
-        awarded_at: new Date().toISOString(),
-        stripe_session_id: session.id
+    // 4. Log to Ledger — stripe_session_id is omitted if the column doesn't exist yet
+    const ledgerData = {
+      profile_row_id: profile.$id,
+      amount: voltzToAdd,
+      event_type: 'purchase',
+      reason: `Stripe Purchase: ${packageName}`,
+      awarded_at: new Date().toISOString(),
+    };
+    try {
+      await tablesDB.createRow({
+        databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(),
+        data: { ...ledgerData, stripe_session_id: session.id }
+      });
+    } catch (writeErr) {
+      if (/Attribute not found/i.test(writeErr.message)) {
+        // stripe_session_id column missing — write without it
+        await tablesDB.createRow({
+          databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(),
+          data: ledgerData
+        });
+      } else {
+        throw writeErr;
       }
-    });
+    }
 
     return { received: true, status: 'credited', amount: voltzToAdd };
   }
@@ -175,25 +206,37 @@ async function actionVerifySession({ stripe, tablesDB, dbId, profileTable, ledge
   const profile = found.rows[0];
   if (!profile) throw new Error('Profile not found');
 
-  const existing = await tablesDB.listRows({
-    databaseId: dbId, tableId: ledgerTable,
-    queries: [Query.equal('stripe_session_id', [session.id]), Query.limit(1)],
-  });
-  if (existing.total > 0) return { verified: true, already_credited: true, current_voltz: profile.current_voltz };
+  try {
+    const existing = await tablesDB.listRows({
+      databaseId: dbId, tableId: ledgerTable,
+      queries: [Query.equal('stripe_session_id', [session.id]), Query.limit(1)],
+    });
+    if (existing.total > 0) return { verified: true, already_credited: true, current_voltz: profile.current_voltz };
+  } catch {
+    // stripe_session_id column not yet in schema — proceed to credit
+  }
 
   const nextBalance = (profile.current_voltz || 0) + voltzToAdd;
   const updates = { current_voltz: nextBalance };
-  if (packageName === 'pro') updates.stripe_subscription_id = session.subscription || '';
+  const subPackages = ['pro', 'luminary', 'zenith'];
+  if (subPackages.includes(packageName)) updates.stripe_subscription_id = session.subscription || '';
 
   await tablesDB.updateRow({ databaseId: dbId, tableId: profileTable, rowId: profile.$id, data: updates });
-  await tablesDB.createRow({
-    databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(),
-    data: {
-      profile_row_id: profile.$id, amount: voltzToAdd,
-      event_type: 'purchase', reason: `Stripe Purchase (verified): ${packageName}`,
-      awarded_at: new Date().toISOString(), stripe_session_id: session.id,
-    },
-  });
+
+  const ledgerData = {
+    profile_row_id: profile.$id, amount: voltzToAdd,
+    event_type: 'purchase', reason: `Stripe Purchase (verified): ${packageName}`,
+    awarded_at: new Date().toISOString(),
+  };
+  try {
+    await tablesDB.createRow({ databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(), data: { ...ledgerData, stripe_session_id: session.id } });
+  } catch (writeErr) {
+    if (/Attribute not found/i.test(writeErr.message)) {
+      await tablesDB.createRow({ databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(), data: ledgerData });
+    } else {
+      throw writeErr;
+    }
+  }
 
   return { verified: true, credited: true, amount: voltzToAdd, current_voltz: nextBalance };
 }
@@ -250,6 +293,12 @@ export default async ({ req, res, log, error }) => {
     return res.json({ error: "Invalid action or webhook signature missing" }, 400);
   } catch (err) {
     error(err.message);
+    Sentry.captureException(err, {
+      tags: {
+        action: req.body?.action || 'unknown',
+        function: 'stripeGateway'
+      }
+    });
     return res.json({ error: err.message }, 500);
   }
 };

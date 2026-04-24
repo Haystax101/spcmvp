@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion as Motion, AnimatePresence } from 'framer-motion'
+import * as Sentry from '@sentry/react'
 import {
   ChevronRight,
   ChevronLeft,
@@ -11,12 +12,14 @@ import {
   UserCircle
 } from 'lucide-react'
 import { tables, account, functions, DB_ID, PROFILES_TABLE, DISCOVERY_FUNCTION_ID, ID, Query } from './lib/appwrite'
+import { track, captureError, identifyUser, logoutUser } from './lib/tracking'
 import SearchScreen from './components/SearchScreen'
 import NewOnboarding from './NewOnboarding'
 import SuperchargedInbox from './SuperchargedInbox'
 import SuperchargedProfile from './supercharged_v18'
 import HomeScreen from './HomeScreen'
-import { VoltzWallet, VoltzPurchaseModal } from './components/VoltzSystem'
+import { VoltzWallet } from './components/VoltzSystem'
+import VoltzOverlay from './components/voltz/VoltzOverlay'
 
 const OXFORD_COLLEGES = [
   'All Souls', 'Balliol', 'Brasenose', 'Christ Church', 'Corpus Christi', 'Exeter', 
@@ -107,16 +110,22 @@ function AuthScreen({ onAuth }) {
       }
 
       if (mode === 'signup') {
+        track.signupAttempted()
         const tempName = email.split('@')[0]
         await account.create(ID.unique(), email, password, tempName)
         await account.createEmailPasswordSession(email, password)
+        track.signupCompleted()
       } else {
+        track.signinAttempted()
         await account.createEmailPasswordSession(email, password)
+        track.signinCompleted()
       }
       const user = await account.get()
       onAuth(user)
     } catch (err) {
-      setError(err.message || 'Authentication failed')
+      const message = err.message || 'Authentication failed'
+      setError(message)
+      captureError(err, { context: 'auth_submit', mode })
     } finally {
       setLoading(false)
     }
@@ -1303,9 +1312,52 @@ function MatchCard({ match, rank }) {
 }
 
 // ─── Main App Navigation ─────────────────────────────────────────────────────────
-function MainApp({ profile, user }) {
+function MainApp({ profile: initialProfile, onProfileUpdate, user }) {
+  const [profile, setProfile] = useState(initialProfile)
   const [activeScreen, setActiveScreen] = useState('home')
   const [showVoltzModal, setShowVoltzModal] = useState(false)
+  const [pendingConfirmation, setPendingConfirmation] = useState(null)
+
+  const handleProfileUpdate = (updatedProfile) => {
+    setProfile(updatedProfile)
+    if (onProfileUpdate) onProfileUpdate(updatedProfile)
+  }
+
+  // Verify any pending Stripe payment on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.get('payment')) return
+    window.history.replaceState({}, '', window.location.pathname)
+    const sessionId = localStorage.getItem('sc_pending_stripe_session')
+    if (!sessionId || !profile) return
+    localStorage.removeItem('sc_pending_stripe_session')
+    ;(async () => {
+      try {
+        const execution = await functions.createExecution(
+          'stripeGateway',
+          JSON.stringify({ action: 'verify_session', session_id: sessionId }),
+          false
+        )
+        const data = JSON.parse(execution.responseBody || '{}')
+        if (data.verified && (data.credited || data.already_credited) && typeof data.current_voltz === 'number') {
+          const updatedProfile = { ...profile, current_voltz: data.current_voltz }
+          handleProfileUpdate(updatedProfile)
+          setPendingConfirmation({
+            type: 'voltz',
+            packageName: data.package || 'purchase',
+            voltzAdded: data.amount || 0,
+            bonusVoltz: Math.floor((data.amount || 0) * 0.05),
+            baseVoltz: data.amount || 0,
+            newBalance: data.current_voltz,
+          })
+          setShowVoltzModal(true)
+        }
+      } catch (err) {
+        console.warn('Payment verification failed:', err)
+        captureError(err, { context: 'payment_verification_on_return' })
+      }
+    })()
+  }, [])
 
   const navItems = [
     { key: 'home', label: 'Home', Icon: HomeIcon },
@@ -1345,11 +1397,13 @@ function MainApp({ profile, user }) {
       {activeScreen === 'inbox' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedInbox currentUserProfile={profile} voltzBalance={profile?.current_voltz ?? 0} onOpenVoltzModal={() => setShowVoltzModal(true)} /></div>}
       {activeScreen === 'profile' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedProfile /></div>}
 
-      <VoltzPurchaseModal
+      <VoltzOverlay
         open={showVoltzModal}
-        onClose={() => setShowVoltzModal(false)}
-        currentBalance={profile?.current_voltz ?? 0}
-        userId={profile?.user_id ?? profile?.$id}
+        onClose={() => { setShowVoltzModal(false); setPendingConfirmation(null); }}
+        profile={profile}
+        onProfileUpdate={handleProfileUpdate}
+        initialScreen={pendingConfirmation ? 'confirmation' : undefined}
+        initialResult={pendingConfirmation}
       />
 
       <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-3">
@@ -1388,25 +1442,10 @@ function App() {
   const [docId, setDocId] = useState(null)
   const [profile, setProfile] = useState(null)
 
-  // Verify a pending Stripe session on return from checkout
-  const verifyPendingPayment = useCallback(async (currentProfile) => {
-    const sessionId = localStorage.getItem('sc_pending_stripe_session')
-    if (!sessionId || !currentProfile) return null
-    localStorage.removeItem('sc_pending_stripe_session')
-    try {
-      const execution = await functions.createExecution(
-        'stripeGateway',
-        JSON.stringify({ action: 'verify_session', session_id: sessionId }),
-        false
-      )
-      const data = JSON.parse(execution.responseBody || '{}')
-      if (data.verified && (data.credited || data.already_credited) && typeof data.current_voltz === 'number') {
-        return data.current_voltz
-      }
-    } catch (err) {
-      console.warn('Payment verification failed:', err)
-    }
-    return null
+  // Capture referral code from URL on first load
+  useEffect(() => {
+    const refCode = new URLSearchParams(window.location.search).get('ref')
+    if (refCode) sessionStorage.setItem('sc_referral_code', refCode)
   }, [])
 
   const checkSession = async () => {
@@ -1415,7 +1454,9 @@ function App() {
     try {
       authenticatedUser = await account.get()
       setUser(authenticatedUser)
+      identifyUser(authenticatedUser.$id, { email: authenticatedUser.email })
     } catch {
+      logoutUser()
       setUser(null)
       setProfile(null)
       setDocId(null)
@@ -1440,12 +1481,15 @@ function App() {
         } else {
           setDocId(existingProfile.$id)
           setStep('onboarding')
+          track.onboardingStarted()
         }
       } else {
         setStep('onboarding')
+        track.onboardingStarted()
       }
     } catch (err) {
       console.error('Profile lookup failed for active session:', err)
+      captureError(err, { context: 'profile_lookup_on_session_check' })
       setProfile(null)
       setDocId(null)
       setStep('onboarding')
@@ -1457,23 +1501,18 @@ function App() {
     checkSession()
   }, [])
 
-  // After discovery step loads: verify any pending Stripe payment
-  useEffect(() => {
-    if (step !== 'discovery' || !profile) return
-    const params = new URLSearchParams(window.location.search)
-    if (!params.get('payment')) return
-    // Clear the query param
-    window.history.replaceState({}, '', window.location.pathname)
-    verifyPendingPayment(profile).then(newBalance => {
-      if (newBalance !== null) {
-        setProfile(prev => prev ? { ...prev, current_voltz: newBalance } : prev)
-      }
-    })
-  }, [step, profile, verifyPendingPayment])
-
-  const handleAuth = () => { checkSession() }
-  const handleOnboardingComplete = (id) => { setDocId(id); setStep('loading') }
-  const handleSynced = (doc) => { setProfile(doc); setStep('discovery') }
+  const handleAuth = () => {
+    checkSession()
+  }
+  const handleOnboardingComplete = (id) => {
+    track.onboardingCompleted()
+    setDocId(id)
+    setStep('loading')
+  }
+  const handleSynced = (doc) => {
+    setProfile(doc)
+    setStep('discovery')
+  }
 
   return (
     <div className="selection:bg-accent selection:text-text">
@@ -1484,9 +1523,15 @@ function App() {
       )}
       {step === 'onboarding' && <NewOnboarding user={user} onAuth={handleAuth} onComplete={handleOnboardingComplete} />}
       {step === 'loading' && <LoadingScreen docId={docId} onReady={handleSynced} />}
-      {step === 'discovery' && <MainApp profile={profile} user={user} />}
+      {step === 'discovery' && (
+        <MainApp
+          profile={profile}
+          user={user}
+          onProfileUpdate={(p) => setProfile(p)}
+        />
+      )}
     </div>
   )
 }
 
-export default App
+export default Sentry.withProfiler(App)

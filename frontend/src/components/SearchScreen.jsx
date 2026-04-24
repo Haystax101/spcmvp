@@ -405,7 +405,7 @@ function ProfileDetailView({ person, onBack, onConnect }) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: C.paper, animation: 'sc-push-in 300ms ease-out', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 88 }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px) + 20px)' }}>
 
         {/* Header */}
         <div style={{ padding: '14px 24px 18px', display: 'grid', gridTemplateColumns: '24px 1fr 24px', alignItems: 'center', gap: 8, animation: 'sc-fade-up 400ms ease-out 50ms both' }}>
@@ -483,7 +483,7 @@ function ProfileDetailView({ person, onBack, onConnect }) {
       </div>
 
       {/* Pinned Connect CTA */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: C.paper, padding: '16px 20px 28px', boxShadow: '0 -12px 24px rgba(255,255,255,0.95)', flexShrink: 0 }}>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: C.paper, padding: '16px 20px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -12px 24px rgba(255,255,255,0.95)', flexShrink: 0, zIndex: 10 }}>
         <button onClick={() => onConnect(person)} style={{ width: '100%', height: 52, background: C.ink, color: C.paper, border: 'none', borderRadius: 999, fontSize: 15, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", cursor: 'pointer' }}>
           Connect
         </button>

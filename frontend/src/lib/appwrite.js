@@ -1,4 +1,4 @@
-import { Client, TablesDB, Account, Functions, Storage, ID, Query, Permission, Role } from 'appwrite';
+import { Client, TablesDB, Account, Functions, Storage, ID, Query, Permission, Role, Realtime } from 'appwrite';
 
 const client = new Client()
     .setEndpoint(import.meta.env.VITE_APPWRITE_ENDPOINT)
@@ -8,6 +8,7 @@ export const tables = new TablesDB(client);
 export const account = new Account(client);
 export const functions = new Functions(client);
 export const storage = new Storage(client);
+export const realtime = new Realtime(client);
 export const DB_ID = import.meta.env.VITE_APPWRITE_DB;
 export const PROFILES_TABLE = import.meta.env.VITE_APPWRITE_TABLE_PROFILES || import.meta.env.VITE_APPWRITE_COLLECTION_PROFILES;
 export const DISCOVERY_FUNCTION_ID = import.meta.env.VITE_DISCOVERY_FUNCTION_ID;
