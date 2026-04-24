@@ -1800,9 +1800,11 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
         setConversations([]);
       }
 
+      const activeIds = new Set(mappedConversations.map(c => c.id));
       const mappedPending = (pendingData?.connections || [])
         .map(mapNewConnectionFromBackend)
-        .filter(Boolean);
+        .filter(Boolean)
+        .filter(c => !activeIds.has(c.id));
       setNewConnections(mappedPending);
 
       const nextNotifications = buildLiveNotifications(mappedConversations, mappedPending);
@@ -1864,13 +1866,13 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     if (!backendReady || !backendProfile?.$id) return undefined;
 
     const timer = setInterval(() => {
-      refreshInboxData(null, { showLoading: false }).catch((err) => {
+      refreshInboxDataRef.current(null, { showLoading: false }).catch((err) => {
         console.error("Inbox poll refresh failed:", err);
       });
     }, 30000);
 
     return () => clearInterval(timer);
-  }, [backendReady, backendProfile, refreshInboxData]);
+  }, [backendReady, backendProfile]); // refreshInboxData removed from deps
 
   useEffect(() => () => {
     clearTimeout(toastTimerRef.current);
@@ -1895,18 +1897,43 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
       `tablesdb.${DB_ID}.tables.connections.rows`,
     ];
 
-    const unsubscribe = realtime.subscribe(channels, (response) => {
-      const isCreate = response.events?.some(e => e.endsWith('.create'));
-      const isUpdate = response.events?.some(e => e.endsWith('.update'));
-      if (!isCreate && !isUpdate) return;
+    let unsubscribe;
+    const initRealtime = async () => {
+      try {
+        unsubscribe = await realtime.subscribe(channels, (response) => {
+          const isCreate = response.events?.some(e => e.endsWith('.create'));
+          const isUpdate = response.events?.some(e => e.endsWith('.update'));
+          if (!isCreate && !isUpdate) return;
 
-      removeCacheEntry(INBOX_CACHE_KEY(profileId));
-      refreshInboxDataRef.current(null, { forceRefresh: true })
-        .catch(err => console.warn('Global realtime inbox refresh err:', err));
-    });
+          removeCacheEntry(INBOX_CACHE_KEY(profileId));
+          refreshInboxDataRef.current(null, { forceRefresh: true })
+            .catch(err => console.warn('Global realtime inbox refresh err:', err));
+        });
+      } catch (err) {
+        console.error('Failed to subscribe to global realtime:', err);
+      }
+    };
 
-    return () => unsubscribe();
+    initRealtime();
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      } else if (unsubscribe?.unsubscribe) {
+        unsubscribe.unsubscribe();
+      }
+    };
   }, [backendProfile, DB_ID]);
+
+  // Fallback: More aggressive polling when inbox is active (realtime may not capture all new messages due to access control scoping)
+  useEffect(() => {
+    if (!backendReady || !backendProfile?.$id || chatActive) return undefined;
+    const timer = setInterval(() => {
+      refreshInboxDataRef.current(null, { showLoading: false }).catch((err) => {
+        console.warn('Fallback inbox poll failed:', err);
+      });
+    }, 8000); // Poll every 8s when in inbox (vs 30s when inactive)
+    return () => clearInterval(timer);
+  }, [backendReady, backendProfile, chatActive]);
 
   // Appwrite Realtime: push new messages into the open conversation without polling
   // Uses tablesdb.* channel prefix (TablesDB API) not databases.* (legacy Collections).
@@ -1914,48 +1941,62 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     if (!activeConversationId || !backendProfile?.$id) return;
 
     const channel = `tablesdb.${DB_ID}.tables.messages.rows`;
-    const unsubscribe = realtime.subscribe(channel, (response) => {
-      const isCreate = response.events?.some(e => e.endsWith('.create'));
-      const isUpdate = response.events?.some(e => e.endsWith('.update'));
-      
-      if (!isCreate && !isUpdate) return;
-      
-      const doc = response.payload;
-      const docConvId = typeof doc.conversation === 'string' ? doc.conversation : doc.conversation?.$id;
-      if (docConvId !== activeConversationId) return;
-      
-      const senderId = typeof doc.sender === 'string' ? doc.sender : doc.sender?.$id;
-      const isOutgoing = senderId === backendProfile.$id;
-      const sentAt = doc.sent_at || new Date().toISOString();
+    let unsubscribe;
+    const initChatRealtime = async () => {
+      try {
+        unsubscribe = await realtime.subscribe(channel, (response) => {
+          const isCreate = response.events?.some(e => e.endsWith('.create'));
+          const isUpdate = response.events?.some(e => e.endsWith('.update'));
+          
+          if (!isCreate && !isUpdate) return;
+          
+          const doc = response.payload;
+          const docConvId = typeof doc.conversation === 'string' ? doc.conversation : doc.conversation?.$id;
+          if (docConvId !== activeConversationId) return;
+          
+          const senderId = typeof doc.sender === 'string' ? doc.sender : doc.sender?.$id;
+          const isOutgoing = senderId === backendProfile.$id;
+          const sentAt = doc.sent_at || new Date().toISOString();
 
-      if (isCreate) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === doc.$id)) return prev;
-          const newMsg = isOutgoing
-            ? { id: doc.$id, type: 'out', text: doc.body, time: formatChatTime(sentAt), read: doc.delivery_status === 'read' }
-            : { id: doc.$id, type: 'in', text: doc.body };
-          return [...prev, newMsg];
-        });
+          if (isCreate) {
+            setMessages(prev => {
+              if (prev.some(m => m.id === doc.$id)) return prev;
+              const newMsg = isOutgoing
+                ? { id: doc.$id, type: 'out', text: doc.body, time: formatChatTime(sentAt), read: doc.delivery_status === 'read' }
+                : { id: doc.$id, type: 'in', text: doc.body };
+              return [...prev, newMsg];
+            });
 
-        // Automatically mark incoming messages as read if we have the chat open
-        if (!isOutgoing) {
-          executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
-            action: "mark_conversation_read",
-            conversation_id: activeConversationId,
-          }).catch(err => console.warn('Realtime mark read err:', err));
-        }
-      } else if (isUpdate) {
-        // Handle read receipts
-        setMessages(prev => prev.map(m => {
-          if (m.id === doc.$id && m.type === 'out') {
-            return { ...m, read: doc.delivery_status === 'read' };
+            // Automatically mark incoming messages as read if we have the chat open
+            if (!isOutgoing) {
+              executeFunction(MESSAGE_GATEWAY_FUNCTION_ID, {
+                action: "mark_conversation_read",
+                conversation_id: activeConversationId,
+              }).catch(err => console.warn('Realtime mark read err:', err));
+            }
+          } else if (isUpdate) {
+            // Handle read receipts
+            setMessages(prev => prev.map(m => {
+              if (m.id === doc.$id && m.type === 'out') {
+                return { ...m, read: doc.delivery_status === 'read' };
+              }
+              return m;
+            }));
           }
-          return m;
-        }));
+        });
+      } catch (err) {
+        console.error('Failed to subscribe to chat realtime:', err);
       }
-    });
+    };
 
-    return () => unsubscribe();
+    initChatRealtime();
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      } else if (unsubscribe?.unsubscribe) {
+        unsubscribe.unsubscribe();
+      }
+    };
   }, [activeConversationId, backendProfile, DB_ID]);
 
   // --- handlers ---
