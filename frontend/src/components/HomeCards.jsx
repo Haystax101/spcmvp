@@ -102,8 +102,13 @@ export const NewConnectionCard = ({ p, onAccept, onDecline, onCompatTap }) => (
 );
 
 export const SurfacedCard = ({ p, onSkip, onConnect, onCompatTap }) => {
-  const intentMatch  = p.primary_intent || p.career_field || 'Intent match';
-  const profileMatch = p.college ? `${p.college} alumni` : 'Profile match';
+  const pills = [
+    p.primary_intent && { label: p.primary_intent, dot: 'var(--dim-intent)', border: 'rgba(61,170,130,0.3)', bg: 'rgba(61,170,130,0.08)' },
+    p.college && { label: `${p.college} alumni`, dot: 'var(--dim-resonance)', border: 'rgba(155,124,246,0.3)', bg: 'rgba(155,124,246,0.08)' },
+    p.year_of_study && { label: p.year_of_study, dot: '#F59E0B', border: 'rgba(245,158,11,0.3)', bg: 'rgba(245,158,11,0.08)' },
+    (p.career_field || p.study_subject) && { label: p.career_field || p.study_subject, dot: 'var(--text3)', border: 'rgba(175,175,175,0.3)', bg: 'rgba(175,175,175,0.08)' },
+  ].filter(Boolean).slice(0, 4);
+
   return (
     <>
       <CardPhoto p={p} onCompatTap={onCompatTap} />
@@ -118,15 +123,13 @@ export const SurfacedCard = ({ p, onSkip, onConnect, onCompatTap }) => {
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {p.hook || p.building_description || p.match_reason || `${p.career_field || 'Building'} · ${p.college || 'Oxford'}`}
         </motion.div>
-        <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(61,170,130,0.3)', borderRadius: 999, padding: '4px 10px', background: 'rgba(61,170,130,0.08)', fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 11, color: 'var(--dim-intent)', whiteSpace: 'nowrap' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--dim-intent)', flexShrink: 0 }} />
-            {String(intentMatch).length > 24 ? String(intentMatch).slice(0, 24) + '…' : intentMatch}
-          </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: '1px solid rgba(155,124,246,0.3)', borderRadius: 999, padding: '4px 10px', background: 'rgba(155,124,246,0.08)', fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 11, color: 'var(--dim-resonance)', whiteSpace: 'nowrap' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--dim-resonance)', flexShrink: 0 }} />
-            {profileMatch}
-          </div>
+        <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {pills.map((pill, i) => (
+            <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${pill.border}`, borderRadius: 999, padding: '4px 10px', background: pill.bg, fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 11, color: pill.dot, whiteSpace: 'nowrap' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: pill.dot, flexShrink: 0 }} />
+              {String(pill.label).length > 20 ? String(pill.label).slice(0, 20) + '…' : pill.label}
+            </div>
+          ))}
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
           <CardButton variant="secondary" onClick={onSkip}>Skip</CardButton>
@@ -137,7 +140,7 @@ export const SurfacedCard = ({ p, onSkip, onConnect, onCompatTap }) => {
   );
 };
 
-export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap }) => {
+export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap, onViewInbox }) => {
   const [index, setIndex] = useState(0);
   const [swipeDir, setSwipeDir] = useState(0);
   const x = useMotionValue(0);
@@ -167,9 +170,13 @@ export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap }) => {
   };
 
   if (!deck.length) return (
-    <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text3)', fontFamily: 'var(--font-sans)', fontSize: 14 }}>
+    <motion.div
+      whileTap={{ scale: 0.98 }}
+      onClick={onViewInbox}
+      style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text3)', fontFamily: 'var(--font-sans)', fontSize: 14, cursor: onViewInbox ? 'pointer' : 'default', userSelect: 'none' }}>
       {tab === 'new' ? 'No new connection requests' : 'No surfaced connections right now'}
-    </div>
+      {onViewInbox && <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text2)' }}>Tap to view inbox →</div>}
+    </motion.div>
   );
 
   const p = deck[index];

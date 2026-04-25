@@ -1340,14 +1340,22 @@ function MainApp({ profile: initialProfile, onProfileUpdate, user }) {
         )
         const data = JSON.parse(execution.responseBody || '{}')
         if (data.verified && (data.credited || data.already_credited) && typeof data.current_voltz === 'number') {
+          // Hardcode voltz amounts based on package
+          const PACKAGE_VOLTZ = {
+            spark: 300,
+            zenith: 1000,
+          };
+          const baseVoltz = PACKAGE_VOLTZ[data.package] || data.amount || 0;
+          const bonusVoltz = 100;
+
           const updatedProfile = { ...profile, current_voltz: data.current_voltz }
           handleProfileUpdate(updatedProfile)
           setPendingConfirmation({
             type: 'voltz',
             packageName: data.package || 'purchase',
-            voltzAdded: data.amount || 0,
-            bonusVoltz: Math.floor((data.amount || 0) * 0.05),
-            baseVoltz: data.amount || 0,
+            voltzAdded: baseVoltz,
+            bonusVoltz,
+            baseVoltz,
             newBalance: data.current_voltz,
           })
           setShowVoltzModal(true)

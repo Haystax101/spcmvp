@@ -1827,7 +1827,7 @@
         },
         {
             "$id": "voltz_ledger",
-            "$permissions": [],
+            "$permissions": ["read(\"users\")"],
             "databaseId": "supercharged",
             "name": "Voltz Ledger",
             "enabled": true,

@@ -21,13 +21,13 @@ const COMPOSE_CSS = `
 .csc-bubble-in { background:#F0EDE8; border:none; border-radius:22px; padding:10px 14px; font-weight:400; font-size:14px; color:#1A1A1A; line-height:1.55; max-width:100%; }
 .csc-bubble-out-wrap { align-self:flex-end; max-width:78%; display:flex; flex-direction:column; align-items:flex-end; }
 .csc-bubble-out { background:#1A1A1A; border:none; border-radius:22px; padding:10px 14px; font-weight:400; font-size:14px; color:#FFFEFD; line-height:1.55; }
-.csc-input-bar { border-top:1px solid #DDDBD8; padding:10px 16px 18px; display:flex; align-items:center; gap:10px; background:#FFFEFD; flex-shrink:0; }
-.csc-ai-orb { width:36px; height:36px; border-radius:50%; border:1.5px solid #1A1A1A; background:#FFFEFD; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
-.csc-input-field { flex:1; border:1.5px solid #1A1A1A; border-radius:999px; background:#FFFEFD; padding:4px 4px 4px 16px; display:flex; align-items:center; gap:8px; min-height:40px; position:relative; }
-.csc-input-field textarea { flex:1; border:none; outline:none; background:transparent; font-family:'DM Sans',sans-serif; font-weight:400; font-size:14px; color:#1A1A1A; padding:6px 0; min-width:0; resize:none; max-height:100px; overflow-y:auto; line-height:1.5; }
+.csc-input-bar { border-top:1px solid #DDDBD8; border-bottom:none; padding:10px 16px 18px; display:flex; align-items:center; gap:10px; background:#FFFEFD; flex-shrink:0; }
+.csc-ai-orb { width:36px; height:36px; border-radius:50%; border:1.5px solid #1A1A1A; background:#FFFEFD; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#F59E0B; }
+.csc-input-field { flex:1; border:1.5px solid #1A1A1A; border-radius:999px; background:#FFFEFD; padding:4px 4px 4px 16px; display:flex; align-items:center; gap:8px; min-height:40px; position:relative; border-bottom:none; }
+.csc-input-field textarea { flex:1; border:none; outline:none; background:transparent; font-family:'DM Sans',sans-serif; font-weight:400; font-size:16px; color:#1A1A1A; padding:6px 0; min-width:0; resize:none; max-height:100px; overflow-y:auto; line-height:1.5; }
 .csc-input-field textarea::placeholder { color:#AFAFAF; }
 .csc-send-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; flex-shrink:0; transition:all 0.15s ease; }
-.csc-send-btn.active { background:#1A1A1A; }
+.csc-send-btn.active { background:#007AFF; }
 .csc-send-btn.inactive { background:#F2F0EC; opacity:0.5; cursor:not-allowed; }
 .csc-ai-sheet-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.3); z-index:50; }
 .csc-ai-sheet { position:absolute; left:0; right:0; bottom:0; background:#FFFEFD; border-radius:22px 22px 0 0; padding:0 20px 32px; z-index:51; }
@@ -50,7 +50,7 @@ export default function ComposeScreen({ person, onClose, onSend }) {
   const [aiOpen, setAiOpen] = useState(false);
   const [aiDraft, setAiDraft] = useState('');
   const textareaRef = useRef(null);
-  const canSend = text.trim().length >= 10 && !drafting;
+  const canSend = text.trim().length >= 1 && !drafting;
 
   useEffect(() => {
     const style = document.getElementById('csc-styles');
@@ -107,6 +107,7 @@ export default function ComposeScreen({ person, onClose, onSend }) {
 
   const handleSend = () => {
     if (!canSend) return;
+    setText('');
     onSend(text.trim());
   };
 

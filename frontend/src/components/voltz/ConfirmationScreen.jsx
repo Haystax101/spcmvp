@@ -34,7 +34,15 @@ export default function ConfirmationScreen({ result, voltzBalance, onHome }) {
 
   const isVoltz = result.type === "voltz";
   const bonusV = result.bonusVoltz || 0;
-  const mainVoltz = isVoltz ? result.baseVoltz : (result.item?.voltzPerMonth || result.voltzAdded || 0);
+
+  // Hardcode voltz amounts based on package
+  const PACKAGE_VOLTZ = {
+    spark: 300,
+    zenith: 1000,
+  };
+  const mainVoltz = isVoltz
+    ? (PACKAGE_VOLTZ[result.packageName] || result.baseVoltz || 0)
+    : (result.item?.voltzPerMonth || result.voltzAdded || 0);
   const newBalance = voltzBalance;
 
   return (

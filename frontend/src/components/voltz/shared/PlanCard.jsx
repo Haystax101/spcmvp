@@ -7,12 +7,12 @@ function PriceBlock({ price, original, suffix, big = false }) {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1 }}>
       {original && (
         <span style={{ fontFamily: SANS, fontSize: 11, color: C.muted, textDecoration: "line-through", marginBottom: 4 }}>
-          ${original.toFixed(2)}
+          £{original.toFixed(2)}
         </span>
       )}
       <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
         <span style={{ fontFamily: SERIF, fontSize: big ? 36 : 20, fontWeight: 600, color: C.text, letterSpacing: big ? "-0.01em" : "0" }}>
-          ${price.toFixed(2)}
+          £{price.toFixed(2)}
         </span>
         {suffix && (
           <span style={{ fontFamily: SANS, fontSize: big ? 14 : 12, color: C.secondary }}>

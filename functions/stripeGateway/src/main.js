@@ -1,4 +1,4 @@
-import { Client, TablesDB, Query, ID } from 'node-appwrite';
+import { Client, TablesDB, Query, ID, Permission, Role } from 'node-appwrite';
 import Stripe from 'stripe';
 import * as Sentry from '@sentry/node';
 
@@ -135,7 +135,9 @@ async function actionHandleWebhook({ stripe, tablesDB, dbId, profileTable, ledge
     if (alreadyProcessed) return { received: true, status: 'already_processed' };
 
     // 3. Update Balance
-    const nextBalance = (profile.current_voltz || 0) + voltzToAdd;
+    const bonusVoltz = 100; // Always give 100 bonus voltz on purchase
+    const totalVoltzToAdd = voltzToAdd + bonusVoltz;
+    const nextBalance = (profile.current_voltz || 0) + totalVoltzToAdd;
     const updates = { current_voltz: nextBalance };
 
     const subPackages = ['pro', 'luminary', 'zenith'];
@@ -158,24 +160,51 @@ async function actionHandleWebhook({ stripe, tablesDB, dbId, profileTable, ledge
       reason: `Stripe Purchase: ${packageName}`,
       awarded_at: new Date().toISOString(),
     };
+
+    // Add row-level permissions so user can read their own ledger entry
+    const permissions = profile.user_id ? [Permission.read(Role.user(profile.user_id))] : [];
+
     try {
       await tablesDB.createRow({
         databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(),
-        data: { ...ledgerData, stripe_session_id: session.id }
+        data: { ...ledgerData, stripe_session_id: session.id },
+        permissions
       });
     } catch (writeErr) {
       if (/Attribute not found/i.test(writeErr.message)) {
         // stripe_session_id column missing — write without it
         await tablesDB.createRow({
           databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(),
-          data: ledgerData
+          data: ledgerData,
+          permissions
         });
       } else {
         throw writeErr;
       }
     }
 
-    return { received: true, status: 'credited', amount: voltzToAdd };
+    // Log bonus voltz
+    const bonusLedgerData = {
+      profile_row_id: profile.$id,
+      amount: bonusVoltz,
+      event_type: 'purchase_bonus',
+      reason: `Stripe Purchase Bonus: ${packageName}`,
+      awarded_at: new Date().toISOString(),
+    };
+
+    try {
+      await tablesDB.createRow({
+        databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(),
+        data: bonusLedgerData,
+        permissions
+      });
+    } catch (writeErr) {
+      if (!/Attribute not found/i.test(writeErr.message)) {
+        throw writeErr;
+      }
+    }
+
+    return { received: true, status: 'credited', amount: voltzToAdd, bonusVoltz, totalVoltz: totalVoltzToAdd };
   }
 
   return { received: true };
@@ -216,29 +245,51 @@ async function actionVerifySession({ stripe, tablesDB, dbId, profileTable, ledge
     // stripe_session_id column not yet in schema — proceed to credit
   }
 
-  const nextBalance = (profile.current_voltz || 0) + voltzToAdd;
+  const bonusVoltz = 100; // Always give 100 bonus voltz on purchase
+  const totalVoltzToAdd = voltzToAdd + bonusVoltz;
+  const nextBalance = (profile.current_voltz || 0) + totalVoltzToAdd;
   const updates = { current_voltz: nextBalance };
   const subPackages = ['pro', 'luminary', 'zenith'];
   if (subPackages.includes(packageName)) updates.stripe_subscription_id = session.subscription || '';
 
   await tablesDB.updateRow({ databaseId: dbId, tableId: profileTable, rowId: profile.$id, data: updates });
 
+  // Create ledger entry for purchased voltz
   const ledgerData = {
     profile_row_id: profile.$id, amount: voltzToAdd,
     event_type: 'purchase', reason: `Stripe Purchase (verified): ${packageName}`,
     awarded_at: new Date().toISOString(),
   };
+
+  // Add row-level permissions so user can read their own ledger entry
+  const permissions = profile.user_id ? [Permission.read(Role.user(profile.user_id))] : [];
+
   try {
-    await tablesDB.createRow({ databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(), data: { ...ledgerData, stripe_session_id: session.id } });
+    await tablesDB.createRow({ databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(), data: { ...ledgerData, stripe_session_id: session.id }, permissions });
   } catch (writeErr) {
     if (/Attribute not found/i.test(writeErr.message)) {
-      await tablesDB.createRow({ databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(), data: ledgerData });
+      await tablesDB.createRow({ databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(), data: ledgerData, permissions });
     } else {
       throw writeErr;
     }
   }
 
-  return { verified: true, credited: true, amount: voltzToAdd, current_voltz: nextBalance };
+  // Create ledger entry for bonus voltz
+  const bonusLedgerData = {
+    profile_row_id: profile.$id, amount: bonusVoltz,
+    event_type: 'purchase_bonus', reason: `Stripe Purchase Bonus: ${packageName}`,
+    awarded_at: new Date().toISOString(),
+  };
+
+  try {
+    await tablesDB.createRow({ databaseId: dbId, tableId: ledgerTable, rowId: ID.unique(), data: bonusLedgerData, permissions });
+  } catch (writeErr) {
+    if (!/Attribute not found/i.test(writeErr.message)) {
+      throw writeErr;
+    }
+  }
+
+  return { verified: true, credited: true, amount: voltzToAdd, bonusVoltz, totalVoltz: totalVoltzToAdd, current_voltz: nextBalance };
 }
 
 export default async ({ req, res, log, error }) => {
@@ -259,8 +310,10 @@ export default async ({ req, res, log, error }) => {
   try {
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     const { action } = payload;
+    log(`[stripeGateway] Received action: ${action}, payload keys: ${Object.keys(payload).join(',')}`);
 
     if (action === 'create_checkout_session') {
+      log(`[stripeGateway] Processing create_checkout_session for user ${payload.userId}, package ${payload.package}`);
       const result = await actionCreateCheckoutSession({
         stripe, tablesDB, dbId, profileTable,
         userId: payload.userId,

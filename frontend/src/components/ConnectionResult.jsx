@@ -20,7 +20,7 @@ export default function ConnectionResult({ person, type, onStartChatting, onBack
       style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', borderRadius: 44, overflow: 'hidden' }}
     >
       {/* Top half — photo or coloured bg with initials */}
-      <div style={{ flex: '0 0 52%', position: 'relative', background: person?.color || 'var(--dim-resonance)', overflow: 'hidden' }}>
+      <div style={{ flex: '0 0 58%', position: 'relative', background: person?.color || 'var(--dim-resonance)', overflow: 'hidden' }}>
         {(person?.photo_url || person?.photo) && (
           <img
             src={person.photo_url || person.photo}

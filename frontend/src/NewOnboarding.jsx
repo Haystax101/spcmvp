@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
+import { Eye, EyeOff } from 'lucide-react';
 import { account, tables, ID, DB_ID, PROFILES_TABLE, Query } from './lib/appwrite';
 import './NewOnboarding.css';
 
@@ -174,6 +175,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showEndScreen, setShowEndScreen] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
   const [existingSessionUser, setExistingSessionUser] = useState(user || null);
 
   useEffect(() => {
@@ -242,11 +244,11 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
       }
       if (answers['career']) cond.push('q-social');
     } else if (rank1Cat === 'social') {
-      cond = ['q-social', 'q-friendship'];
+      cond = ['q-social'];
     } else if (rank1Cat === 'romantic') {
-      cond = ['q-romantic-sexuality', 'q-romantic-status', 'q-dating', 'q-dating-appearance', 'q-dating-personality', 'q-dating-hobbies'];
+      cond = ['q-sexuality', 'q-romantic-status', 'q-dating', 'q-dating-appearance', 'q-dating-personality', 'q-dating-hobbies'];
     } else if (rank1Cat === 'academic') {
-      cond = ['q-intellect', 'q-study-wish', 'q-intellectual-ambition', 'q-intellectual-venue', 'q-conntype'];
+      cond = ['q-intellectual-venue', 'q-conntype'];
     }
     const post = ['q-hobby', 'q-societies', 'q-music', 'q-friends', 'confirm'];
     return [...pre, ...cond, ...post];
@@ -502,7 +504,20 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
       sessionStorage.removeItem('sc_referral_code');
       setLoading(false);
       setShowEndScreen(true);
+      setLoadProgress(0);
+
+      // Animate progress bar and trigger background loading
+      const startTime = Date.now();
+      const duration = 2400;
+      const progressInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min((elapsed / duration) * 100, 95);
+        setLoadProgress(progress);
+      }, 50);
+
       setTimeout(() => {
+        clearInterval(progressInterval);
+        setLoadProgress(100);
         onComplete(docId);
       }, 2500);
 
@@ -532,7 +547,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
       
       <div id="logo">
         <svg width="14" height="18" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842"/></svg>
-        <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 14, color: '#1A1A1A', letterSpacing: '-0.01em' }}>supercharged</span>
+        <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 14, color: '#1A1A1A', letterSpacing: '-0.01em' }}>upercharged</span>
       </div>
 
       <div id="progress-dots" style={{ opacity: (currentStep === 'cover' || currentStep === 'login' || INTERSTITIALS.includes(currentStep) || currentStep === 'confirm') ? 0 : 1 }}>
@@ -601,7 +616,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
               <button className="pw-toggle" type="button" onClick={() => setPwVisible(!pwVisible)} tabIndex="-1">
                 <svg width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round">
                   <path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z"/>
-                  {pwVisible ? <circle cx="10" cy="7" r="3"/> : <line x1="1" y1="7" x2="19" y2="7"/>}
+                  {!pwVisible ? <circle cx="10" cy="7" r="3"/> : <line x1="1" y1="7" x2="19" y2="7"/>}
                 </svg>
               </button>
             </div>
@@ -737,20 +752,14 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
             <div className="pw-wrap">
               <input autoFocus className="underline-input" type={pwVisible ? "text" : "password"} placeholder="Create password" value={password} onChange={e => setPassword(e.target.value)} />
               <button className="pw-toggle" type="button" onClick={() => setPwVisible(!pwVisible)} tabIndex="-1">
-                <svg width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round">
-                  <path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z"/>
-                  {pwVisible ? <circle cx="10" cy="7" r="3"/> : <line x1="1" y1="7" x2="19" y2="7"/>}
-                </svg>
+                {pwVisible ? <EyeOff size={18} color="var(--text3)" /> : <Eye size={18} color="var(--text3)" />}
               </button>
             </div>
             <div className="pw-spacer"></div>
             <div className="pw-wrap">
               <input className="underline-input" type={confirmPwVisible ? "text" : "password"} placeholder="Confirm password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && pwValid && handleSignUp()} />
               <button className="pw-toggle" type="button" onClick={() => setConfirmPwVisible(!confirmPwVisible)} tabIndex="-1">
-                <svg width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round">
-                  <path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z"/>
-                  {confirmPwVisible ? <circle cx="10" cy="7" r="3"/> : <line x1="1" y1="7" x2="19" y2="7"/>}
-                </svg>
+                {confirmPwVisible ? <EyeOff size={18} color="var(--text3)" /> : <Eye size={18} color="var(--text3)" />}
               </button>
             </div>
             <div className="input-error">{error || (password.length > 0 && confirmPassword.length > 0 && password !== confirmPassword ? "Passwords don't match." : '')}</div>
@@ -776,7 +785,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
             <h1 className="ob-heading sm">Which year are you in?</h1>
             <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us calibrate the kind of connections that make sense for where you are right now.</p>
             <div className="tap-cards">
-              {['First year', 'Second year', 'Third year', 'Fourth year or above', 'Postgraduate'].map(y => (
+              {['First year', 'Second year', 'Third year', 'Fourth year', 'Postgraduate'].map(y => (
                 <div key={y} className={`tap-card ${answers['year'] === y ? 'selected' : ''}`} onClick={() => updateAnswer('year', y)}>{y}</div>
               ))}
             </div>
@@ -787,7 +796,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
           {currentStep === '7' && (
 <StepWrapper key="7" currentStep={currentStep} id="7">
-            <h1 className="ob-heading" style={{ fontSize: 44 }}>Your profile runs<br/>in the background.</h1>
+            <h1 className="ob-heading interstitial-heading">Your profile runs<br/>in the background.</h1>
             <p className="ob-subtext" style={{ marginBottom: 0 }}>While you're in lectures, Supercharged is computing simulations. By the time you open the app, your best matches are already waiting.</p>
             <div className="flow-diagram">
               <div className="flow-node"><div className="flow-circle">&#128100;</div><div className="flow-label">Your profile</div></div>
@@ -808,10 +817,10 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
             <p className="ob-whisper" style={{ marginBottom: 20 }}>Your top priority determines who we surface first. You can select up to four.</p>
             <div className="rank-cards">
               {[
-                { id: 'professional', label: 'Professional', desc: 'Career, startups, investing, consulting, research' },
-                { id: 'social', label: 'Social', desc: 'Friendships, events, new people, community' },
+                { id: 'professional', label: 'Professional', desc: 'Career, startups, investing' },
+                { id: 'social', label: 'Social', desc: 'Friendships, events, new people' },
                 { id: 'romantic', label: 'Romantic', desc: 'Dating and relationships' },
-                { id: 'academic', label: 'Academic', desc: 'Study partners, intellectual exchange, research' }
+                { id: 'academic', label: 'Academic', desc: 'Study partners, intellectual exchange' }
               ].map(g => (
                 <div key={g.id} className={`rank-card ${userGoals.includes(g.id) ? 'selected' : ''}`} onClick={() => rankGoal(g.id)}>
                   <div className="rank-badge">{userGoals.indexOf(g.id) + 1 || ''}</div>
@@ -1038,11 +1047,11 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
           {currentStep === 'q-dating-hobbies' && (
 <StepWrapper key="q-dating-hobbies" currentStep={currentStep} id="q-dating-hobbies">
-            <h1 className="ob-heading sm">What would you want to do together?</h1>
+            <h1 className="ob-heading sm" style={{ marginTop: 12 }}>What would you want to do together?</h1>
             <p className="ob-subtext">The kind of person who would actually fit into your life.</p>
             <p className="ob-whisper" style={{ marginBottom: 16 }}>Compatibility on how you spend time matters as much as chemistry.</p>
             <div className="chip-grid">
-              {['Go to exhibitions or galleries', 'Cook or eat out', 'Hike or be outdoors', 'Go to gigs or festivals', 'Travel spontaneously', 'Stay in and watch films', 'Work out together', 'Talk for hours over coffee', 'Go out and socialise', 'Do creative things together'].map(c => (
+              {['Go to exhibitions or galleries', 'Cook or eat out', 'Hike or be outdoors', 'Go to gigs or festivals', 'Travel spontaneously', 'Stay in and watch films', 'Work out together', 'Talk for hours', 'Go out and socialise', 'Do creative things together'].map(c => (
                 <div key={c} className={`chip ${(answers['dhob']||[]).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('dhob', c)}>{c}</div>
               ))}
             </div>
@@ -1112,7 +1121,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
             <p className="ob-subtext">The people you'd actually want on here with you.</p>
             <p className="ob-whisper" style={{ marginBottom: 24 }}>We'll connect you automatically if they're already here, and give you a link to invite them if not.</p>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap', marginBottom: 8 }} id="friend-bubbles">
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'nowrap', marginBottom: 8 }} id="friend-bubbles">
               {[0, 1, 2].map((idx) => {
                 const visual = friendVisuals[idx];
                 const isActive = activeFriendPopover === idx;
@@ -1125,8 +1134,8 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
                       ref={(node) => { friendBubbleRefs.current[idx] = node; }}
                       onClick={() => openFriendPopover(idx)}
                       style={{
-                        width: 100,
-                        height: 100,
+                        width: 88,
+                        height: 88,
                         borderRadius: '50%',
                         border: `1.5px ${isVerified ? 'solid' : 'dashed'} ${isVerified ? 'var(--success)' : 'var(--border2)'}`,
                         cursor: 'pointer',
@@ -1145,7 +1154,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
                       </div>
                       {isVerified ? (
                         <>
-                          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round">
+                          <svg width="18" height="18" viewBox="0 0 22 22" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round">
                             <path d="M4 11l5 5L18 6" />
                           </svg>
                           <span style={{ fontSize: 10, color: 'var(--text2)', textAlign: 'center', padding: '0 8px', wordBreak: 'break-all', maxWidth: 88, lineHeight: 1.3 }}>{visual.value}</span>
@@ -1154,7 +1163,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
                         <span style={{ fontSize: 10, color: 'var(--text2)', textAlign: 'center', padding: '0 8px', wordBreak: 'break-all', maxWidth: 88, lineHeight: 1.3 }}>{visual.value}</span>
                       ) : (
                         <>
-                          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="16" cy="11" r="5" />
                             <path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12" />
                           </svg>
@@ -1169,8 +1178,9 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
                       style={{
                         position: 'absolute',
                         top: 110,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
+                        left: idx === 0 ? 0 : (idx === 2 ? 'auto' : '50%'),
+                        right: idx === 2 ? 0 : 'auto',
+                        transform: idx === 1 ? 'translateX(-50%)' : 'none',
                         width: 200,
                         background: 'var(--bg)',
                         border: '1px solid var(--border2)',
@@ -1249,14 +1259,11 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
           {currentStep === 'confirm' && (
 <StepWrapper key="confirm" currentStep={currentStep} id="confirm">
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(245,200,66,0.12)', border: '1.5px solid rgba(245,200,66,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 32px' }}>
-              <svg width="14" height="18" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842"/></svg>
-            </div>
-            <h1 className="ob-heading em" style={{ fontSize: 52, textAlign: 'center' }}>You're in{firstName ? `, ${firstName}` : ''}.</h1>
+            <h1 className="ob-heading em" style={{ fontSize: 52, textAlign: 'center' }}>You're in{firstName ? ` ${firstName}` : ''}</h1>
             <p className="ob-subtext" style={{ textAlign: 'center' }}>Your profile is now live. Supercharged is already running simulations and finding who you need to meet. Expect your first matches within the hour.</p>
             <div className="ob-spacer"></div>
             <button className="btn-accent" disabled={loading} onClick={handleFinish}>
-              {loading ? 'Entering...' : 'Enter Supercharged \u26A1'}
+              {loading ? 'Entering...' : 'Enter Supercharged'}
             </button>
           </StepWrapper>
 )}
@@ -1266,10 +1273,14 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
       <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: showEndScreen ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', pointerEvents: 'all' }}>
         <div style={{ textAlign: 'center', maxWidth: 340, padding: 24, animation: 'fadeUp 0.8s var(--ease) both' }}>
-          <div style={{ marginBottom: 20 }}><svg width="14" height="18" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842"/></svg></div>
           <h1 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 300, fontSize: 44, lineHeight: 1.1, marginBottom: 16 }}>You're in.</h1>
           <p style={{ fontSize: 15, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 32 }}>Your profile is live. Supercharged is finding who you need to meet.</p>
-          <div className="spinner"></div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ height: 4, background: 'var(--border-light)', borderRadius: 2, overflow: 'hidden', marginBottom: 8 }}>
+              <div style={{ height: '100%', background: 'var(--text)', borderRadius: 2, transition: 'width 0.3s ease', width: `${loadProgress}%` }} />
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text3)' }}>{Math.round(loadProgress)}%</p>
+          </div>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { Client, ID, Query, TablesDB, Messaging } from 'node-appwrite';
+import { Client, ID, Query, TablesDB, Messaging, Permission, Role } from 'node-appwrite';
 import * as Sentry from '@sentry/node';
 
 Sentry.init({
@@ -14,6 +14,7 @@ const MESSAGES_TABLE = process.env.APPWRITE_MESSAGES_TABLE || 'messages';
 const CONNECTIONS_TABLE = process.env.APPWRITE_CONNECTIONS_TABLE || 'connections';
 const REL_EVENTS_TABLE = process.env.APPWRITE_REL_EVENTS_TABLE || 'relationship_events';
 const VOLTZ_LEDGER_TABLE = process.env.APPWRITE_VOLTZ_LEDGER_TABLE || 'voltz_ledger';
+const INBOX_NOTIFICATIONS_TABLE = process.env.APPWRITE_INBOX_NOTIFICATIONS_TABLE || 'inbox_notifications';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -187,6 +188,22 @@ async function createRelationshipEvent(tables, { connectionId, actorId, eventTyp
 async function createVoltzEntry(tables, { profileId, connectionId, relationshipEventId, eventType, amount, reason, awardedAt = new Date().toISOString() }) {
   if (!profileId || !amount) return null;
 
+  // Fetch profile to get user_id for row permissions
+  let userIdPermission = null;
+  try {
+    const profileRes = await tables.listRows({
+      databaseId: DB_ID,
+      tableId: PROFILES_TABLE,
+      queries: [Query.equal('$id', profileId), Query.limit(1)],
+    });
+    const profile = profileRes.rows?.[0];
+    if (profile?.user_id) {
+      userIdPermission = Permission.read(Role.user(profile.user_id));
+    }
+  } catch (e) {
+    // Non-fatal: if we can't fetch profile, create row without permissions (fallback)
+  }
+
   return tables.createRow({
     databaseId: DB_ID,
     tableId: VOLTZ_LEDGER_TABLE,
@@ -203,6 +220,7 @@ async function createVoltzEntry(tables, { profileId, connectionId, relationshipE
       reason,
       awarded_at: awardedAt,
     },
+    permissions: userIdPermission ? [userIdPermission] : [],
   });
 }
 
@@ -394,9 +412,11 @@ async function actionSendMessage({ tables, messaging, body, currentProfile, log 
     const otherMemberIds = (allMembers.rows || [])
       .map((m) => relationId(m.profile))
       .filter((id) => id && id !== currentProfile.$id);
+    if (log) log(`[inbox_notifications] Conversation members: ${allMembers.rows?.length || 0}, otherMemberIds after filter: ${otherMemberIds.length}, otherMemberIds: ${otherMemberIds.join(',')}, currentSenderId: ${currentProfile.$id}`);
 
     if (otherMemberIds.length > 0) {
       const recipientProfiles = await getProfilesByIds(tables, otherMemberIds);
+      if (log) log(`[inbox_notifications] Fetched ${recipientProfiles.length} recipient profiles: ${recipientProfiles.map(p => `${p.name}(uid:${p.user_id})`).join(', ')}`);
       const notifyIds = recipientProfiles
         .filter((p) => p.notify_message_replies)
         .map((p) => p.user_id)
@@ -412,6 +432,40 @@ async function actionSendMessage({ tables, messaging, body, currentProfile, log 
           notifyIds,
         );
         if (log) log(`Message notification sent to ${notifyIds.length} recipient(s)`);
+      }
+
+      // Write inbox_notifications rows for ALL recipients (not just email-enabled ones)
+      // so the recipient's inbox realtime subscription fires regardless of email pref
+      const senderName = currentProfile.first_name || currentProfile.username || 'Someone';
+      if (log) log(`[inbox_notifications] Writing for ${recipientProfiles.length} recipients`);
+      for (const rp of recipientProfiles) {
+        if (!rp.user_id) {
+          if (log) log(`[inbox_notifications] Skipping recipient ${rp.$id} (no user_id)`);
+          continue;
+        }
+        try {
+          const notifRow = await tables.createRow({
+            databaseId: DB_ID,
+            tableId: INBOX_NOTIFICATIONS_TABLE,
+            rowId: ID.unique(),
+            data: {
+              conversation_id: conversationId,
+              recipient_profile_id: rp.$id,
+              sender_name: senderName,
+              message_preview: messageBody.slice(0, 120),
+            },
+            permissions: [Permission.read(Role.user(rp.user_id))],
+          });
+          if (log) log(`[inbox_notifications] Created row ${notifRow.$id} for recipient ${rp.username || rp.name} (user ${rp.user_id})`);
+        } catch (notifRowErr) {
+          if (log) log(`[inbox_notifications] Failed for recipient ${rp.$id}: ${notifRowErr.message}`);
+          if (typeof Sentry !== 'undefined') {
+            Sentry.captureException(notifRowErr, {
+              tags: { context: 'inbox_notification_write', recipientId: rp.$id, conversationId },
+              level: 'error'
+            });
+          }
+        }
       }
     }
   } catch (notifErr) {

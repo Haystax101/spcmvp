@@ -46,13 +46,13 @@
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   pointer-events: none;
 }
 
 .new-onboarding #progress-dots {
   position: absolute;
-  top: 32px;
+  top: 52px;
   left: 0;
   right: 0;
   z-index: 200;
@@ -126,6 +126,7 @@
 }
 .new-onboarding .ob-heading.sm { font-size: 46px; }
 .new-onboarding .ob-heading.em { font-style: italic; }
+.new-onboarding .interstitial-heading { font-size: 44px; }
 
 .new-onboarding .ob-subtext {
   font-size: 16px;
@@ -293,7 +294,7 @@
 .new-onboarding .skip-link:hover { color: var(--text2); }
 
 .new-onboarding #back-btn {
-  position: absolute; top: 28px; left: 36px; z-index: 210;
+  position: absolute; top: 20px; left: 36px; z-index: 210;
   background: none; border: none; cursor: pointer;
   font-size: 13px; color: var(--text2);
   font-family: 'DM Sans', sans-serif;
@@ -353,11 +354,52 @@
 
 @media(max-width: 700px) {
   .new-onboarding .ob-step { width: 92vw; padding: 40px 28px 36px; }
+  .new-onboarding #step-cover h1 { font-size: 32px; }
   .new-onboarding .ob-heading { font-size: 38px; }
   .new-onboarding .ob-heading.sm { font-size: 30px; }
+  .new-onboarding .interstitial-heading { font-size: 32px; }
   .new-onboarding .underline-input { font-size: 26px; }
   .new-onboarding .code-boxes { gap: 8px; }
   .new-onboarding .code-box { width: 42px; height: 54px; font-size: 22px; }
   .new-onboarding #back-btn { left: 16px; }
+  .new-onboarding #progress-dots { top: 60px; }
+  .new-onboarding .flow-diagram { margin-top: 20px; }
+  .new-onboarding .flow-circle { width: 40px; height: 40px; font-size: 16px; }
+  .new-onboarding .flow-label { font-size: 11px; }
+  .new-onboarding .flow-arrow { font-size: 14px; }
 }
+
+@media(max-width: 380px) {
+  .new-onboarding .ob-step { padding: 32px 20px 28px; }
+  .new-onboarding #step-cover h1 { font-size: 28px; }
+  .new-onboarding .ob-heading { font-size: 32px; line-height: 1.1; }
+  .new-onboarding .ob-heading.sm { font-size: 26px; }
+  .new-onboarding .interstitial-heading { font-size: 28px; }
+  .new-onboarding .ob-subtext { font-size: 14px; margin-bottom: 12px; }
+  .new-onboarding .ob-whisper { font-size: 12px; margin-bottom: 12px; }
+  .new-onboarding .underline-input { font-size: 22px; padding: 10px 0; }
+  .new-onboarding .chip { font-size: 12px; padding: 7px 12px; }
+  .new-onboarding .chip-grid { gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+  .new-onboarding .chip-grid::-webkit-scrollbar { width: 3px; }
+  .new-onboarding .chip-grid::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+  .new-onboarding .tap-cards { flex-direction: row; flex-wrap: wrap; gap: 8px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
+  .new-onboarding .tap-cards::-webkit-scrollbar { width: 3px; }
+  .new-onboarding .tap-cards::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+  .new-onboarding .tap-card { flex: 0 1 calc(50% - 4px); padding: 14px 16px; font-size: 14px; }
+  .new-onboarding #q-romantic-status .tap-cards { flex-direction: column; max-height: none; }
+  .new-onboarding #q-romantic-status .tap-card { flex: 1 1 auto; }
+  .new-onboarding #q-conntype .tap-cards { flex-direction: column; max-height: none; }
+  .new-onboarding #q-conntype .tap-card { flex: 1 1 auto; }
+  .new-onboarding .rank-card { padding: 12px 16px; gap: 10px; }
+  .new-onboarding .rank-card > div:last-child > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .new-onboarding .btn-primary { padding: 13px 24px; font-size: 14px; }
+  .new-onboarding .code-box { width: 36px; height: 48px; font-size: 20px; }
+  .new-onboarding .code-boxes { gap: 6px; }
+  .new-onboarding .flow-circle { width: 36px; height: 36px; font-size: 14px; }
+  .new-onboarding .flow-label { font-size: 10px; }
+  .new-onboarding .pw-spacer { height: 16px; }
+  .new-onboarding .skip-link { margin-top: 10px; font-size: 12px; }
+  .new-onboarding .resend-link { margin-top: 12px; font-size: 12px; }
+}
+
 @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }

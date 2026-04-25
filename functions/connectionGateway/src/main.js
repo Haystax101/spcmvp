@@ -600,6 +600,22 @@ async function createRelationshipEvent(tables, { connectionId, actorId, eventTyp
 }
 
 async function createVoltzEntry(tables, { profileId, connectionId, relationshipEventId, eventType, amount, reason, awardedAt = new Date().toISOString() }) {
+  // Fetch profile to get user_id for row permissions
+  let userIdPermission = null;
+  try {
+    const profileRes = await tables.listRows({
+      databaseId: DB_ID,
+      tableId: PROFILES_TABLE,
+      queries: [Query.equal('$id', profileId), Query.limit(1)],
+    });
+    const profile = profileRes.rows?.[0];
+    if (profile?.user_id) {
+      userIdPermission = Permission.read(Role.user(profile.user_id));
+    }
+  } catch (e) {
+    // Non-fatal: if we can't fetch profile, create row without permissions (fallback)
+  }
+
   const row = await tables.createRow({
     databaseId: DB_ID,
     tableId: VOLTZ_LEDGER_TABLE,
@@ -616,6 +632,7 @@ async function createVoltzEntry(tables, { profileId, connectionId, relationshipE
       reason,
       awarded_at: awardedAt,
     },
+    permissions: userIdPermission ? [userIdPermission] : [],
   });
   return row;
 }

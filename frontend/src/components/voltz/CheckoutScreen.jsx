@@ -12,11 +12,11 @@ function PriceBlock({ price, original, suffix, alignRight = false }) {
     <div style={{ display: "flex", flexDirection: "column", alignItems: alignRight ? "flex-end" : "flex-start", lineHeight: 1 }}>
       {original && (
         <span style={{ fontFamily: SANS, fontSize: 11, color: C.muted, textDecoration: "line-through", marginBottom: 4 }}>
-          ${original.toFixed(2)}
+          £{original.toFixed(2)}
         </span>
       )}
       <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-        <span style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, color: C.text }}>${price.toFixed(2)}</span>
+        <span style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, color: C.text }}>£{price.toFixed(2)}</span>
         {suffix && <span style={{ fontFamily: SANS, fontSize: 12, color: C.secondary }}>{suffix}</span>}
       </div>
     </div>
@@ -51,6 +51,7 @@ export default function CheckoutScreen({ context, userId, onBack }) {
   const item = context?.item;
   if (!item) return null;
 
+  const isVoltz = context.type === "voltz";
   const totalPrice = item.price;
   const baseVoltz = item.voltzPerMonth;
   const bonusVoltz = 0;
@@ -66,8 +67,8 @@ export default function CheckoutScreen({ context, userId, onBack }) {
           userId,
           package: item.id,
           quantity: 1,
-          successUrl: window.location.origin + "?payment=success",
-          cancelUrl: window.location.origin + "?payment=cancelled",
+          successUrl: window.location.origin + "/platform-beta/?payment=success",
+          cancelUrl: window.location.origin + "/platform-beta/?payment=cancelled",
         }),
         false
       );
@@ -152,7 +153,7 @@ export default function CheckoutScreen({ context, userId, onBack }) {
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
             <span style={{ fontFamily: SANS, fontSize: 14, color: C.secondary }}>Total</span>
             <span style={{ fontFamily: SERIF, fontSize: 20, fontWeight: 600, color: C.text }}>
-              ${totalPrice.toFixed(2)}
+              £{totalPrice.toFixed(2)}
               {!isVoltz && <span style={{ fontFamily: SANS, fontSize: 12, color: C.secondary, fontWeight: 400 }}>/mo</span>}
             </span>
           </div>
@@ -218,7 +219,7 @@ export default function CheckoutScreen({ context, userId, onBack }) {
         {loading ? (
           "Connecting to payment…"
         ) : (
-          `Start plan — $${totalPrice.toFixed(2)}/mo`
+          `Start plan — £${totalPrice.toFixed(2)}/mo`
         )}
       </button>
 

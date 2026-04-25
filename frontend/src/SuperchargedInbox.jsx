@@ -1892,30 +1892,75 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     if (!backendProfile?.$id) return;
 
     const profileId = backendProfile.$id;
+    console.log('[Inbox Realtime] backendProfile:', {
+      $id: backendProfile.$id,
+      user_id: backendProfile.user_id,
+      name: backendProfile.name,
+    });
     const channels = [
-      `tablesdb.${DB_ID}.tables.messages.rows`,
+      `tablesdb.${DB_ID}.tables.inbox_notifications.rows`,
       `tablesdb.${DB_ID}.tables.connections.rows`,
     ];
+    console.log('[Inbox Realtime] Subscribing to channels:', channels);
 
     let unsubscribe;
     const initRealtime = async () => {
       try {
+        console.log('[Inbox Realtime] Calling realtime.subscribe...');
         unsubscribe = await realtime.subscribe(channels, (response) => {
+          console.log('[Inbox Realtime] EVENT RECEIVED:', response);
           const isCreate = response.events?.some(e => e.endsWith('.create'));
           const isUpdate = response.events?.some(e => e.endsWith('.update'));
-          if (!isCreate && !isUpdate) return;
+          console.log('[Inbox Realtime]', {
+            events: response.events,
+            isCreate,
+            isUpdate,
+            payloadConversationId: response.payload?.conversation_id,
+            payloadSenderName: response.payload?.sender_name,
+            payloadPreview: response.payload?.message_preview?.slice(0, 50),
+          });
+          if (!isCreate && !isUpdate) {
+            console.log('[Inbox Realtime] Ignoring non-create/update event');
+            return;
+          }
+
+          // Optimistic update — show new message preview immediately
+          if (isCreate && response.payload?.conversation_id) {
+            const cid = response.payload.conversation_id;
+            console.log(`[Inbox Realtime] Optimistic update for conversation ${cid}`);
+            setConversations((prev) => {
+              const updated = prev.map((c) => {
+                const isMatch = (c.conversationId || c.id) === cid;
+                if (isMatch) {
+                  console.log(`[Inbox Realtime] Matched conversation, updating preview from "${c.lastMessage?.slice(0, 30)}" to "${response.payload.message_preview?.slice(0, 30)}"`);
+                  return {
+                    ...c,
+                    lastMessage: response.payload.message_preview || c.lastMessage,
+                    unreadCount: (c.unreadCount || 0) + 1,
+                  };
+                }
+                return c;
+              });
+              return updated;
+            });
+          } else if (isCreate) {
+            console.log('[Inbox Realtime] Create event but no conversation_id in payload');
+          }
 
           removeCacheEntry(INBOX_CACHE_KEY(profileId));
+          console.log('[Inbox Realtime] Invalidated cache, starting full refresh');
           refreshInboxDataRef.current(null, { forceRefresh: true })
             .catch(err => console.warn('Global realtime inbox refresh err:', err));
         });
+        console.log('[Inbox Realtime] Subscription successful, listener active');
       } catch (err) {
-        console.error('Failed to subscribe to global realtime:', err);
+        console.error('[Inbox Realtime] Failed to subscribe:', err);
       }
     };
 
     initRealtime();
     return () => {
+      console.log('[Inbox Realtime] Cleaning up subscription');
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       } else if (unsubscribe?.unsubscribe) {
@@ -2002,10 +2047,14 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
   // --- handlers ---
   const openChat = () => { setChatActive(true); };
   const closeChat = () => {
+    console.log('[closeChat] Closing chat and refreshing inbox');
     setChatActive(false);
     setDrawerOpen(false);
     setSheetOpen(false);
     setActiveConversationId(null);
+    refreshInboxData(null, { showLoading: false, forceRefresh: true }).catch((err) => {
+      console.error('[closeChat] Inbox refresh failed:', err);
+    });
     setTimeout(() => {
       if (previewMode) {
         setPreviewMode(false);

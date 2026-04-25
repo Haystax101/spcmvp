@@ -47,6 +47,12 @@ function kwColor(kw) {
   return kwCache[kw];
 }
 
+const BoltIcon = ({ size = 14, color = '#92400E' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={{ color }}>
+    <path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" />
+  </svg>
+);
+
 const SUGGESTION_CHIPS = [
   'AI founders in Oxford',
   'Research collaborators',
@@ -185,14 +191,13 @@ function ScopeToggle({ scope, setScope }) {
             <button key={s} onClick={() => setScope(s)}
               style={{ background: active ? C.ink : C.paper, border: `1.5px solid ${C.ink}`, borderRadius: 999, padding: '8px 22px', fontSize: 14, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", color: active ? C.paper : C.ink, cursor: 'pointer', transition: 'all 160ms ease-out', display: 'flex', alignItems: 'center', gap: 6 }}>
               {label}
-              {s === 'external' && <span style={{ fontSize: 10, opacity: 0.65 }}>· 1⚡</span>}
             </button>
           );
         })}
       </div>
       {scope === 'external' && (
         <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#FEF3C7', color: '#92400E', fontSize: 11, fontWeight: 500, padding: '5px 11px', borderRadius: 999, animation: 'sc-fade-up 220ms ease-out both' }}>
-          <span>⚡</span> 1 Voltz per external search
+          <BoltIcon size={12} color="#92400E" /> 1 Voltz per external search
         </div>
       )}
     </div>
