@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { QdrantClient } from '@qdrant/js-client-rest';
-import { Client, TablesDB, Query } from 'node-appwrite';
+import { Client, TablesDB, Query, ID } from 'node-appwrite';
 import OpenAI from 'openai';
 import crypto from 'crypto';
 import * as Sentry from "@sentry/node";
@@ -22,6 +22,8 @@ const PEOPLE_SPORTS_TABLE = process.env.APPWRITE_PEOPLE_SPORTS_TABLE || 'people_
 const SOCIETIES_TABLE = process.env.APPWRITE_SOCIETIES_TABLE || 'societies';
 const SPORTS_TABLE = process.env.APPWRITE_SPORTS_TABLE || 'sports';
 
+const DISCOVERY_QUEUE_TABLE = process.env.APPWRITE_DISCOVERY_QUEUE_TABLE || 'discovery_queue';
+const CONNECTIONS_TABLE = process.env.APPWRITE_CONNECTIONS_TABLE || 'connections';
 const KIMI_DEPLOYMENT = process.env.AZURE_FOUNDRY_DEPLOYMENT || 'Kimi-K2.6-1';
 
 const SEARCH_VARIANTS = new Set([
@@ -473,6 +475,9 @@ async function translateSearchQuery(query, ai, log) {
         systemInstruction: QUERY_TRANSLATION_SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         temperature: 0.1,
+        thinkingConfig: {
+          thinkingLevel: "minimal"
+        }
       },
     });
 
@@ -520,6 +525,22 @@ async function buildIdealProfile(query, userId, kimi, tables, ai, log) {
     translator: 'fallback',
   };
 
+  // Short-circuit: if the query looks like a person's name, skip AI and vector search entirely
+  const NAME_QUERY_RE = /^(?:find|search for|look up|show me)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*$/i;
+  const nameMatch = query.trim().match(NAME_QUERY_RE);
+  if (nameMatch) {
+    return {
+      semantic_query: query,
+      intent_query: query,
+      filters: {},
+      must_not: {},
+      attribute_weights: {},
+      strict_key: null,
+      translator: 'name',
+      name_query: nameMatch[1].trim(),
+    };
+  }
+
   try {
     log(`[buildIdealProfile] Starting with query="${query}", userId="${userId}", hasKimi=${!!kimi}, hasTables=${!!tables}`);
 
@@ -566,32 +587,39 @@ Using the valid values provided in your instructions, generate a structured idea
 }
 Only include filters you are confident about. Use exact strings from the valid values list.`;
 
-    log(`[buildIdealProfile] Calling Grok with deployment: ${KIMI_DEPLOYMENT}`);
-    const response = await kimi.chat.completions.create({
-      model: KIMI_DEPLOYMENT,
-      messages: [{
-        role: 'system',
-        content: QUERY_TRANSLATION_SYSTEM_PROMPT
-      }, {
-        role: 'user',
-        content: userPrompt
-      }],
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-      max_tokens: 512,
-    });
-
-    log(`[buildIdealProfile] Grok response received, choices: ${response.choices?.length || 0}`);
-    const kimiContent = response.choices?.[0]?.message?.content || '';
-    log(`[buildIdealProfile] Grok FULL content: ${kimiContent}`);
+    log(`[buildIdealProfile] Calling Gemini for search translation`);
+    log(`[buildIdealProfile] User Prompt Snippet: ${userPrompt.slice(0, 100)}...`);
+    const aiStart = Date.now();
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite-preview',
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        config: {
+          systemInstruction: QUERY_TRANSLATION_SYSTEM_PROMPT,
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+          thinkingConfig: {
+            thinkingLevel: "minimal"
+          }
+        },
+      });
+      log(`[buildIdealProfile] Gemini response received successfully in ${Date.now() - aiStart}ms`);
+    } catch (apiErr) {
+      log(`[buildIdealProfile] Gemini API Error after ${Date.now() - aiStart}ms!`);
+      log(`[buildIdealProfile] API Error Message: ${apiErr.message}`);
+      throw apiErr;
+    }
+    const kimiContent = response?.text || '';
+    log(`[buildIdealProfile] Gemini FULL content (size=${kimiContent.length}): ${kimiContent.slice(0, 100)}...`);
 
     const parsed = safeParseJson(kimiContent);
     if (!parsed || typeof parsed !== 'object') {
-      log(`[buildIdealProfile] Grok response invalid (parsed=${!!parsed}, type=${typeof parsed}), content="${kimiContent.slice(0, 500)}"`);
-      log(`[buildIdealProfile] Falling back to Gemini`);
+      log(`[buildIdealProfile] Gemini response invalid (parsed=${!!parsed}, type=${typeof parsed}), content="${kimiContent.slice(0, 500)}"`);
+      log(`[buildIdealProfile] Falling back to heuristic/simple parsing`);
       return await translateSearchQuery(query, ai, log);
     }
-    log(`[buildIdealProfile] Grok response parsed successfully`);
+    log(`[buildIdealProfile] Gemini response parsed successfully`);
 
     const semanticQuery = normalizeString(parsed.semantic_query) || query;
     const intentQuery = normalizeString(parsed.intent_query) || semanticQuery;
@@ -823,11 +851,6 @@ function computeStructuredScore(match, context = {}) {
       details.push('startup signal');
     }
 
-    const keywordHits = keywords.filter((keyword) => matchText.includes(keyword)).slice(0, 3);
-    if (keywordHits.length > 0) {
-      total += Math.min(0.15, keywordHits.length * 0.05);
-      details.push(`keywords=${keywordHits.join(', ')}`);
-    }
 
     if (strictKey) {
       details.push(`strict_key=${strictKey}`);
@@ -982,10 +1005,25 @@ function buildMatchReason(match, translated, originalQuery) {
   return `Matched on ${reasons.slice(0, 2).join(' and ')}.`;
 }
 
+function boostAndSpreadScore(rawScore, minRaw = 0.60, maxRaw = 0.85, minTarget = 0.65, maxTarget = 0.96, exponent = 1.2) {
+  // Clamp raw score to expected bounds
+  const clampedRaw = Math.max(minRaw, Math.min(maxRaw, rawScore));
+  
+  // Normalize to 0.0 - 1.0 range
+  const normalized = (clampedRaw - minRaw) / (maxRaw - minRaw);
+  
+  // Apply exponent to curve the distribution
+  const curved = Math.pow(normalized, exponent);
+  
+  // Map back to target range
+  return minTarget + (curved * (maxTarget - minTarget));
+}
+
 function applyStructuredScoring(matches, context) {
   return matches.map((match) => {
     const structured = computeStructuredScore(match, context);
-    const baseScore = Number(match.score || 0) / 100;
+    const rawDenseScore = Number(match.score || 0) / 100;
+    const baseScore = boostAndSpreadScore(rawDenseScore);
     const blendedScore = Math.min(1, (baseScore * (1 - STRUCTURED_WEIGHT)) + (structured.score * STRUCTURED_WEIGHT));
     return {
       ...match,
@@ -993,6 +1031,7 @@ function applyStructuredScoring(matches, context) {
       score: Math.round(blendedScore * 100),
       score_breakdown: {
         base: Math.round(baseScore * 100),
+        raw_dense: Math.round(rawDenseScore * 100),
         structured: Math.round(structured.score * 100),
         details: structured.details,
       },
@@ -1079,6 +1118,24 @@ function buildSearchMetadata({ variant, translated, filters, startedAt, parseMs,
   };
 }
 
+async function getProfilesByIds(tables, ids) {
+  if (!ids || ids.length === 0) return [];
+  try {
+    const res = await tables.listRows({
+      databaseId: DB_ID,
+      tableId: PROFILES_TABLE,
+      queries: [
+        Query.equal('$id', ids),
+        Query.limit(ids.length)
+      ]
+    });
+    return res.rows || [];
+  } catch (e) {
+    console.error(`getProfilesByIds failed: ${e.message}`);
+    return [];
+  }
+}
+
 export default async ({ req, res, log, error }) => {
   const qdrant = new QdrantClient({
     url: process.env.QDRANT_ENDPOINT,
@@ -1097,6 +1154,219 @@ export default async ({ req, res, log, error }) => {
     const { action } = body;
     log(`[discoveryEngine] Received action: "${action}", body keys: ${Object.keys(body).join(', ')}`);
     log(`[discoveryEngine] Body: ${JSON.stringify(body).slice(0, 200)}...`);
+
+    // ─── GET_FEED: fetch pre-calculated matches from the queue ────────────────
+    if (action === 'get_feed') {
+      const userId = body.userId || req.headers['x-appwrite-user-id'];
+      if (!userId) return res.json({ error: 'userId is required.' }, 400);
+
+      const appwrite = new Client()
+        .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
+        .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
+        .setKey(process.env.APPWRITE_API_KEY);
+      const tables = new TablesDB(appwrite);
+
+      // 1. Get profile
+      const profileRes = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: PROFILES_TABLE,
+        queries: [Query.equal('user_id', userId), Query.limit(1)]
+      });
+      const profile = profileRes.rows?.[0];
+      if (!profile) return res.json({ error: 'Profile not found.' }, 404);
+
+      // 2. Fetch pending items from queue
+      const queueItems = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: DISCOVERY_QUEUE_TABLE,
+        queries: [
+          Query.equal('profile_id', profile.$id),
+          Query.equal('status', 'pending'),
+          Query.limit(10)
+        ]
+      });
+
+      // 3. If queue is low, we should trigger a refill (handled by frontend usually, or we could do it here)
+      const matches = queueItems.rows.map(item => ({
+        $id: item.target_profile_id,
+        score: item.score,
+        match_reason: item.match_reason,
+        score_breakdown: JSON.parse(item.score_breakdown || '{}'),
+        queue_id: item.$id
+      }));
+
+      // 4. Enrich with profile data
+      const targetIds = matches.map(m => m.$id);
+      if (targetIds.length > 0) {
+        const targets = await getProfilesByIds(tables, targetIds);
+        const enriched = matches.map(m => {
+          const t = targets.find(p => p.$id === m.$id);
+          if (!t) return null;
+          return { ...t, ...m };
+        }).filter(Boolean);
+        return res.json({ matches: enriched, needsRefill: enriched.length < 5 });
+      }
+
+      return res.json({ matches: [], needsRefill: true });
+    }
+
+    // ─── REFILL_QUEUE: pre-calculate matches and store them ───────────────────
+    if (action === 'refill_queue') {
+      const userId = body.userId || req.headers['x-appwrite-user-id'];
+      const directProfileId = body.profile_id; // Appwrite row $id, bypasses user_id lookup
+      if (!userId && !directProfileId) return res.json({ error: 'userId or profile_id is required.' }, 400);
+
+      const appwrite = new Client()
+        .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
+        .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
+        .setKey(process.env.APPWRITE_API_KEY);
+      const tables = new TablesDB(appwrite);
+
+      // 1. Get profile (by $id directly or via user_id lookup)
+      let profile;
+      if (directProfileId) {
+        try {
+          profile = await tables.getRow({ databaseId: DB_ID, tableId: PROFILES_TABLE, rowId: directProfileId });
+        } catch (e) {
+          profile = null;
+        }
+      } else {
+        const profileRes = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: PROFILES_TABLE,
+          queries: [Query.equal('user_id', userId), Query.limit(1)]
+        });
+        profile = profileRes.rows?.[0];
+      }
+      if (!profile) return res.json({ error: 'Profile not found.' }, 404);
+
+      const qdrantId = getQdrantId(profile.$id);
+
+      // 2. Run recommendation
+      const [intentRes, semanticRes] = await Promise.all([
+        qdrant.recommend(COLLECTION, { positive: [qdrantId], using: 'intent', limit: 30, with_payload: true }),
+        qdrant.recommend(COLLECTION, { positive: [qdrantId], using: 'semantic', limit: 30, with_payload: true }),
+      ]);
+
+      let matches = applyStructuredScoring(
+        fuseResults(intentRes, semanticRes, qdrantId),
+        { type: 'recommend', source: profile }
+      );
+
+      log(`[refill_queue] Qdrant results: intent=${intentRes.length}, semantic=${semanticRes.length}`);
+      log(`[refill_queue] Fused matches before filtering: ${matches.length}`);
+
+      // 3. Filter out people already in connections or already in queue
+      const [existingConns, existingQueue] = await Promise.all([
+        tables.listRows({
+          databaseId: DB_ID,
+          tableId: CONNECTIONS_TABLE,
+          queries: [
+            Query.equal('initiator_profile_id', profile.$id),
+            Query.notEqual('status', 'declined'),
+            Query.limit(200)
+          ]
+        }),
+        tables.listRows({
+          databaseId: DB_ID,
+          tableId: DISCOVERY_QUEUE_TABLE,
+          queries: [
+            Query.equal('profile_id', profile.$id),
+            Query.notEqual('status', 'dismissed'), // dismissed can re-enter the queue; pending/connected/shown cannot
+            Query.limit(200)
+          ]
+        })
+      ]);
+
+      const excludedIds = new Set([
+        profile.$id, // Exclude self
+        ...existingConns.rows.map(c => c.responder_profile_id),
+        ...existingQueue.rows.map(q => q.target_profile_id)
+      ]);
+      log(`[refill_queue] Exclusion list size: ${excludedIds.size}`);
+
+      const filtered = matches.filter(m => {
+        const id = m.$id || m.user_id || m.qdrant_id;
+        const isExcluded = excludedIds.has(m.$id) || excludedIds.has(m.qdrant_id);
+        if (isExcluded) log(`[refill_queue] Skipping excluded: $id=${m.$id} qdrant=${m.qdrant_id}`);
+        return id && !isExcluded;
+      }).slice(0, 15);
+      log(`[refill_queue] Final filtered candidates: ${filtered.length}`);
+
+      // 4a. Resolve Appwrite $id for any matches that only have user_id (old payload_version 1 points)
+      const needsLookup = filtered.filter(m => !m.$id && m.user_id);
+      let userIdToAppwriteId = {};
+      if (needsLookup.length > 0) {
+        const userIds = needsLookup.map(m => m.user_id);
+        log(`[refill_queue] Resolving ${userIds.length} Appwrite IDs via user_id lookup`);
+        try {
+          const lookupRes = await tables.listRows({
+            databaseId: DB_ID,
+            tableId: PROFILES_TABLE,
+            queries: [Query.equal('user_id', userIds), Query.limit(userIds.length)]
+          });
+          lookupRes.rows.forEach(p => { userIdToAppwriteId[p.user_id] = p.$id; });
+          log(`[refill_queue] Resolved ${Object.keys(userIdToAppwriteId).length}/${userIds.length} IDs`);
+        } catch (e) {
+          log(`[refill_queue] user_id lookup failed: ${e.message}`);
+        }
+      }
+
+      // 4. Batch insert into queue
+      const created = [];
+      for (const m of filtered) {
+        const targetId = m.$id || userIdToAppwriteId[m.user_id] || null;
+        if (!targetId) {
+          log(`[refill_queue] Skipping match — no resolvable Appwrite ID (user_id=${m.user_id}, qdrant_id=${m.qdrant_id})`);
+          continue;
+        }
+        try {
+          const rowId = crypto.randomUUID();
+          const row = await tables.createRow({
+            databaseId: DB_ID,
+            tableId: DISCOVERY_QUEUE_TABLE,
+            rowId: rowId,
+            data: {
+              profile_id: profile.$id,
+              target_profile_id: targetId,
+              score: m.score,
+              match_reason: buildMatchReason(m, {}, ''), 
+              score_breakdown: JSON.stringify(m.score_breakdown || {}),
+              status: 'pending'
+            }
+          });
+          created.push(row.$id);
+        } catch (e) {
+          log(`[refill_queue] Failed to insert ${targetId}: ${e.message}`);
+        }
+      }
+
+      return res.json({ success: true, added: created.length });
+    }
+
+    // ─── UPDATE_QUEUE_STATUS: mark a queue item as shown, connected, or dismissed
+    if (action === 'update_queue_status') {
+      const { queueId, status } = body;
+      if (!queueId || !status) return res.json({ error: 'queueId and status are required.' }, 400);
+
+      const appwrite = new Client()
+        .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
+        .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
+        .setKey(process.env.APPWRITE_API_KEY);
+      const tables = new TablesDB(appwrite);
+
+      try {
+        await tables.updateRow({
+          databaseId: DB_ID,
+          tableId: DISCOVERY_QUEUE_TABLE,
+          rowId: queueId,
+          data: { status }
+        });
+        return res.json({ success: true });
+      } catch (e) {
+        return res.json({ error: e.message }, 500);
+      }
+    }
 
     // ─── RECOMMEND: find matches based on the user's own vectors ───────────────
     if (action === 'recommend') {
@@ -1165,9 +1435,93 @@ export default async ({ req, res, log, error }) => {
         tables = new TablesDB(appwrite);
       }
 
+      // 1. FAST NAME PATH
+      // If the query is short (1-3 words), try a direct database match first to return "instantly"
+      const queryWords = query.trim().split(/\s+/);
+      if (query.length >= 2 && queryWords.length <= 3) {
+        if (!tables) {
+          const appwrite = new Client()
+            .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
+            .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
+            .setKey(process.env.APPWRITE_API_KEY);
+          tables = new TablesDB(appwrite);
+        }
+        
+        log(`[search] Attempting fast name match for "${query}"`);
+        const nameRes = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: PROFILES_TABLE,
+          queries: [
+            Query.or([
+              Query.contains('full_name', query),
+              Query.contains('first_name', query),
+              Query.contains('last_name', query),
+            ]),
+            Query.limit(20),
+          ],
+        });
+
+        if (nameRes.rows?.length > 0) {
+          const nameMatches = nameRes.rows.map((p) => ({
+            id: p.user_id,
+            profile: p,
+            score: 1.0,
+            dimensions: { identity: 1, intent: 1, resonance: 1, network: 1 },
+            match_reason: `Found person matching "${query}"`,
+            source: 'in-app',
+            retrieval_variant: 'fast_name',
+          }));
+          log(`[search] Fast path matched ${nameMatches.length} profiles. Skipping AI Deep Search.`);
+          return res.json({ 
+            matches: nameMatches, 
+            metadata: { 
+              total_ms: Date.now() - startedAt, 
+              fast: true,
+              resultCount: nameMatches.length 
+            } 
+          });
+        }
+      }
+
+      // 2. DEEP SEARCH PATH (AI-Powered)
       const parseStart = Date.now();
       const translated = await buildIdealProfile(query, userId, kimi, tables, ai, log);
       const parseMs = Date.now() - parseStart;
+
+      // Secondary Name Search (if LLM identifies a name query that fast path missed)
+      if (translated.name_query) {
+        if (!tables) {
+          const appwrite = new Client()
+            .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
+            .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
+            .setKey(process.env.APPWRITE_API_KEY);
+          tables = new TablesDB(appwrite);
+        }
+        const nameParts = translated.name_query.split(/\s+/);
+        const nameRes = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: PROFILES_TABLE,
+          queries: [
+            Query.or([
+              Query.contains('first_name', nameParts[0]),
+              Query.contains('last_name', nameParts[nameParts.length - 1]),
+              Query.contains('full_name', translated.name_query),
+            ]),
+            Query.limit(20),
+          ],
+        });
+        const nameMatches = (nameRes.rows || []).map((p) => ({
+          id: p.user_id,
+          profile: p,
+          score: 1.0,
+          dimensions: { identity: 1, intent: 1, resonance: 1, network: 1 },
+          match_reason: `Direct name match for "${translated.name_query}" (AI identified)`,
+          source: 'in-app',
+          retrieval_variant: 'ai_name',
+        }));
+        log(`[search] AI Name query matched ${nameMatches.length} profiles`);
+        return res.json({ matches: nameMatches });
+      }
 
       log(`[search] Translated filters: ${JSON.stringify(translated.filters)}`);
       log(`[search] Translated must_not: ${JSON.stringify(translated.must_not)}`);
@@ -1213,22 +1567,22 @@ Return JSON:
 }
 Keep lists to 3–5 items max. Use short fragments (e.g. "Entrepreneurs" not full name).`;
 
-          log(`[external] Calling Kimi for group identification`);
-          const groupResponse = await kimi.chat.completions.create({
-            model: KIMI_DEPLOYMENT,
-            messages: [{
-              role: 'system',
-              content: 'You identify Oxford university societies and sports clubs relevant to a search query. Output only valid JSON.'
-            }, {
-              role: 'user',
-              content: groupPrompt
-            }],
-            response_format: { type: 'json_object' },
-            temperature: 0.1,
-            max_tokens: 256,
+          log(`[external] Calling Gemini for group identification`);
+          const groupStart = Date.now();
+          const groupResponse = await ai.models.generateContent({
+            model: 'gemini-3.1-flash-lite-preview',
+            contents: [{ role: 'user', parts: [{ text: groupPrompt }] }],
+            config: {
+              systemInstruction: 'You identify Oxford university societies and sports clubs relevant to a search query. Output only valid JSON.',
+              responseMimeType: 'application/json',
+              temperature: 0.1,
+              thinkingConfig: {
+                thinkingLevel: "minimal"
+              }
+            }
           });
-          log(`[external] Kimi grouping response received`);
-          const groups = safeParseJson(groupResponse.choices?.[0]?.message?.content || '{}') || {};
+          log(`[external] Gemini grouping response received in ${Date.now() - groupStart}ms`);
+          const groups = safeParseJson(groupResponse?.text || '{}') || {};
           const targetSocieties = groups.societies || [];
           const targetSports = groups.sports || [];
           log(`[external] Identified societies: ${targetSocieties.join(', ') || 'none'}, sports: ${targetSports.join(', ') || 'none'}`);
@@ -1312,6 +1666,7 @@ Return JSON array:
 Score 0–100. Include all ${candidates.length} candidates.`;
 
             log(`[external] Calling Kimi for ranking`);
+            const rankStart = Date.now();
             const rankResponse = await kimi.chat.completions.create({
               model: KIMI_DEPLOYMENT,
               messages: [{
@@ -1325,7 +1680,7 @@ Score 0–100. Include all ${candidates.length} candidates.`;
               temperature: 0.1,
               max_tokens: 512,
             });
-            log(`[external] Kimi ranking response received`);
+            log(`[external] Kimi ranking response received in ${Date.now() - rankStart}ms`);
 
             let rankings = safeParseJson(rankResponse.choices?.[0]?.message?.content || '[]') || [];
             if (!Array.isArray(rankings) && rankings.rankings) {
@@ -1496,6 +1851,131 @@ Score 0–100. Include all ${candidates.length} candidates.`;
         log(`[search] WARNING: No matches found for query="${query}"`);
       }
       return res.json({ matches, metadata });
+    }
+
+    // ─── GENERATE_DRAFT: AI-assisted message draft for a conversation ────────
+    if (action === 'generate_draft') {
+      const { messages = [], current_profile = {}, other_profile = {}, tone = 'direct', instruction = '' } = body;
+      const userId = req.headers['x-appwrite-user-id'] || current_profile?.user_id;
+      log(`[generate_draft] Starting for tone="${tone}", instruction="${instruction}", msgCount=${messages.length}`);
+
+      if (!userId) {
+        return res.json({ error: 'User ID is required to generate drafts.' }, 400);
+      }
+
+      const appwrite = new Client()
+        .setEndpoint(process.env.APPWRITE_FUNCTION_ENDPOINT || 'https://fra.cloud.appwrite.io/v1')
+        .setProject(process.env.APPWRITE_FUNCTION_PROJECT_ID)
+        .setKey(process.env.APPWRITE_API_KEY);
+      const tables = new TablesDB(appwrite);
+
+      // Fetch the most up-to-date profile to check limits and subscription
+      const profileRes = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: PROFILES_TABLE,
+        queries: [Query.equal('user_id', userId), Query.limit(1)]
+      });
+      const dbProfile = profileRes.rows?.[0];
+      
+      if (!dbProfile) {
+        return res.json({ error: 'Profile not found.' }, 404);
+      }
+
+      const isPro = dbProfile.active_plan === 'spark' || dbProfile.active_plan === 'zenith' || !!dbProfile.stripe_subscription_id;
+      let draftsUsed = dbProfile.ai_drafts_used || 0;
+      let resetAt = dbProfile.ai_drafts_reset_at ? new Date(dbProfile.ai_drafts_reset_at) : null;
+      const now = new Date();
+
+      // If they are on the free plan, enforce limits
+      if (!isPro) {
+        // Reset if 30 days have passed or if never set
+        if (!resetAt || now > resetAt) {
+          draftsUsed = 0;
+          const nextReset = new Date();
+          nextReset.setDate(nextReset.getDate() + 30);
+          resetAt = nextReset;
+          // We'll optimistically update the DB now so we don't double count if they spam requests
+          await tables.updateRow({
+            databaseId: DB_ID,
+            tableId: PROFILES_TABLE,
+            rowId: dbProfile.$id,
+            data: {
+              ai_drafts_used: draftsUsed,
+              ai_drafts_reset_at: resetAt.toISOString()
+            }
+          });
+        }
+
+        if (draftsUsed >= 10) {
+          log(`[generate_draft] Draft limit reached for user ${userId}.`);
+          return res.json({ error: 'draft_limit_reached' }, 403);
+        }
+      }
+
+      const msgContext = messages
+        .map(m => `${m.type === 'out' ? 'Me' : other_profile.full_name || 'Them'}: ${m.text}`)
+        .join('\n');
+
+      const myContext = [
+        current_profile.full_name && `Name: ${current_profile.full_name}`,
+        current_profile.college && `College: ${current_profile.college}`,
+        current_profile.career_field && `Career: ${current_profile.career_field}`,
+        current_profile.bio && `Bio: ${current_profile.bio}`,
+      ].filter(Boolean).join('\n');
+
+      const theirContext = [
+        other_profile.full_name && `Name: ${other_profile.full_name}`,
+        other_profile.college && `College: ${other_profile.college}`,
+        other_profile.career_field && `Career: ${other_profile.career_field}`,
+        other_profile.bio && `Bio: ${other_profile.bio}`,
+      ].filter(Boolean).join('\n');
+
+      const systemPrompt = `You are a professional networking assistant. Write a short, natural reply message in a ${tone} tone. Keep it under 3 sentences. Do not use filler phrases or generic openers. Output the message text only — no quotes, no preamble.`;
+
+      const userPrompt = [
+        myContext ? `My profile:\n${myContext}` : '',
+        theirContext ? `\nTheir profile:\n${theirContext}` : '',
+        msgContext ? `\nConversation so far:\n${msgContext}` : '',
+        instruction ? `\nInstruction: ${instruction}` : '',
+        '\nWrite my next message:',
+      ].filter(Boolean).join('\n');
+
+      log(`[generate_draft] Constructed prompts (system=${systemPrompt.length}, user=${userPrompt.length})`);
+      log(`[generate_draft] Calling Gemini models for draft generation`);
+      
+      const draftStart = Date.now();
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite-preview',
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          config: {
+            systemInstruction: systemPrompt,
+            temperature: 0.7,
+            maxOutputTokens: 200,
+          },
+        });
+
+        log(`[generate_draft] Gemini response received in ${Date.now() - draftStart}ms`);
+        const draft = (response?.text || '').trim();
+        log(`[generate_draft] Generated draft (size=${draft.length})`);
+
+        // If it succeeded and they are free, increment their usage
+        if (!isPro) {
+          await tables.updateRow({
+            databaseId: DB_ID,
+            tableId: PROFILES_TABLE,
+            rowId: dbProfile.$id,
+            data: {
+              ai_drafts_used: draftsUsed + 1
+            }
+          });
+        }
+
+        return res.json({ draft });
+      } catch (apiErr) {
+        log(`[generate_draft] Gemini API Error after ${Date.now() - draftStart}ms: ${apiErr.message}`);
+        throw apiErr;
+      }
     }
 
     return res.json({ error: `Unknown action: ${action}` }, 400);

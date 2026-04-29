@@ -1,4 +1,4 @@
-import { Client, ID, Query, TablesDB, Messaging } from 'node-appwrite';
+import { Client, ID, Query, TablesDB, Messaging, Permission, Role } from 'node-appwrite';
 import { GoogleGenAI } from '@google/genai';
 import * as Sentry from '@sentry/node';
 
@@ -16,6 +16,7 @@ const MESSAGES_TABLE = process.env.APPWRITE_MESSAGES_TABLE || 'messages';
 const CONNECTIONS_TABLE = process.env.APPWRITE_CONNECTIONS_TABLE || 'connections';
 const REL_EVENTS_TABLE = process.env.APPWRITE_REL_EVENTS_TABLE || 'relationship_events';
 const VOLTZ_LEDGER_TABLE = process.env.APPWRITE_VOLTZ_LEDGER_TABLE || 'voltz_ledger';
+const INBOX_NOTIFICATIONS_TABLE = process.env.APPWRITE_INBOX_NOTIFICATIONS_TABLE || 'inbox_notifications';
 
 const PROFILE_PHOTOS_BUCKET_ID = process.env.PROFILE_PHOTOS_BUCKET_ID || 'profilePhotos';
 
@@ -373,22 +374,36 @@ function buildCompatibilitySnapshot({ profileA, profileB, baseScore, generatedAt
   const bSubject = normalizeString(profileB?.study_subject);
   const aCareer = normalizeString(profileA?.career_field);
   const bCareer = normalizeString(profileB?.career_field);
+  const aYear = normalizeString(profileA?.year_of_study || profileA?.year);
+  const bYear = normalizeString(profileB?.year_of_study || profileB?.year);
+  const aStage = normalizeString(profileA?.project_stage || profileA?.stage);
+  const bStage = normalizeString(profileB?.project_stage || profileB?.stage);
 
   const sameCollege = Boolean(aCollege) && aCollege.toLowerCase() === bCollege.toLowerCase();
   const sameSubject = Boolean(aSubject) && aSubject.toLowerCase() === bSubject.toLowerCase();
   const sameCareer = Boolean(aCareer) && aCareer.toLowerCase() === bCareer.toLowerCase();
+  const sameYear = Boolean(aYear) && aYear.toLowerCase() === bYear.toLowerCase();
+  const sameStage = Boolean(aStage) && aStage.toLowerCase() === bStage.toLowerCase();
 
   const goalsOverlap = overlapValues(toUniqueList(profileA?.goals), toUniqueList(profileB?.goals));
   const desiredOverlap = overlapValues(toUniqueList(profileA?.desired_connections), toUniqueList(profileB?.desired_connections));
-  const startupOverlap = overlapValues(toUniqueList(profileA?.startup_connections), toUniqueList(profileB?.startup_connections));
   const circlesOverlap = overlapValues(toUniqueList(profileA?.social_circles), toUniqueList(profileB?.social_circles));
   const datingOverlap = overlapValues(toUniqueList(profileA?.dating_hobbies), toUniqueList(profileB?.dating_hobbies));
 
-  const background = clampScore(50 + (sameCollege ? 24 : 0) + (sameSubject ? 14 : 0) + (sameCareer ? 12 : 0));
-  const goals = clampScore(46 + (goalsOverlap.length * 15) + (desiredOverlap.length * 9) + (startupOverlap.length * 8));
-  const network = clampScore(50 + (circlesOverlap.length * 12) + (datingOverlap.length * 7));
-  const stage = clampScore((baseScore * 0.6) + (goals * 0.2) + (network * 0.2));
-  const score = clampScore((baseScore * 0.7) + (background * 0.1) + (goals * 0.1) + (network * 0.1));
+  // Network: College, Subject, Social Circles (25% weight)
+  const background = clampScore(50 + (sameCollege ? 25 : 0) + (sameSubject ? 10 : 0) + (circlesOverlap.length * 8));
+  
+  // Goals: Intent, Shared Goals, Desired Connections, Career (25% weight)
+  const goals = clampScore(45 + (goalsOverlap.length * 15) + (desiredOverlap.length * 10) + (sameCareer ? 15 : 0));
+  
+  // Stage: Year of Study, Project Stage (25% weight)
+  const network = clampScore(55 + (sameYear ? 25 : 0) + (sameStage ? 20 : 0));
+  
+  // Sync: AI Semantic Score (25% weight)
+  const stage = clampScore(baseScore);
+
+  // Overall Score: Perfect average of the 4 dimensions so they "add up" for the user
+  const score = clampScore((background + goals + network + stage) / 4);
 
   const chips = [];
   if (sameCollege) {
@@ -403,13 +418,6 @@ function buildCompatibilitySnapshot({ profileA, profileB, baseScore, generatedAt
       key: 'career',
       label: `${aCareer} focus`,
       tooltip: `Both profiles map to ${aCareer}. Keep examples practical and domain-specific.`,
-    });
-  }
-  if (sameSubject) {
-    chips.push({
-      key: 'subject',
-      label: `Shared subject: ${aSubject}`,
-      tooltip: `A common academic thread in ${aSubject} can anchor the conversation quickly.`,
     });
   }
   if (goalsOverlap.length > 0) {
@@ -433,13 +441,6 @@ function buildCompatibilitySnapshot({ profileA, profileB, baseScore, generatedAt
       tooltip: `Both profiles prioritize: ${listSummary(desiredOverlap, 2)}. This makes intent clearer early on.`,
     });
   }
-  if (startupOverlap.length > 0) {
-    chips.push({
-      key: 'startup',
-      label: `Startup priorities overlap`,
-      tooltip: `Shared startup connection interests: ${listSummary(startupOverlap, 2)}.`,
-    });
-  }
 
   if (chips.length === 0) {
     chips.push({
@@ -450,14 +451,14 @@ function buildCompatibilitySnapshot({ profileA, profileB, baseScore, generatedAt
   }
 
   const summaryParts = [];
-  if (sameCollege) summaryParts.push('shared college context');
-  if (sameCareer) summaryParts.push('aligned career focus');
-  if (goalsOverlap.length > 0) summaryParts.push('goal alignment');
-  if (circlesOverlap.length > 0) summaryParts.push('network overlap');
+  if (sameCollege) summaryParts.push('shared college');
+  if (sameCareer) summaryParts.push('aligned focus');
+  if (goalsOverlap.length > 0) summaryParts.push(`mutual interest in ${goalsOverlap[0]}`);
+  if (circlesOverlap.length > 0) summaryParts.push('overlapping networks');
 
   const summary = summaryParts.length > 0
-    ? `Strong match - ${summaryParts.slice(0, 3).join(', ')}.`
-    : `Good match - compatibility is ${score}% from profile overlap and conversation context.`;
+    ? `Strong match based on ${summaryParts.slice(0, 2).join(' and ')}.`
+    : `High compatibility match (${score}%) driven by AI-identified profile resonance.`;
 
   return {
     version: 1,
@@ -517,7 +518,7 @@ async function listOneRow(tables, tableId, queries) {
   return out.rows?.[0] || null;
 }
 
-async function getRowOrNull(tables, tableId, rowId) {
+async function getRowOrNull(tables, tableId, rowId, log) {
   if (!rowId) return null;
   try {
     return await tables.getRow({
@@ -525,19 +526,28 @@ async function getRowOrNull(tables, tableId, rowId) {
       tableId,
       rowId,
     });
-  } catch {
+  } catch (e) {
+    if (log) log(`[getRowOrNull] FAILED table=${tableId} rowId=${rowId} err=${e.message}`);
     return null;
   }
 }
 
-async function getProfileByUserId(tables, userId) {
-  return listOneRow(tables, PROFILES_TABLE, [
-    Query.equal('user_id', userId),
-  ]);
+async function getProfileByUserId(tables, userId, log) {
+  if (log) log(`[getProfileByUserId] userId: ${userId}`);
+  const out = await tables.listRows({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    queries: [Query.equal('user_id', userId), Query.orderDesc('$createdAt'), Query.limit(5)],
+  });
+  if (log && (out.rows?.length ?? 0) > 1) {
+    log(`[getProfileByUserId] WARNING: ${out.rows.length} profiles found for user_id=${userId}. IDs: ${out.rows.map(r => r.$id).join(', ')} — using newest: ${out.rows[0].$id}`);
+  }
+  return out.rows?.[0] || null;
 }
 
-async function getProfileById(tables, profileId) {
-  return getRowOrNull(tables, PROFILES_TABLE, profileId);
+async function getProfileById(tables, profileId, log) {
+  if (log) log(`[getProfileById] profileId: ${profileId}`);
+  return getRowOrNull(tables, PROFILES_TABLE, profileId, log);
 }
 
 async function getProfilesByIds(tables, profileIds) {
@@ -635,6 +645,24 @@ async function createVoltzEntry(tables, { profileId, connectionId, relationshipE
     permissions: userIdPermission ? [userIdPermission] : [],
   });
   return row;
+}
+
+async function incrementProfileVoltz(tables, profileId, amount) {
+  const res = await tables.listRows({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    queries: [Query.equal('$id', [profileId]), Query.limit(1)],
+  });
+  const profile = res.rows?.[0];
+  if (!profile) return null;
+  const next = (profile.current_voltz || 0) + amount;
+  await tables.updateRow({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    rowId: profileId,
+    data: { current_voltz: next },
+  });
+  return next;
 }
 
 async function getCompatibilityScore(tables, userAId, userBId) {
@@ -749,6 +777,9 @@ function mapConversationCard(connection, counterpart, latestMessage, unreadCount
   const daysCold = dayDiffFromNow(lastEventAt);
   const attention = daysCold >= 7;
 
+  const rawPhotoIds = Array.isArray(counterpart?.photo_file_ids) ? counterpart.photo_file_ids : [];
+  const photo_file_id = rawPhotoIds.find((id) => typeof id === 'string' && id.trim()) || null;
+
   return {
     id: relationId(connection.conversation) || connection.conversation_row_id || connection.$id,
     conversationId: relationId(connection.conversation) || connection.conversation_row_id || null,
@@ -757,6 +788,7 @@ function mapConversationCard(connection, counterpart, latestMessage, unreadCount
     role: profileRole(counterpart),
     initials: initialsFromName(fullName),
     color: colorFromName(fullName),
+    photo_file_id,
     cold: attention,
     preview,
     previewFromYou: isFromCurrentUser,
@@ -770,13 +802,15 @@ function mapConversationCard(connection, counterpart, latestMessage, unreadCount
   };
 }
 
-async function requireCurrentProfile(tables, req, body) {
+async function requireCurrentProfile(tables, req, body, log) {
   const currentUserId = resolveCurrentUserId(req, body);
+  if (log) log(`[requireCurrentProfile] auth user_id from header/body: ${currentUserId}`);
   if (!currentUserId) {
     throw new HttpError(401, 'Unable to resolve current user id');
   }
 
-  const profile = await getProfileByUserId(tables, currentUserId);
+  const profile = await getProfileByUserId(tables, currentUserId, log);
+  if (log) log(`[requireCurrentProfile] resolved profile $id=${profile?.$id} for auth user_id=${currentUserId}`);
   if (!profile) {
     throw new HttpError(404, 'Current user profile not found');
   }
@@ -784,19 +818,27 @@ async function requireCurrentProfile(tables, req, body) {
   return profile;
 }
 
-async function actionInitiateRequest({ tables, body, currentProfile }) {
+async function actionInitiateRequest({ tables, body, currentProfile, log }) {
+  if (log) log(`[initiate_request] Started. initiator: ${currentProfile.$id}`);
   const targetProfileId = normalizeString(body.target_profile_id || body.targetProfileId || body.profile_id);
   const targetUserId = normalizeString(body.target_user_id || body.targetUserId);
   const openingMessage = truncate(normalizeString(body.opening_message || body.openingMessage || body.message) || 'Hey - I would love to connect.', 5000);
   const now = new Date().toISOString();
 
+  if (log) log(`[initiate_request] Params: targetProfileId=${targetProfileId}, targetUserId=${targetUserId}`);
+
   if (!targetProfileId && !targetUserId) {
     throw new HttpError(400, 'target_profile_id or target_user_id is required');
   }
 
-  const targetProfile = targetProfileId
-    ? await getProfileById(tables, targetProfileId)
-    : await getProfileByUserId(tables, targetUserId);
+  let targetProfile = targetProfileId
+    ? await getProfileById(tables, targetProfileId, log)
+    : null;
+
+  if (!targetProfile && targetUserId) {
+    if (log) log(`[initiate_request] Profile not found by ID ${targetProfileId}, falling back to User ID ${targetUserId}`);
+    targetProfile = await getProfileByUserId(tables, targetUserId, log);
+  }
 
   if (!targetProfile) {
     throw new HttpError(404, 'Target profile not found');
@@ -807,7 +849,9 @@ async function actionInitiateRequest({ tables, body, currentProfile }) {
   }
 
   const pairKey = buildPairKey(currentProfile.$id, targetProfile.$id);
+  if (log) log(`[initiate_request] pairKey: ${pairKey}`);
   const existing = await listOneRow(tables, CONNECTIONS_TABLE, [Query.equal('pair_key', pairKey)]);
+  if (log) log(`[initiate_request] Existing connection: ${existing ? existing.$id : 'none'} (status: ${existing?.status || 'n/a'})`);
 
   if (existing?.status === 'blocked') {
     throw new HttpError(409, 'Connection is blocked');
@@ -915,7 +959,14 @@ async function actionInitiateRequest({ tables, body, currentProfile }) {
           compatibility_snapshot_json: null,
           compatibility_generated_at: null,
         },
+        permissions: [
+          Permission.read(Role.user(currentProfile.user_id)),
+          Permission.update(Role.user(currentProfile.user_id)),
+          Permission.read(Role.user(targetProfile.user_id)),
+          Permission.update(Role.user(targetProfile.user_id)),
+        ],
       });
+      if (log) log(`[initiate_request] Created NEW connection: $id=${connection.$id} initiator_profile_id=${currentProfile.$id} responder_profile_id=${targetProfile.$id} targetProfile.user_id=${targetProfile.user_id}`);
 
       rollback.push(async () => {
         await tables.deleteRow({
@@ -946,6 +997,10 @@ async function actionInitiateRequest({ tables, body, currentProfile }) {
         sent_at: now,
         reply_to_message_id: null,
       },
+      permissions: [
+        Permission.read(Role.user(currentProfile.user_id)),
+        Permission.read(Role.user(targetProfile.user_id)),
+      ],
     });
 
     rollback.push(async () => {
@@ -965,6 +1020,34 @@ async function actionInitiateRequest({ tables, body, currentProfile }) {
         opening_message_preview: truncate(openingMessage, 500),
         last_activity_at: now,
       },
+    });
+
+    // Create an inbox notification for the responder to trigger realtime
+    const notificationRow = await tables.createRow({
+      databaseId: DB_ID,
+      tableId: INBOX_NOTIFICATIONS_TABLE,
+      rowId: ID.unique(),
+      data: {
+        recipient_profile_id: targetProfile.$id,
+        conversation_id: connection.$id,
+        message_preview: `${currentProfile.full_name || 'Someone'} sent you a connection request.`,
+        sender_name: currentProfile.full_name || 'Someone',
+      },
+      permissions: [
+        Permission.read(Role.user(targetProfile.user_id)),
+        Permission.update(Role.user(targetProfile.user_id)),
+        Permission.delete(Role.user(targetProfile.user_id)),
+      ],
+    });
+
+    if (log) log(`[initiate_request] Created inbox notification for responder: ${targetProfile.user_id}`);
+
+    rollback.push(async () => {
+      await tables.deleteRow({
+        databaseId: DB_ID,
+        tableId: INBOX_NOTIFICATIONS_TABLE,
+        rowId: notificationRow.$id,
+      });
     });
 
     const eventRow = await createRelationshipEvent(tables, {
@@ -1002,16 +1085,18 @@ async function actionInitiateRequest({ tables, body, currentProfile }) {
       });
     });
 
+    const newBalance = await incrementProfileVoltz(tables, currentProfile.$id, VOLTZ_POINTS.message_sent);
+
     return {
       success: true,
       connection_id: connection.$id,
       message_id: openingMessageRow.$id,
       voltz_earned: VOLTZ_POINTS.message_sent,
+      new_voltz_balance: newBalance,
     };
   } catch (err) {
     for (const task of rollback.reverse()) {
       try {
-        // Best-effort rollback to keep state coherent.
         // eslint-disable-next-line no-await-in-loop
         await task();
       } catch {
@@ -1067,6 +1152,12 @@ async function actionAcceptConnection({ tables, messaging, body, currentProfile,
         last_message_at: now,
         creator: currentProfile.$id,
       },
+      permissions: [
+        Permission.read(Role.user(currentProfile.user_id)),
+        Permission.update(Role.user(currentProfile.user_id)),
+        Permission.read(Role.user(initiatorProfile.user_id)),
+        Permission.update(Role.user(initiatorProfile.user_id)),
+      ],
     });
 
     rollback.push(async () => {
@@ -1088,6 +1179,11 @@ async function actionAcceptConnection({ tables, messaging, body, currentProfile,
         muted: false,
         last_read_at: null,
       },
+      permissions: [
+        Permission.read(Role.user(initiatorProfile.user_id)),
+        Permission.update(Role.user(initiatorProfile.user_id)),
+        Permission.delete(Role.user(initiatorProfile.user_id)),
+      ],
     });
 
     rollback.push(async () => {
@@ -1109,6 +1205,11 @@ async function actionAcceptConnection({ tables, messaging, body, currentProfile,
         muted: false,
         last_read_at: now,
       },
+      permissions: [
+        Permission.read(Role.user(currentProfile.user_id)),
+        Permission.update(Role.user(currentProfile.user_id)),
+        Permission.delete(Role.user(currentProfile.user_id)),
+      ],
     });
 
     rollback.push(async () => {
@@ -1225,11 +1326,14 @@ async function actionAcceptConnection({ tables, messaging, body, currentProfile,
       });
     });
 
+    const newBalance = await incrementProfileVoltz(tables, currentProfile.$id, VOLTZ_POINTS.connection_accepted);
+
     const result = {
       success: true,
       connection_id: connection.$id,
       conversation_id: conversation.$id,
       voltz_earned: VOLTZ_POINTS.connection_accepted,
+      new_voltz_balance: newBalance,
       compatibility_snapshot: compatibilitySnapshot,
       stage_progress: buildStageProgress('accepted'),
     };
@@ -1399,23 +1503,56 @@ async function actionBlockConnection({ tables, body, currentProfile }) {
   };
 }
 
-async function actionListPendingToMe({ tables, body, currentProfile }) {
+async function actionListPendingToMe({ tables, body, currentProfile, log }) {
+  if (log) log(`[list_pending_to_me] Started for profile $id=${currentProfile.$id} user_id=${currentProfile.user_id}`);
   const limit = clampLimit(body.limit);
   const offset = clampOffset(body.offset);
 
+  // Fetch ALL profile rows for this auth user to handle duplicate profile rows
+  const allProfilesForUser = await tables.listRows({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    queries: [Query.equal('user_id', currentProfile.user_id), Query.limit(10)],
+  });
+  const allProfileIds = [...new Set((allProfilesForUser.rows || []).map(p => p.$id).filter(Boolean))];
+  if (log) log(`[list_pending_to_me] All profile IDs for user: ${allProfileIds.join(', ')}`);
+
   const queries = [
-    Query.equal('responder_profile_id', currentProfile.$id),
+    Query.equal('responder_profile_id', allProfileIds),
     Query.equal('status', 'pending'),
     Query.orderDesc('initiated_at'),
     Query.limit(limit),
   ];
   if (offset > 0) queries.push(Query.offset(offset));
 
+  if (log) log(`[list_pending_to_me] Querying connections WHERE responder_profile_id IN [${allProfileIds.join(',')}] AND status='pending' LIMIT ${limit}`);
+
   const out = await tables.listRows({
     databaseId: DB_ID,
     tableId: CONNECTIONS_TABLE,
     queries,
   });
+  if (log) log(`[list_pending_to_me] Found ${out.rows?.length || 0} rows (total reported: ${out.total ?? 'n/a'})`);
+  if (log && out.rows?.length > 0) {
+    log(`[list_pending_to_me] Sample row: responder_profile_id=${out.rows[0].responder_profile_id} initiator_profile_id=${out.rows[0].initiator_profile_id} status=${out.rows[0].status}`);
+  }
+  if (log && out.rows?.length === 0) {
+    try {
+      // Scan last 10 connections in the table regardless of profile — show raw IDs
+      const allRecent = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: CONNECTIONS_TABLE,
+        queries: [Query.orderDesc('initiated_at'), Query.limit(10)],
+      });
+      log(`[DIAG] Last ${allRecent.rows?.length ?? 0} connections in table:`);
+      (allRecent.rows || []).forEach((r, i) => {
+        log(`[DIAG] [${i}] $id=${r.$id} status=${r.status} initiator_profile_id=${r.initiator_profile_id} responder_profile_id=${r.responder_profile_id} initiated_at=${r.initiated_at}`);
+      });
+      log(`[DIAG] Current profile $id=${currentProfile.$id} user_id=${currentProfile.user_id}`);
+    } catch (diagErr) {
+      log(`[DIAG] Scan failed: ${diagErr.message}`);
+    }
+  }
 
   const initiatorIds = out.rows
     .map((connection) => relationId(connection.initiator) || connection.initiator_profile_id)
@@ -1440,16 +1577,27 @@ async function actionListPendingToMe({ tables, body, currentProfile }) {
   };
 }
 
-async function actionListPendingFromMe({ tables, body, currentProfile }) {
+async function actionListPendingFromMe({ tables, body, currentProfile, log }) {
+  if (log) log(`[list_pending_from_me] Started for profile ${currentProfile.$id} user_id=${currentProfile.user_id}`);
   const limit = clampLimit(body.limit);
   const offset = clampOffset(body.offset);
 
+  // Fetch ALL profile rows for this auth user to handle duplicate profile rows
+  const allProfilesForUser = await tables.listRows({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    queries: [Query.equal('user_id', currentProfile.user_id), Query.limit(10)],
+  });
+  const allProfileIds = [...new Set((allProfilesForUser.rows || []).map(p => p.$id).filter(Boolean))];
+  if (log) log(`[list_pending_from_me] All profile IDs for user: ${allProfileIds.join(', ')}`);
+
   const queries = [
-    Query.equal('initiator_profile_id', currentProfile.$id),
-    Query.equal('status', 'pending'),
+    Query.equal('initiator_profile_id', allProfileIds),
+    Query.equal('status', ['pending', 'declined']),
     Query.orderDesc('initiated_at'),
     Query.limit(limit),
   ];
+  if (log) log(`[list_pending_from_me] Query: initiator_profile_id IN [${allProfileIds.join(',')}], status IN [pending, declined]`);
   if (offset > 0) queries.push(Query.offset(offset));
 
   const out = await tables.listRows({
@@ -1457,6 +1605,24 @@ async function actionListPendingFromMe({ tables, body, currentProfile }) {
     tableId: CONNECTIONS_TABLE,
     queries,
   });
+
+  if (log) log(`[list_pending_from_me] Found ${out.rows?.length || 0} rows (total: ${out.total || 0})`);
+  if (log && out.rows?.length === 0) {
+    try {
+      const allRecent = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: CONNECTIONS_TABLE,
+        queries: [Query.orderDesc('initiated_at'), Query.limit(10)],
+      });
+      log(`[DIAG from_me] Last ${allRecent.rows?.length ?? 0} connections in table:`);
+      (allRecent.rows || []).forEach((r, i) => {
+        log(`[DIAG from_me] [${i}] $id=${r.$id} status=${r.status} initiator_profile_id=${r.initiator_profile_id} responder_profile_id=${r.responder_profile_id}`);
+      });
+      log(`[DIAG from_me] Queried initiator_profile_id=${currentProfile.$id}`);
+    } catch (e) {
+      log(`[DIAG from_me] Scan failed: ${e.message}`);
+    }
+  }
 
   const responderIds = out.rows
     .map((connection) => relationId(connection.responder) || connection.responder_profile_id)
@@ -1527,7 +1693,8 @@ function computeGrowthTrend(items, dateKey, valueKey, periods, totalNow) {
   return results;
 }
 
-async function actionListActive({ tables, body, currentProfile }) {
+async function actionListActive({ tables, body, currentProfile, log }) {
+  if (log) log(`[list_active] Started for profile ${currentProfile.$id}`);
   const limit = clampLimit(body.limit);
 
   const [initiated, received] = await Promise.all([
@@ -1848,10 +2015,12 @@ async function actionGetProfileStats({ tables, currentProfile }) {
   };
 }
 
-async function actionGetHomeFeed({ tables, body, currentProfile }) {
+async function actionGetHomeFeed({ tables, body, currentProfile, log }) {
   const endpoint = process.env.APPWRITE_FUNCTION_ENDPOINT || process.env.APPWRITE_ENDPOINT || 'https://fra.cloud.appwrite.io/v1';
   const projectId = process.env.APPWRITE_FUNCTION_PROJECT_ID || process.env.APPWRITE_PROJECT_ID;
   const now = new Date().toISOString();
+
+  if (log) log(`[get_home_feed] Started for profile $id=${currentProfile.$id} user_id=${currentProfile.user_id}`);
 
   // ── 1. Pending incoming connections ─────────────────────────────────────────
   const pendingOut = await tables.listRows({
@@ -1864,6 +2033,11 @@ async function actionGetHomeFeed({ tables, body, currentProfile }) {
       Query.limit(10),
     ],
   });
+
+  if (log) log(`[get_home_feed] Pending query returned ${pendingOut.rows?.length ?? 0} rows. Queried responder_profile_id='${currentProfile.$id}'`);
+  if (log && pendingOut.rows?.length > 0) {
+    log(`[get_home_feed] Pending sample: ${JSON.stringify({ id: pendingOut.rows[0].$id, status: pendingOut.rows[0].status, initiator: pendingOut.rows[0].initiator_profile_id })}`);
+  }
 
   const initiatorIds = pendingOut.rows
     .map((c) => relationId(c.initiator) || c.initiator_profile_id)
@@ -2116,11 +2290,17 @@ async function actionDeductVoltz({ tables, body, currentProfile }) {
   };
 }
 
-async function actionBootstrapInbox({ tables, body, currentProfile }) {
+async function actionBootstrapInbox({ tables, body, currentProfile, log }) {
+  if (log) log(`[bootstrap_inbox] Starting for profile $id=${currentProfile.$id} user_id=${currentProfile.user_id}`);
   const [active, pending] = await Promise.all([
-    actionListActive({ tables, body, currentProfile }),
-    actionListPendingToMe({ tables, body, currentProfile }),
+    actionListActive({ tables, body, currentProfile, log }),
+    actionListPendingToMe({ tables, body, currentProfile, log }),
   ]);
+
+  if (log) log(`[bootstrap_inbox] Done: conversations=${active.conversations?.length ?? 0} pending=${pending.connections?.length ?? 0}`);
+  if (log && pending.connections?.length > 0) {
+    log(`[bootstrap_inbox] Pending sample: ${JSON.stringify(pending.connections[0])}`);
+  }
 
   return {
     success: true,
@@ -2143,14 +2323,14 @@ export default async ({ req, res, log, error }) => {
       throw new HttpError(400, 'action is required');
     }
 
-    const currentProfile = await requireCurrentProfile(tables, req, body);
+    const currentProfile = await requireCurrentProfile(tables, req, body, log);
 
     let payload;
     switch (action) {
       case 'initiate_request':
       case 'create_connection':
       case 'create_connection_request':
-        payload = await actionInitiateRequest({ tables, body, currentProfile });
+        payload = await actionInitiateRequest({ tables, body, currentProfile, log });
         break;
       case 'accept_connection':
         payload = await actionAcceptConnection({ tables, messaging, body, currentProfile, log });
@@ -2165,10 +2345,10 @@ export default async ({ req, res, log, error }) => {
         payload = await actionBlockConnection({ tables, body, currentProfile });
         break;
       case 'list_pending_to_me':
-        payload = await actionListPendingToMe({ tables, body, currentProfile });
+        payload = await actionListPendingToMe({ tables, body, currentProfile, log });
         break;
       case 'list_pending_from_me':
-        payload = await actionListPendingFromMe({ tables, body, currentProfile });
+        payload = await actionListPendingFromMe({ tables, body, currentProfile, log });
         break;
       case 'list_active':
       case 'list_connections':
@@ -2181,10 +2361,10 @@ export default async ({ req, res, log, error }) => {
         payload = await actionGetProfileStats({ tables, currentProfile });
         break;
       case 'bootstrap_inbox':
-        payload = await actionBootstrapInbox({ tables, body, currentProfile });
+        payload = await actionBootstrapInbox({ tables, body, currentProfile, log });
         break;
       case 'get_home_feed':
-        payload = await actionGetHomeFeed({ tables, body, currentProfile });
+        payload = await actionGetHomeFeed({ tables, body, currentProfile, log });
         break;
       case 'ai_draft_message':
         payload = await actionAiDraftMessage({ tables, body, currentProfile });

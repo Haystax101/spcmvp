@@ -2,7 +2,7 @@ import React from "react";
 import { C, SERIF, SANS } from "./shared/designTokens";
 import { BoltIcon, IconGear, IconHelp, IconChevronRight, IconExternal } from "./shared/icons";
 import TopNav from "./shared/TopNav";
-import { buildThumbnailUrl } from "../../lib/photos";
+import { getProfilePhotoUrl, PHOTO_SIZES } from "../../lib/photos";
 
 const PlanBadge = ({ kind }) => {
   const map = {
@@ -42,8 +42,7 @@ export default function VoltzHomeScreen({
 
   const initials = (profile?.first_name?.[0] || profile?.full_name?.[0] || "?").toUpperCase();
 
-  const firstPhotoId = Array.isArray(profile?.photo_file_ids) ? profile.photo_file_ids[0] : null;
-  const photoUrl = firstPhotoId ? buildThumbnailUrl(firstPhotoId) : null;
+  const photoUrl = getProfilePhotoUrl(profile, PHOTO_SIZES.thumbnail);
 
   const menu = [
     { key: "usage",    label: "Usage",    icon: <BoltIcon size={20} color={C.amber} />, trailing: "chevron", onClick: onUsage    },

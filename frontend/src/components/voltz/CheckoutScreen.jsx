@@ -46,20 +46,70 @@ function StepperButton({ children, onClick, filled, disabled }) {
 
 export default function CheckoutScreen({ context, userId, onBack }) {
   const [loading, setLoading] = useState(false);
+  const [prefetchUrl, setPrefetchUrl] = useState("");
+  const [prefetching, setPrefetching] = useState(true);
   const [error, setError] = useState("");
 
   const item = context?.item;
+
+  // Pre-fetch the checkout URL as soon as we enter checkout
+  React.useEffect(() => {
+    if (!item || !userId) return;
+
+    const fetchSession = async () => {
+      try {
+        const response = await functions.createExecution(
+          STRIPE_GATEWAY_ID,
+          JSON.stringify({
+            action: "create_checkout_session",
+            userId,
+            package: item.id,
+            quantity: 1,
+            successUrl: window.location.origin + "/platform-beta/?payment=success",
+            cancelUrl: window.location.origin + "/platform-beta/?payment=cancelled",
+          }),
+          false
+        );
+
+        if (!response?.responseBody) throw new Error("Payment server didn't respond.");
+
+        const data = JSON.parse(response.responseBody);
+        if (data.url) {
+          setPrefetchUrl(data.url);
+          if (data.session_id) localStorage.setItem("sc_pending_stripe_session", data.session_id);
+        } else {
+          throw new Error(data.error || "Failed to initialize checkout.");
+        }
+      } catch (err) {
+        console.warn("Pre-fetch failed:", err);
+        // We don't show the error yet, because the user might still click and we can retry then
+      } finally {
+        setPrefetching(false);
+      }
+    };
+
+    fetchSession();
+  }, [item?.id, userId]);
+
   if (!item) return null;
 
   const isVoltz = context.type === "voltz";
   const totalPrice = item.price;
-  const baseVoltz = item.voltzPerMonth;
-  const bonusVoltz = 0;
 
   const handleCheckout = async () => {
+    // If we already have the URL, go immediately
+    if (prefetchUrl) {
+      track.userAction('stripe_checkout_session_created_prefetch', { packageId: item.id });
+      window.location.href = prefetchUrl;
+      return;
+    }
+
+    // Otherwise, do the standard fetch (or wait for the prefetch to finish)
     setLoading(true);
     setError("");
     try {
+      // If prefetching is still in flight, we could wait for it, 
+      // but simpler to just trigger a fresh one if it failed or is slow.
       const response = await functions.createExecution(
         STRIPE_GATEWAY_ID,
         JSON.stringify({
@@ -74,13 +124,7 @@ export default function CheckoutScreen({ context, userId, onBack }) {
       );
 
       if (!response?.responseBody) throw new Error("Payment server didn't respond.");
-
-      let data;
-      try {
-        data = JSON.parse(response.responseBody);
-      } catch {
-        throw new Error("Invalid response from payment server.");
-      }
+      const data = JSON.parse(response.responseBody);
 
       if (data.url) {
         if (data.session_id) localStorage.setItem("sc_pending_stripe_session", data.session_id);

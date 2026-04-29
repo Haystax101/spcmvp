@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { functions, DISCOVERY_FUNCTION_ID, CONNECTION_GATEWAY_FUNCTION_ID } from '../lib/appwrite';
+import { getProfilePhotoUrl, PHOTO_SIZES } from '../lib/photos';
 import { readCacheValue, writeCacheEntry } from '../lib/cache';
 import ProfileView from './ProfileView';
 
@@ -172,10 +173,13 @@ function enrichMatch(m, profile, idx) {
     ? `${firstName} is working in ${flat.career_field}${flat.college ? ` at ${flat.college}` : ''} — worth a conversation.`
     : `${firstName} is active on Supercharged and open to new connections.`;
 
+  const photoUrl = getProfilePhotoUrl(flat, PHOTO_SIZES.thumbnail);
+
   return {
     ...flat,
     name, initials, role, score, matched,
     timingSignal, opener,
+    photoUrl,
     dims,
     palette: idx % 4,
     gradient: ['linear-gradient(160deg,#8B7FE8 0%,#5B4FCF 100%)', 'linear-gradient(160deg,#5FBCA7 0%,#1F7A6A 100%)', 'linear-gradient(160deg,#E89B85 0%,#B35A3D 100%)', 'linear-gradient(160deg,#7BA0D4 0%,#3A609E 100%)'][idx % 4],
@@ -397,8 +401,12 @@ function ResultCard({ person, index, onOpenProfile, onConnect }) {
     <div style={{ background: C.paper, border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 16, padding: 18, animation: `sc-card-in 180ms ease-out ${index * 70}ms both`, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
       {/* Top — avatar + name + match */}
       <div onClick={onOpenProfile} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', userSelect: 'none' }}>
-        <div style={{ width: 42, height: 42, borderRadius: '50%', background: p.bg, color: p.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0, fontFamily: "'DM Sans', sans-serif" }}>
-          {person.initials}
+        <div style={{ width: 42, height: 42, borderRadius: '50%', background: p.bg, color: p.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0, fontFamily: "'DM Sans', sans-serif", overflow: 'hidden' }}>
+          {person.photoUrl ? (
+            <img src={person.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            person.initials
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 500, color: C.ink, fontFamily: "'DM Sans', sans-serif" }}>{person.name}</div>

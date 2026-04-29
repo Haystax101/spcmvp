@@ -281,6 +281,7 @@ export default async ({ req, res, log, error }) => {
         },
         payload: {
           // Core identity
+          $id:        profile.$id,
           user_id:    profile.user_id,
           full_name:  profile.full_name   || "",
           first_name: profile.first_name  || "",
@@ -338,21 +339,33 @@ export default async ({ req, res, log, error }) => {
     // ── Award referral bonus on first successful sync (if referred) ───────────
     if (profile.referred_by_code && !profile.referral_bonus_awarded) {
       try {
-        const referrerResult = await tables.listRows({
+        // Look up referrer by username OR referral_code
+        let referrerResult = await tables.listRows({
           databaseId: 'supercharged', tableId: 'profiles',
-          queries: [Query.equal('referral_code', [profile.referred_by_code]), Query.limit(1)]
+          queries: [Query.equal('username', [profile.referred_by_code]), Query.limit(1)]
         });
+        
+        if (!referrerResult.rows?.length) {
+          referrerResult = await tables.listRows({
+            databaseId: 'supercharged', tableId: 'profiles',
+            queries: [Query.equal('referral_code', [profile.referred_by_code]), Query.limit(1)]
+          });
+        }
+
         const referrer = referrerResult.rows?.[0];
         if (referrer) {
-          const BONUS = 100;
+          const BONUS = 50; // Award 50 Voltz for a successful referral
           const now = new Date().toISOString();
+          
           await Promise.all([
             tables.updateRow({ databaseId: 'supercharged', tableId: 'profiles', rowId: profile.$id,
               data: { current_voltz: (profile.current_voltz || 0) + BONUS } }),
             tables.updateRow({ databaseId: 'supercharged', tableId: 'profiles', rowId: referrer.$id,
               data: { current_voltz: (referrer.current_voltz || 0) + BONUS } }),
           ]);
+          
           const newProfileName = profile.first_name || profile.username || 'Someone';
+          
           await Promise.all([
             tables.createRow({ databaseId: 'supercharged', tableId: 'voltz_ledger', rowId: ID.unique(),
               data: { profile_row_id: profile.$id, event_type: 'referral_bonus', amount: BONUS,
@@ -361,11 +374,13 @@ export default async ({ req, res, log, error }) => {
               data: { profile_row_id: referrer.$id, event_type: 'referral_bonus', amount: BONUS,
                 reason: `Referral bonus — ${newProfileName} joined using your link`, awarded_at: now } }),
           ]);
+          
           await tables.updateRow({ databaseId: 'supercharged', tableId: 'profiles', rowId: profile.$id,
             data: { referral_bonus_awarded: true } });
+            
           log(`Referral bonus awarded: ${BONUS} voltz each to ${profile.user_id} and ${referrer.user_id}`);
         } else {
-          log(`Referral code ${profile.referred_by_code} not found — bonus skipped`);
+          log(`Referral code/username ${profile.referred_by_code} not found — bonus skipped`);
         }
       } catch (bonusErr) {
         log(`Referral bonus failed (non-fatal): ${bonusErr.message}`);

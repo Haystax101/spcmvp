@@ -15,7 +15,7 @@ import {
   Permission,
   Role,
 } from "./lib/appwrite";
-import SharedProfileView from "./components/SharedProfileView";
+import ProfileView from "./components/ProfileView";
 import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
 
 // ─── CSS injected once ───────────────────────────────────────────────────────
@@ -2455,15 +2455,19 @@ export default function SuperchargedProfile({ onOpenSettings }) {
       </div>
       </div>
       {viewLeaderboardProfile && (
-        <SharedProfileView
+        <ProfileView
           profileId={viewLeaderboardProfile}
+          currentUserProfileId={currentUserId}
           onClose={() => setViewLeaderboardProfile(null)}
+          context="compatibility"
         />
       )}
       {viewConnProfile && (
-        <SharedProfileView
+        <ProfileView
           profileId={viewConnProfile}
+          currentUserProfileId={currentUserId}
           onClose={() => setViewConnProfile(null)}
+          context="compatibility"
         />
       )}
     </div>

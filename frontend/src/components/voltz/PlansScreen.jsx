@@ -4,6 +4,7 @@ import { BoltIcon } from "./shared/icons";
 import TopNav from "./shared/TopNav";
 import PlanCard from "./shared/PlanCard";
 import InviteCard from "./shared/InviteCard";
+import { getProfilePhotoUrl, PHOTO_SIZES } from "../../lib/photos";
 
 const PlanBadge = ({ kind }) => {
   const map = {
@@ -32,6 +33,7 @@ export default function PlansScreen({ profile, activePlan, voltzBalance, onBack,
 
   const displayName = profile?.username || profile?.first_name || profile?.full_name || "You";
   const initials = (profile?.first_name?.[0] || profile?.full_name?.[0] || "?").toUpperCase();
+  const photoUrl = getProfilePhotoUrl(profile, PHOTO_SIZES.thumbnail);
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: C.bg }}>
@@ -54,8 +56,11 @@ export default function PlansScreen({ profile, activePlan, voltzBalance, onBack,
               background: C.accentGreen, color: "#FFFFFF",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontFamily: SANS, fontSize: 17, fontWeight: 600, flexShrink: 0,
+              overflow: "hidden",
             }}>
-              {initials}
+              {photoUrl
+                ? <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                : initials}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <div style={{ fontFamily: SANS, fontSize: 14, fontWeight: 600, color: C.text }}>

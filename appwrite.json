@@ -155,32 +155,31 @@
             "entrypoint": "src/main.js",
             "commands": "npm install",
             "path": "functions/stripeGateway"
-        }
-    ],
-    "buckets": [
+        },
         {
-            "$id": "profilePhotos",
-            "name": "profilePhotos",
-            "$permissions": [
-                "create(\"users\")",
-                "read(\"users\")",
-                "update(\"users\")",
-                "delete(\"users\")"
-            ],
+            "$id": "authGateway",
+            "name": "authGateway",
             "enabled": true,
-            "maximumFileSize": 10485760,
-            "allowedFileExtensions": [
-                "jpg",
-                "jpeg",
-                "png",
-                "webp",
-                "heic",
-                "heif"
+            "live": true,
+            "deployment": "dist",
+            "logging": true,
+            "execute": [
+                "any"
             ],
-            "compression": "none",
-            "encryption": false,
-            "antivirus": false,
-            "fileSecurity": true
+            "scopes": [
+                "databases.read",
+                "databases.write",
+                "tables.read",
+                "tables.write",
+                "rows.read",
+                "rows.write"
+            ],
+            "runtime": "node-22",
+            "version": "v1",
+            "vars": {},
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "path": "functions/authGateway"
         }
     ],
     "tablesDB": [
@@ -225,7 +224,9 @@
                     "type": "double",
                     "required": true,
                     "array": false,
-                    "default": null
+                    "default": null,
+                    "min": -1.7976931348623157e+308,
+                    "max": 1.7976931348623157e+308
                 },
                 {
                     "key": "narrative",
@@ -386,24 +387,6 @@
                     "required": false,
                     "array": false,
                     "size": 64,
-                    "default": null,
-                    "encrypt": false
-                },
-                {
-                    "key": "course",
-                    "type": "varchar",
-                    "required": false,
-                    "array": false,
-                    "size": 128,
-                    "default": null,
-                    "encrypt": false
-                },
-                {
-                    "key": "stage",
-                    "type": "varchar",
-                    "required": false,
-                    "array": false,
-                    "size": 32,
                     "default": null,
                     "encrypt": false
                 },
@@ -737,14 +720,18 @@
                     "type": "integer",
                     "required": false,
                     "array": false,
-                    "default": 0
+                    "default": 0,
+                    "min": 0,
+                    "max": 9223372036854775807
                 },
                 {
                     "key": "visibility_boost_level",
                     "type": "integer",
                     "required": false,
                     "array": false,
-                    "default": 0
+                    "default": 0,
+                    "min": 0,
+                    "max": 9223372036854775807
                 },
                 {
                     "key": "visibility_boost_expires_at",
@@ -771,6 +758,52 @@
                     "size": 256,
                     "default": null,
                     "encrypt": false
+                },
+                {
+                    "key": "notify_new_connections",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": true
+                },
+                {
+                    "key": "notify_message_replies",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": true
+                },
+                {
+                    "key": "notify_weekly_digest",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "referral_code",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 16,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "referred_by_code",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 16,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "referral_bonus_awarded",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
                 }
             ],
             "indexes": [
@@ -809,6 +842,17 @@
                         "primary_intent"
                     ],
                     "orders": []
+                },
+                {
+                    "key": "index_5",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "referral_code"
+                    ],
+                    "orders": [
+                        "asc"
+                    ]
                 }
             ]
         },
@@ -1332,7 +1376,9 @@
         },
         {
             "$id": "messages",
-            "$permissions": [],
+            "$permissions": [
+                "read(\"users\")"
+            ],
             "databaseId": "supercharged",
             "name": "Messages",
             "enabled": true,
@@ -1425,6 +1471,24 @@
                     "size": 36,
                     "default": null,
                     "encrypt": false
+                },
+                {
+                    "key": "conversation_row_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "sender_row_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
                 }
             ],
             "indexes": [
@@ -1472,16 +1536,165 @@
                         "reply_to_message_id"
                     ],
                     "orders": []
+                },
+                {
+                    "key": "index_conversation_sent",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "conversation_row_id"
+                    ],
+                    "orders": [
+                        "asc"
+                    ]
+                },
+                {
+                    "key": "index_unread_calc",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "conversation_row_id",
+                        "sender_row_id"
+                    ],
+                    "orders": [
+                        "asc",
+                        "asc"
+                    ]
+                }
+            ]
+        },
+        {
+            "$id": "relationship_events",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Relationship Events",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "connection",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "connections",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "relationship_events",
+                    "onDelete": "cascade",
+                    "side": "parent"
+                },
+                {
+                    "key": "connection_row_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "actor",
+                    "type": "relationship",
+                    "required": false,
+                    "array": false,
+                    "relatedTable": "profiles",
+                    "relationType": "manyToOne",
+                    "twoWay": false,
+                    "twoWayKey": "relationship_events",
+                    "onDelete": "setNull",
+                    "side": "parent"
+                },
+                {
+                    "key": "actor_profile_id",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "event_type",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": "enum",
+                    "elements": [
+                        "outreach_sent",
+                        "connection_accepted",
+                        "declined",
+                        "undone",
+                        "blocked",
+                        "message_sent",
+                        "message_read",
+                        "call_booked",
+                        "coffee_done",
+                        "introduction_made",
+                        "milestone_5_exchanges",
+                        "milestone_10_exchanges"
+                    ]
+                },
+                {
+                    "key": "details",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "voltz_awarded",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": 0,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
+                },
+                {
+                    "key": "occurred_at",
+                    "type": "datetime",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_rel_events_connection_time",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "connection_row_id",
+                        "occurred_at"
+                    ],
+                    "orders": []
+                },
+                {
+                    "key": "idx_rel_events_type",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "event_type"
+                    ],
+                    "orders": []
                 }
             ]
         },
         {
             "$id": "connections",
-            "$permissions": [],
+            "$permissions": [
+                "create(\"users\")",
+                "read(\"users\")",
+                "update(\"users\")",
+                "delete(\"users\")"
+            ],
             "databaseId": "supercharged",
             "name": "Connections",
             "enabled": true,
-            "rowSecurity": false,
+            "rowSecurity": true,
             "columns": [
                 {
                     "key": "pair_key",
@@ -1705,133 +1918,12 @@
             ]
         },
         {
-            "$id": "relationship_events",
-            "$permissions": [],
-            "databaseId": "supercharged",
-            "name": "Relationship Events",
-            "enabled": true,
-            "rowSecurity": false,
-            "columns": [
-                {
-                    "key": "connection",
-                    "type": "relationship",
-                    "required": false,
-                    "array": false,
-                    "relatedTable": "connections",
-                    "relationType": "manyToOne",
-                    "twoWay": false,
-                    "twoWayKey": "relationship_events",
-                    "onDelete": "cascade",
-                    "side": "parent",
-                    "default": null
-                },
-                {
-                    "key": "connection_row_id",
-                    "type": "varchar",
-                    "required": true,
-                    "array": false,
-                    "size": 36,
-                    "default": null,
-                    "encrypt": false
-                },
-                {
-                    "key": "actor",
-                    "type": "relationship",
-                    "required": false,
-                    "array": false,
-                    "relatedTable": "profiles",
-                    "relationType": "manyToOne",
-                    "twoWay": false,
-                    "twoWayKey": "relationship_events",
-                    "onDelete": "setNull",
-                    "side": "parent"
-                },
-                {
-                    "key": "actor_profile_id",
-                    "type": "varchar",
-                    "required": false,
-                    "array": false,
-                    "size": 36,
-                    "default": null,
-                    "encrypt": false
-                },
-                {
-                    "key": "event_type",
-                    "type": "string",
-                    "required": true,
-                    "array": false,
-                    "default": null,
-                    "format": "enum",
-                    "elements": [
-                        "outreach_sent",
-                        "connection_accepted",
-                        "declined",
-                        "undone",
-                        "blocked",
-                        "message_sent",
-                        "message_read",
-                        "call_booked",
-                        "coffee_done",
-                        "introduction_made",
-                        "milestone_5_exchanges",
-                        "milestone_10_exchanges"
-                    ]
-                },
-                {
-                    "key": "details",
-                    "type": "text",
-                    "required": false,
-                    "array": false,
-                    "default": null,
-                    "encrypt": false
-                },
-                {
-                    "key": "voltz_awarded",
-                    "type": "integer",
-                    "required": false,
-                    "array": false,
-                    "default": 0,
-                    "min": -9223372036854775808,
-                    "max": 9223372036854775807
-                },
-                {
-                    "key": "occurred_at",
-                    "type": "datetime",
-                    "required": true,
-                    "array": false,
-                    "default": null,
-                    "format": ""
-                }
-            ],
-            "indexes": [
-                {
-                    "key": "idx_rel_events_connection_time",
-                    "type": "key",
-                    "status": "available",
-                    "columns": [
-                        "connection_row_id",
-                        "occurred_at"
-                    ],
-                    "orders": []
-                },
-                {
-                    "key": "idx_rel_events_type",
-                    "type": "key",
-                    "status": "available",
-                    "columns": [
-                        "event_type"
-                    ],
-                    "orders": []
-                }
-            ]
-        },
-        {
             "$id": "voltz_ledger",
-            "$permissions": ["read(\"users\")"],
+            "$permissions": [],
             "databaseId": "supercharged",
             "name": "Voltz Ledger",
             "enabled": true,
-            "rowSecurity": false,
+            "rowSecurity": true,
             "columns": [
                 {
                     "key": "profile",
@@ -1843,8 +1935,7 @@
                     "twoWay": false,
                     "twoWayKey": "voltz_ledger",
                     "onDelete": "cascade",
-                    "side": "parent",
-                    "default": null
+                    "side": "parent"
                 },
                 {
                     "key": "profile_row_id",
@@ -1937,7 +2028,7 @@
                     "type": "varchar",
                     "required": false,
                     "array": false,
-                    "size": 256,
+                    "size": 255,
                     "default": null,
                     "encrypt": false
                 }
@@ -1970,8 +2061,292 @@
                         "event_type"
                     ],
                     "orders": []
+                },
+                {
+                    "key": "index_4",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "stripe_session_id"
+                    ],
+                    "orders": [
+                        "asc"
+                    ]
                 }
             ]
+        },
+        {
+            "$id": "inbox_notifications",
+            "$permissions": [
+                "read(\"users\")",
+                "delete(\"users\")"
+            ],
+            "databaseId": "supercharged",
+            "name": "inbox_notifications",
+            "enabled": true,
+            "rowSecurity": true,
+            "columns": [
+                {
+                    "key": "conversation_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "recipient_profile_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "sender_name",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "message_preview",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "card_dismissals",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "card_dismissals",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "profile_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 255,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "dismissed_profile_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 255,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "dismissed_at",
+                    "type": "datetime",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "context",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": "surfaced",
+                    "encrypt": false
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "index_1",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "profile_id"
+                    ],
+                    "orders": [
+                        "asc"
+                    ]
+                }
+            ]
+        },
+        {
+            "$id": "discovery_queue",
+            "$permissions": [
+                "create(\"users\")",
+                "read(\"users\")",
+                "update(\"users\")",
+                "delete(\"users\")"
+            ],
+            "databaseId": "supercharged",
+            "name": "Discovery Queue",
+            "enabled": true,
+            "rowSecurity": true,
+            "columns": [
+                {
+                    "key": "profile_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "target_profile_id",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "score",
+                    "type": "integer",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "min": 0,
+                    "max": 1000
+                },
+                {
+                    "key": "match_reason",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 1000,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "score_breakdown",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 2000,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "status",
+                    "type": "varchar",
+                    "required": true,
+                    "array": false,
+                    "size": 20,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "idx_profile_pending",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "profile_id",
+                        "status"
+                    ],
+                    "orders": [
+                        "asc",
+                        "asc"
+                    ]
+                },
+                {
+                    "key": "idx_unique_match",
+                    "type": "unique",
+                    "status": "available",
+                    "columns": [
+                        "profile_id",
+                        "target_profile_id"
+                    ],
+                    "orders": [
+                        "asc",
+                        "asc"
+                    ]
+                }
+            ]
+        },
+        {
+            "$id": "magic_link_tokens",
+            "$permissions": [],
+            "databaseId": "supercharged",
+            "name": "Magic Link Tokens",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "email",
+                    "type": "varchar",
+                    "required": false,
+                    "array": false,
+                    "size": 255,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "token",
+                    "type": "text",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "expires_at",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "is_used",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                }
+            ],
+            "indexes": []
+        }
+    ],
+    "buckets": [
+        {
+            "$id": "profilePhotos",
+            "name": "profilePhotos",
+            "$permissions": [
+                "create(\"users\")",
+                "read(\"users\")",
+                "update(\"users\")",
+                "delete(\"users\")"
+            ],
+            "enabled": true,
+            "maximumFileSize": 10485760,
+            "allowedFileExtensions": [
+                "jpg",
+                "jpeg",
+                "png",
+                "webp",
+                "heic",
+                "heif"
+            ],
+            "compression": "none",
+            "encryption": false,
+            "antivirus": false,
+            "fileSecurity": true
         }
     ]
 }

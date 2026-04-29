@@ -54,8 +54,24 @@ export function extractPhotoFileIds(profile) {
   if (!profile) return [];
 
   // Try top-level photo_file_ids first
-  if (Array.isArray(profile.photo_file_ids) && profile.photo_file_ids.length > 0) {
-    return profile.photo_file_ids.filter(id => typeof id === 'string' && id.trim());
+  let ids = profile.photo_file_ids;
+  
+  // Handle if it's a JSON string
+  if (typeof ids === 'string' && ids.startsWith('[')) {
+    try {
+      ids = JSON.parse(ids);
+    } catch (e) {
+      ids = null;
+    }
+  }
+
+  if (Array.isArray(ids) && ids.length > 0) {
+    return ids.filter(id => typeof id === 'string' && id.trim());
+  }
+
+  // Fallback to singular photo_file_id (often used in flattened gateway responses)
+  if (typeof profile.photo_file_id === 'string' && profile.photo_file_id.trim()) {
+    return [profile.photo_file_id.trim()];
   }
 
   // Try nested in free_text_responses.profile_ui
@@ -64,10 +80,14 @@ export function extractPhotoFileIds(profile) {
     if (typeof freeText === 'string') {
       freeText = JSON.parse(freeText);
     }
-    if (freeText && typeof freeText === 'object' && freeText.profile_ui && Array.isArray(freeText.profile_ui.photo_file_ids)) {
-      const nested = freeText.profile_ui.photo_file_ids.filter(id => typeof id === 'string' && id.trim());
-      if (nested.length > 0) {
-        return nested;
+    if (freeText && typeof freeText === 'object' && freeText.profile_ui) {
+      let nestedIds = freeText.profile_ui.photo_file_ids;
+      if (typeof nestedIds === 'string' && nestedIds.startsWith('[')) {
+        nestedIds = JSON.parse(nestedIds);
+      }
+      if (Array.isArray(nestedIds)) {
+        const filtered = nestedIds.filter(id => typeof id === 'string' && id.trim());
+        if (filtered.length > 0) return filtered;
       }
     }
   } catch (err) {

@@ -15,7 +15,7 @@ import {
   Query,
   ID,
 } from "./lib/appwrite";
-import { buildThumbnailUrl } from "./lib/photos";
+import { buildThumbnailUrl, getProfilePhotoUrl, PHOTO_SIZES } from "./lib/photos";
 import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
 import { VoltzWallet } from "./components/VoltzSystem";
 import NotificationsPanel from "./components/NotificationsPanel";
@@ -364,9 +364,7 @@ const mapConversationFromBackend = (row) => {
   const id = row.conversationId || row.id;
   if (!id) return null;
 
-  const photoUrl = row.photo_file_id ? (() => {
-    try { return String(storage.getFilePreview({ bucketId: PROFILE_PHOTOS_BUCKET_ID, fileId: row.photo_file_id, width: 100 })); } catch { return null; }
-  })() : null;
+  const photoUrl = getProfilePhotoUrl(row, PHOTO_SIZES.thumbnail);
   return {
     id,
     conversationId: row.conversationId || id,
@@ -393,7 +391,7 @@ const mapNewConnectionFromBackend = (row) => {
   const id = row.connection_id || row.id;
   if (!id) return null;
 
-  const photoUrl = row.photo_file_id ? buildThumbnailUrl(row.photo_file_id) : null;
+  const photoUrl = getProfilePhotoUrl(row, PHOTO_SIZES.thumbnail);
 
   return {
     id,
@@ -417,7 +415,7 @@ const mapSentConnectionFromBackend = (row) => {
   const id = row.connection_id || row.id;
   if (!id) return null;
   const name = row.name || 'Unknown user';
-  const photoUrl = row.photo_file_id ? buildThumbnailUrl(row.photo_file_id) : null;
+  const photoUrl = getProfilePhotoUrl(row, PHOTO_SIZES.thumbnail);
   return {
     id,
     name,
@@ -2286,7 +2284,15 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     const convo = conversations.find((x) => x.id === id);
     if (!convo) return;
 
-    setChatProfile({ initials: convo.initials, color: convo.color, name: convo.name, role: convo.role, id: convo.id, photoUrl: convo.photoUrl || null });
+    setChatProfile({ 
+      initials: convo.initials, 
+      color: convo.color, 
+      name: convo.name, 
+      role: convo.role, 
+      id: convo.id, 
+      connectionId: convo.connectionId,
+      photoUrl: convo.photoUrl || null 
+    });
     setPreviewMode(false);
     setDeclined(false);
     setPreviewCardId(null);
@@ -2376,7 +2382,15 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
   };
 
   const enterPreview = (conn, alsoOpenSheet) => {
-    setChatProfile({ initials: conn.initials, color: conn.color, name: conn.name, role: conn.role, id: conn.id, photoUrl: conn.photoUrl || null });
+    setChatProfile({ 
+      initials: conn.initials, 
+      color: conn.color, 
+      name: conn.name, 
+      role: conn.role, 
+      id: conn.id, 
+      connectionId: conn.connectionId,
+      photoUrl: conn.photoUrl || null 
+    });
     setMessages([
       { type: "sep", text: "Earlier today" },
       { type: "in", text: conn.message },
@@ -2671,7 +2685,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
               onUndo={handleUndo}
               voltz={voltzTotal}
               relationshipContext={relationshipContext}
-              onViewProfile={() => chatProfile && setViewProfileData({ connectionId: activeConversationId, profile: chatProfile })}
+              onViewProfile={() => chatProfile && setViewProfileData({ connectionId: chatProfile.connectionId || (chatProfile.id?.startsWith('conn_') ? chatProfile.id : null), profile: chatProfile })}
               currentProfile={backendProfile}
               executeFunction={executeFunction}
               onUpgrade={onUpgrade}

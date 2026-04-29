@@ -6,7 +6,7 @@ export default function InviteCard({ referralCode }) {
   const [copied, setCopied] = useState(false);
 
   const referralUrl = referralCode
-    ? `https://getsupercharged.app/signup?ref=${referralCode}`
+    ? `https://superchargedai.app/platform-beta/r/${referralCode}`
     : null;
 
   const handleCopy = async () => {

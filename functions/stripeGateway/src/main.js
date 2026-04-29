@@ -84,6 +84,29 @@ async function actionCreateCheckoutSession({ stripe, tablesDB, dbId, profileTabl
 
 
 /**
+ * Stripe Gateway Action: create_portal_session
+ */
+async function actionCreatePortalSession({ stripe, tablesDB, dbId, profileTable, userId, returnUrl }) {
+  const found = await tablesDB.listRows({
+    databaseId: dbId,
+    tableId: profileTable,
+    queries: [Query.equal('user_id', [userId]), Query.limit(1)],
+  });
+  const profile = found.rows[0];
+  if (!profile) throw new Error('Profile not found');
+
+  const customerId = profile.stripe_customer_id;
+  if (!customerId) throw new Error('No active subscription found');
+
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: returnUrl || process.env.APP_URL || 'https://supercharged.ox.ac.uk',
+  });
+
+  return { url: session.url };
+}
+
+/**
  * Stripe Gateway Action: handle_stripe_webhook
  */
 async function actionHandleWebhook({ stripe, tablesDB, dbId, profileTable, ledgerTable, body, signature, webhookSecret }) {
@@ -240,7 +263,7 @@ async function actionVerifySession({ stripe, tablesDB, dbId, profileTable, ledge
       databaseId: dbId, tableId: ledgerTable,
       queries: [Query.equal('stripe_session_id', [session.id]), Query.limit(1)],
     });
-    if (existing.total > 0) return { verified: true, already_credited: true, current_voltz: profile.current_voltz };
+    if (existing.total > 0) return { verified: true, already_credited: true, current_voltz: profile.current_voltz, amount: voltzToAdd, package: packageName };
   } catch {
     // stripe_session_id column not yet in schema — proceed to credit
   }
@@ -329,6 +352,16 @@ export default async ({ req, res, log, error }) => {
       const result = await actionVerifySession({
         stripe, tablesDB, dbId, profileTable, ledgerTable,
         sessionId: payload.session_id,
+      });
+      return res.json(result);
+    }
+
+    if (action === 'create_portal_session') {
+      log(`[stripeGateway] Processing create_portal_session for user ${payload.userId}`);
+      const result = await actionCreatePortalSession({
+        stripe, tablesDB, dbId, profileTable,
+        userId: payload.userId,
+        returnUrl: payload.returnUrl,
       });
       return res.json(result);
     }

@@ -1,113 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { tables, functions, DB_ID, PROFILES_TABLE, CONNECTION_GATEWAY_FUNCTION_ID, Query } from '../lib/appwrite';
-import { extractPhotoFileIds, buildPhotoUrl, PHOTO_SIZES } from '../lib/photos';
+import re
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+with open("/Users/gdwha/SPCMVP/frontend/src/components/ProfileView.jsx", "r") as f:
+    content = f.read()
 
-function safeParseJson(str, fallback = {}) {
-  try { return JSON.parse(str) || fallback; } catch { return fallback; }
-}
+# We want to replace the `ProfileView` component with a new one that contains the states for accordion,
+# fix the data fetch short-circuit, and uses the exact HTML structure from supercharged_v18.jsx.
 
-function parseList(val) {
-  if (Array.isArray(val)) return val.filter(Boolean);
-  if (typeof val === 'string' && val.trim()) return val.split(',').map(s => s.trim()).filter(Boolean);
-  return [];
-}
-
-function parseRow(row) {
-  if (!row) return null;
-  const freeText = safeParseJson(row.free_text_responses, {});
-  const ui = (freeText.profile_ui && typeof freeText.profile_ui === 'object') ? freeText.profile_ui : {};
-
-  const photoIds = extractPhotoFileIds(row);
-
-  const music = parseList(ui.music ?? row.music);
-  const hobbies = parseList(ui.hobbies ?? row.hobby);
-  const campus = parseList(ui.campus ?? row.societies);
-  const goals = parseList(ui.goals ?? row.goals);
-  const datingAppearance = parseList(row.dating_appearance);
-  const datingPersonality = parseList(row.dating_personality);
-  const datingHobbies = parseList(row.dating_hobbies);
-
-  return {
-    fullName: [row.first_name, row.last_name].filter(Boolean).join(' ') || row.full_name || 'Oxford Member',
-    college: row.college || '',
-    subject: row.study_subject || row.course || '',
-    year: row.year_of_study || row.stage || '',
-    primaryIntent: row.primary_intent || '',
-    relationshipStatus: row.relationship_status || '',
-    sexuality: row.sexuality || '',
-    datingAppearance,
-    datingPersonality,
-    datingHobbies,
-    careerField: row.career_field || '',
-    careerSubfield: row.career_subfield || '',
-    projectStage: row.project_stage || '',
-    networkingStyle: row.networking_style || '',
-    workStyle: row.work_style || '',
-    bio: ui.bio || row.building_description || '',
-    honestThing: row.honest_thing || '',
-    goals,
-    music,
-    hobbies,
-    campus,
-    photoIds,
-  };
-}
-
-// Parse already-enriched profile (from search or home feed)
-function parseEnriched(p) {
-  const photoIds = extractPhotoFileIds(p);
-  
-  return {
-    fullName: p.full_name || p.name || 'Oxford Member',
-    college: p.college || '',
-    subject: p.study_subject || p.course || '',
-    year: p.year_of_study || p.year || '',
-    primaryIntent: p.primary_intent || p.primaryIntent || '',
-    relationshipStatus: p.relationship_status || p.relationshipStatus || '',
-    sexuality: p.sexuality || '',
-    datingAppearance: parseList(p.dating_appearance || p.datingAppearance),
-    datingPersonality: parseList(p.dating_personality || p.datingPersonality),
-    datingHobbies: parseList(p.dating_hobbies || p.datingHobbies),
-    careerField: p.career_field || p.careerField || '',
-    careerSubfield: p.career_subfield || p.careerSubfield || '',
-    projectStage: p.project_stage || p.projectStage || '',
-    networkingStyle: p.networking_style || p.networkingStyle || '',
-    workStyle: p.work_style || p.workStyle || '',
-    bio: p.building_description || p.bio || '',
-    honestThing: p.honest_thing || '',
-    goals: parseList(p.goals),
-    music: parseList(p.music),
-    hobbies: parseList(p.hobbies || p.hobby),
-    campus: parseList(p.campus || p.societies),
-    photoIds,
-  };
-}
-
-const PALETTE = ['#7B5CF0', '#3DAA82', '#E8614A', '#3B82F6', '#F5A623'];
-function paletteColor(name) {
-  if (!name) return PALETTE[0];
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffff;
-  return PALETTE[h % PALETTE.length];
-}
-
-// ─── component ────────────────────────────────────────────────────────────────
-
-/**
- * Unified ProfileView component for all contexts
- * @param {Object} props
- * @param {Object} props.profile - Raw profile data (enriched)
- * @param {string} props.profileId - Profile table row ID (for fetching)
- * @param {string} props.connectionId - Connection ID (for resolving profile)
- * @param {string} props.currentUserProfileId - Current user's profile ID
- * @param {Function} props.onClose - Callback when closing profile
- * @param {'own'|'inbox'|'chat'|'search'|'compatibility'} props.context - Display context (default: 'inbox')
- * @returns {React.ReactNode}
- */
-
-const HOWUP_FIELDS = ['relationship_status','sexuality','dating_appearance','dating_personality','dating_hobbies'];
+NEW_HELPERS = """
 const HOWUP_MAP = {
   relationship_status: 'relationshipStatus',
   sexuality: 'sexuality',
@@ -284,7 +183,9 @@ const PROFILE_VIEW_CSS = `
 
 .slp{font-size:13px;font-weight:600;color:#1A1A1A;margin-bottom:8px;padding:0 4px;margin-top:10px;}
 `;
+"""
 
+NEW_COMPONENT_BODY = """
 export default function ProfileView({
   profile: rawProfile,
   profileId,
@@ -320,7 +221,7 @@ export default function ProfileView({
     const fetchProfile = async () => {
       setLoading(true);
       try {
-        let targetProfileId = profileId || rawProfile?.$id || rawProfile?.user_id;
+        let targetProfileId = profileId;
 
         if (!targetProfileId && connectionId) {
           // Resolve from connection
@@ -409,58 +310,55 @@ export default function ProfileView({
     <div style={{ ...ROOT, ...contextStyles[context] }}>
       <style>{PROFILE_VIEW_CSS}</style>
       
-      {/* Scrollable Container */}
-      <div style={{ flex: 1, overflowY: 'auto', background: '#EDECEA', scrollbarWidth: 'none' }}>
+      {/* Hero Photo Section */}
+      <div
+        style={{
+          position: 'relative',
+          height: context === 'chat' ? 250 : 480,
+          flexShrink: 0,
+          background: currentPhoto ? '#111' : accent,
+          overflow: 'hidden',
+        }}
+        onClick={() => photos.length > 1 && setPhotoIdx(i => (i + 1) % photos.length)}
+      >
+        {currentPhoto
+          ? <img src={currentPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%', display: 'block' }} />
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72, fontWeight: 300, color: 'rgba(255,255,255,0.7)', fontFamily: "'Cormorant Garamond', Georgia, serif" }}>{initials}</div>
+        }
+        {/* Scrim */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 280, background: 'linear-gradient(to top, rgba(4,4,2,0.93) 0%, rgba(4,4,2,0.5) 40%, transparent 100%)', pointerEvents: 'none' }} />
         
-        {/* Hero Photo Section */}
-        <div
-          style={{
-            position: 'relative',
-            height: context === 'chat' ? 250 : 480,
-            flexShrink: 0,
-            background: currentPhoto ? '#111' : accent,
-            overflow: 'hidden',
-          }}
-          onClick={() => photos.length > 1 && setPhotoIdx(i => (i + 1) % photos.length)}
-        >
-          {currentPhoto
-            ? <img src={currentPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%', display: 'block' }} />
-            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 72, fontWeight: 300, color: 'rgba(255,255,255,0.7)', fontFamily: "'Cormorant Garamond', Georgia, serif" }}>{initials}</div>
-          }
-          {/* Scrim */}
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 280, background: 'linear-gradient(to top, rgba(4,4,2,0.93) 0%, rgba(4,4,2,0.5) 40%, transparent 100%)', pointerEvents: 'none' }} />
-          
-          {/* Close button */}
-          <button onClick={onClose} style={{ position: 'absolute', top: 16, left: 14, zIndex: 10, width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.38)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#FFFEFD', fontSize: 22, lineHeight: 1 }}>
-            ‹
-          </button>
-          
-          {/* Photo carousel dots */}
-          {photos.length > 1 && (
-            <div style={{ position: 'absolute', top: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 5, padding: '0 24px' }}>
-              {photos.map((_, i) => (
-                <div key={i} style={{ height: 4, flex: 1, maxWidth: 80, borderRadius: 3, background: i === photoIdx ? 'rgba(255,254,253,0.92)' : 'rgba(255,254,253,0.35)' }} />
-              ))}
-            </div>
-          )}
-          
-          {/* Name & college badge */}
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: context === 'chat' ? '0 16px 16px' : '0 22px 24px', pointerEvents: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6, whiteSpace: 'nowrap' }}>
-              <span style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 300, fontSize: context === 'chat' ? 28 : 38, color: '#FFFEFD', lineHeight: 1, letterSpacing: '-0.5px' }}>{data.fullName}</span>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'rgba(245,200,66,0.18)', border: '1px solid rgba(245,200,66,0.65)', borderRadius: 999, padding: '4px 8px 4px 5px', flexShrink: 0 }}>
-                <svg width="8" height="10" viewBox="0 0 8 11" fill="none"><polygon points="5,0 0,6 3.5,6 3,11 8,5 4.5,5" fill="#F5C842"/></svg>
-                <span style={{ fontSize: 9, fontWeight: 600, color: '#F5C842', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Oxford</span>
-              </div>
-            </div>
-            {subLine && <div style={{ fontSize: 13, color: 'rgba(255,254,253,0.6)' }}>{subLine}</div>}
+        {/* Close button */}
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, left: 14, zIndex: 10, width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.38)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#FFFEFD', fontSize: 22, lineHeight: 1 }}>
+          ‹
+        </button>
+        
+        {/* Photo carousel dots */}
+        {photos.length > 1 && (
+          <div style={{ position: 'absolute', top: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 5, padding: '0 24px' }}>
+            {photos.map((_, i) => (
+              <div key={i} style={{ height: 4, flex: 1, maxWidth: 80, borderRadius: 3, background: i === photoIdx ? 'rgba(255,254,253,0.92)' : 'rgba(255,254,253,0.35)' }} />
+            ))}
           </div>
+        )}
+        
+        {/* Name & college badge */}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: context === 'chat' ? '0 16px 16px' : '0 22px 24px', pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6, whiteSpace: 'nowrap' }}>
+            <span style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 300, fontSize: context === 'chat' ? 28 : 38, color: '#FFFEFD', lineHeight: 1, letterSpacing: '-0.5px' }}>{data.fullName}</span>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'rgba(245,200,66,0.18)', border: '1px solid rgba(245,200,66,0.65)', borderRadius: 999, padding: '4px 8px 4px 5px', flexShrink: 0 }}>
+              <svg width="8" height="10" viewBox="0 0 8 11" fill="none"><polygon points="5,0 0,6 3.5,6 3,11 8,5 4.5,5" fill="#F5C842"/></svg>
+              <span style={{ fontSize: 9, fontWeight: 600, color: '#F5C842', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Oxford</span>
+            </div>
+          </div>
+          {subLine && <div style={{ fontSize: 13, color: 'rgba(255,254,253,0.6)' }}>{subLine}</div>}
         </div>
+      </div>
 
-        {/* Content Sections */}
-        <div style={{ padding: '12px 12px calc(40px + env(safe-area-inset-bottom, 0px))' }}>
+      {/* Content Sections */}
+      <div style={{ flex: 1, overflowY: 'auto', background: '#EDECEA', padding: '12px 12px calc(40px + env(safe-area-inset-bottom, 0px))', scrollbarWidth: 'none' }}>
 
-          {/* Bio */}
+        {/* Bio */}
         {data.bio && (
           <div className="bio-card">
             <div className="bio-ey">About</div>
@@ -655,7 +553,6 @@ export default function ProfileView({
 
       </div>
     </div>
-  </div>
   );
 }
 
@@ -694,3 +591,12 @@ const CLOSE_BTN = {
   fontSize: 22,
   lineHeight: 1,
 };
+"""
+
+index_start = content.find("export default function ProfileView")
+prefix = content[:index_start]
+
+new_content = prefix + NEW_HELPERS + NEW_COMPONENT_BODY
+
+with open("/Users/gdwha/SPCMVP/frontend/src/components/ProfileView.jsx", "w") as f:
+    f.write(new_content)

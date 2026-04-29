@@ -10,7 +10,7 @@ import {
   DISCOVERY_FUNCTION_ID,
   Query,
 } from './lib/appwrite';
-import { buildLargeUrl } from './lib/photos';
+import { getProfilePhotoUrl, PHOTO_SIZES } from './lib/photos';
 
 const DISCOVERY_QUEUE_TABLE = 'discovery_queue';
 import { readCacheValue, writeCacheEntry } from './lib/cache';
@@ -568,21 +568,13 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
           LOG('No profile row found for target_profile_id:', item.target_profile_id, '— skipping');
           return null;
         }
-        // photo_file_ids is inside free_text_responses.profile_ui
-        let photoFileIds = p.photo_file_ids;
-        if (!photoFileIds) {
-          try {
-            const ftr = typeof p.free_text_responses === 'string' ? JSON.parse(p.free_text_responses) : (p.free_text_responses || {});
-            photoFileIds = ftr?.profile_ui?.photo_file_ids || [];
-          } catch { photoFileIds = []; }
-        }
         return {
           ...p,
           queue_id: item.$id,
           queue_status: item.status,
           score: item.score ?? 0,
           match_reason: item.match_reason || '',
-          photo_url: buildPhotoUrl(photoFileIds),
+          photo_url: getProfilePhotoUrl(p, PHOTO_SIZES.large),
           initials: ((p.full_name || '').split(' ').map((x) => x[0]).join('').toUpperCase().slice(0, 2)) || '??',
           color: '#7B5CF0',
           name: p.full_name || 'Unknown',
