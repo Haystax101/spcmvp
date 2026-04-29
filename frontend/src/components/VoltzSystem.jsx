@@ -8,9 +8,9 @@ const STRIPE_GATEWAY_ID = 'stripeGateway';
 export function VoltzWallet({ balance, onBuyMore }) {
   return (
     <div className="flex items-center gap-3 bg-white/90 border border-border-light rounded-full pl-3 pr-1 py-1 shadow-sm backdrop-blur-sm">
-      <div className="flex items-center gap-1.5">
-        <Zap size={14} className="text-accent fill-accent" />
-        <span className="font-playfair text-sm font-semibold tracking-tight">{balance}</span>
+      <div className="flex gap-1.5" style={{ alignItems: 'baseline' }}>
+        <Zap size={14} className="text-accent fill-accent" style={{ position: 'relative', top: 3 }} />
+        <span className="font-playfair text-sm font-semibold tracking-tight" style={{ lineHeight: 1 }}>{balance}</span>
         <span className="text-[10px] text-text3 uppercase tracking-tighter font-bold">Voltz</span>
       </div>
       <button 

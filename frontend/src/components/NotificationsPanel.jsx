@@ -15,6 +15,45 @@ const C = {
 
 const b = (text) => <strong style={{ fontWeight: 700 }}>{text}</strong>;
 
+function NewUserNotificationCard({ profile, onDismiss, onConnect }) {
+  const pills = [
+    profile.primary_intent && { label: profile.primary_intent, dot: 'var(--dim-intent)', border: 'rgba(61,170,130,0.3)', bg: 'rgba(61,170,130,0.08)' },
+    profile.college && { label: `${profile.college} alumni`, dot: 'var(--dim-resonance)', border: 'rgba(155,124,246,0.3)', bg: 'rgba(155,124,246,0.08)' },
+    profile.year_of_study && { label: profile.year_of_study, dot: '#F59E0B', border: 'rgba(245,158,11,0.3)', bg: 'rgba(245,158,11,0.08)' },
+    (profile.career_field || profile.study_subject) && { label: profile.career_field || profile.study_subject, dot: 'var(--text3)', border: 'rgba(175,175,175,0.3)', bg: 'rgba(175,175,175,0.08)' },
+  ].filter(Boolean).slice(0, 4);
+
+  return (
+    <div style={{ margin: '16px 20px', borderRadius: 20, border: '1.5px solid var(--border, #EFEFEF)', background: 'var(--bg, #FFFFFF)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '16px 20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontFamily: 'var(--font-sans, system-ui)', fontWeight: 600, fontSize: 10, color: 'var(--success, #22C55E)', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Zap size={10} />
+          NEW MEMBER
+        </div>
+        <div style={{ marginTop: 6, fontFamily: 'var(--font-serif, serif)', fontWeight: 400, fontSize: 18, color: 'var(--text, #111111)', lineHeight: 1.3, letterSpacing: '-0.01em', flex: 1 }}>
+          {profile.hook || profile.building_description || profile.match_reason || `${profile.career_field || 'Building'} · ${profile.college || 'Oxford'}`}
+        </div>
+        <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {pills.map((pill, i) => (
+            <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${pill.border}`, borderRadius: 999, padding: '4px 10px', background: pill.bg, fontFamily: 'var(--font-sans, system-ui)', fontWeight: 500, fontSize: 11, color: pill.dot, whiteSpace: 'nowrap' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: pill.dot, flexShrink: 0 }} />
+              {String(pill.label).length > 20 ? String(pill.label).slice(0, 20) + '…' : pill.label}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button onClick={() => onDismiss(profile)} style={{ flex: 1, height: 44, borderRadius: 999, fontFamily: 'var(--font-sans, system-ui)', fontSize: 14, cursor: 'pointer', background: 'var(--bg, #FFFFFF)', border: '1.5px solid var(--border-light, #F5F5F5)', color: 'var(--text2, #6B6B6B)', fontWeight: 500 }}>
+            Dismiss
+          </button>
+          <button onClick={() => onConnect(profile)} style={{ flex: 1, height: 44, borderRadius: 999, fontFamily: 'var(--font-sans, system-ui)', fontSize: 14, cursor: 'pointer', background: 'var(--text, #111111)', border: '1.5px solid var(--border, #EFEFEF)', color: '#fff', fontWeight: 600 }}>
+            Connect
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Avatar({ notification }) {
   const size = 48;
   const base = {
@@ -192,6 +231,8 @@ export default function NotificationsPanel({
   onDraftPress = () => {},
   onMarkAllRead = () => {},
   onBack = () => {},
+  onDismissNewUser = () => {},
+  onConnectNewUser = () => {},
 }) {
   const [allRead, setAllRead] = useState(false);
 
@@ -355,12 +396,20 @@ export default function NotificationsPanel({
               borderBottom: `1px solid ${C.border}`,
             }}
           >
-            <NotificationRow
-              notification={n}
-              isRead={allRead || n.read}
-              onRowPress={handleRowPress}
-              onDraftPress={handleDraftPress}
-            />
+            {n.isSignupCard ? (
+              <NewUserNotificationCard 
+                profile={n.profile} 
+                onDismiss={onDismissNewUser} 
+                onConnect={onConnectNewUser} 
+              />
+            ) : (
+              <NotificationRow
+                notification={n}
+                isRead={allRead || n.read}
+                onRowPress={handleRowPress}
+                onDraftPress={handleDraftPress}
+              />
+            )}
           </div>
         ))}
       </div>

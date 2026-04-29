@@ -1,55 +1,55 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff } from 'lucide-react';
-import { account, tables, ID, DB_ID, PROFILES_TABLE, Query } from './lib/appwrite';
+import { account, tables, functions, ID, DB_ID, PROFILES_TABLE, DISCOVERY_FUNCTION_ID, AUTH_GATEWAY_FUNCTION_ID, CONNECTION_GATEWAY_FUNCTION_ID, Query } from './lib/appwrite';
 import './NewOnboarding.css';
 
 const OXFORD_COLLEGES = ['All Souls', 'Balliol', 'Brasenose', 'Christ Church', 'Corpus Christi', 'Exeter', 'Green Templeton', 'Harris Manchester', 'Hertford', 'Jesus', 'Keble', 'Kellogg', 'Lady Margaret Hall', 'Linacre', 'Lincoln', 'Magdalen', 'Mansfield', 'Merton', 'New College', 'Nuffield', 'Oriel', 'Pembroke', "Queen's", 'Reuben', "Regent's Park", 'Somerville', "St Anne's", "St Antony's", "St Catherine's", 'St Cross', 'St Edmund Hall', "St Hilda's", "St Hugh's", "St John's", "St Peter's", 'Trinity', 'University', 'Wadham', 'Wolfson', 'Worcester', 'Wycliffe Hall'];
 
-const CAREER_SUB_DATA={
-  'Finance and investing':{
-    heading:'Where in finance?', whisper:'Lets us match you with people on the exact same track.',
-    chips:['Investment banking','Private equity','Hedge funds','Venture capital','Asset management','Corporate finance','Financial consulting','Fintech','Trading','Impact investing','Not sure yet']
+const CAREER_SUB_DATA = {
+  'Finance and investing': {
+    heading: 'Where in finance?', whisper: 'Lets us match you with people on the exact same track.',
+    chips: ['Investment banking', 'Private equity', 'Hedge funds', 'Venture capital', 'Asset management', 'Corporate finance', 'Financial consulting', 'Fintech', 'Trading', 'Impact investing', 'Not sure yet']
   },
-  'Consulting and strategy':{
-    heading:'What type of consulting?', whisper:'',
-    chips:['Strategy consulting (MBB)','Big 4 consulting','Boutique or specialist','In-house strategy','Public sector consulting','Tech consulting','Not sure yet']
+  'Consulting and strategy': {
+    heading: 'What type of consulting?', whisper: '',
+    chips: ['Strategy consulting (MBB)', 'Big 4 consulting', 'Boutique or specialist', 'In-house strategy', 'Public sector consulting', 'Tech consulting', 'Not sure yet']
   },
-  'Technology and engineering':{
-    heading:'What area of tech?', whisper:'',
-    chips:['Software engineering','Machine learning and AI','Cybersecurity','Hardware and embedded','Data engineering','DevOps and infrastructure','Biotech or deep tech','Not sure yet']
+  'Technology and engineering': {
+    heading: 'What area of tech?', whisper: '',
+    chips: ['Software engineering', 'Machine learning and AI', 'Cybersecurity', 'Hardware and embedded', 'Data engineering', 'DevOps and infrastructure', 'Biotech or deep tech', 'Not sure yet']
   },
-  'Startups and entrepreneurship':{
-    heading:'What are you looking to build?', whisper:'',
-    chips:['I am already building something','Consumer app or platform','B2B SaaS','Deep tech or science-based','Social enterprise','Marketplace','Media or content','Hardware or physical product','Not sure yet']
+  'Startups and entrepreneurship': {
+    heading: 'What are you looking to build?', whisper: '',
+    chips: ['I am already building something', 'Consumer app or platform', 'B2B SaaS', 'Deep tech or science-based', 'Social enterprise', 'Marketplace', 'Media or content', 'Hardware or physical product', 'Not sure yet']
   },
-  'Law':{
-    heading:'What area of law?', whisper:'',
-    chips:['Corporate and M&A','Litigation','Criminal','Human rights and public law','IP and tech','International law','Barrister route','Not sure yet']
+  'Law': {
+    heading: 'What area of law?', whisper: '',
+    chips: ['Corporate and M&A', 'Litigation', 'Criminal', 'Human rights and public law', 'IP and tech', 'International law', 'Barrister route', 'Not sure yet']
   },
-  'Medicine and healthcare':{
-    heading:'Which direction?', whisper:'',
-    chips:['Clinical medicine','Research and academia','Health policy','Biotech or pharma','Global health','Mental health','Medical technology','Not sure yet']
+  'Medicine and healthcare': {
+    heading: 'Which direction?', whisper: '',
+    chips: ['Clinical medicine', 'Research and academia', 'Health policy', 'Biotech or pharma', 'Global health', 'Mental health', 'Medical technology', 'Not sure yet']
   },
-  'Academia and research':{
-    heading:'What kind of research?', whisper:'',
-    chips:['Theoretical or pure research','Applied research','Interdisciplinary','Policy-facing research','Commercialising research','Not sure yet']
+  'Academia and research': {
+    heading: 'What kind of research?', whisper: '',
+    chips: ['Theoretical or pure research', 'Applied research', 'Interdisciplinary', 'Policy-facing research', 'Commercialising research', 'Not sure yet']
   },
-  'Policy and public sector':{
-    heading:'Where in policy?', whisper:'',
-    chips:['Civil service','Think tanks','International institutions','Political advisory','Local government','Regulatory bodies','Not sure yet']
+  'Policy and public sector': {
+    heading: 'Where in policy?', whisper: '',
+    chips: ['Civil service', 'Think tanks', 'International institutions', 'Political advisory', 'Local government', 'Regulatory bodies', 'Not sure yet']
   },
-  'Creative industries and media':{
-    heading:'What kind of creative work?', whisper:'',
-    chips:['Journalism and writing','Film and television','Music','Architecture and design','Advertising and branding','Publishing','Digital content','Not sure yet']
+  'Creative industries and media': {
+    heading: 'What kind of creative work?', whisper: '',
+    chips: ['Journalism and writing', 'Film and television', 'Music', 'Architecture and design', 'Advertising and branding', 'Publishing', 'Digital content', 'Not sure yet']
   },
-  'Social impact and NGOs':{
-    heading:'What kind of impact work?', whisper:'',
-    chips:['International development','Climate and environment','Education','Economic empowerment','Human rights','Effective altruism','Not sure yet']
+  'Social impact and NGOs': {
+    heading: 'What kind of impact work?', whisper: '',
+    chips: ['International development', 'Climate and environment', 'Education', 'Economic empowerment', 'Human rights', 'Effective altruism', 'Not sure yet']
   },
-  'Other':{
-    heading:'Can you say more?', whisper:'',
-    chips:['Still exploring','Multiple interests','Something unconventional','I will fill this in later']
+  'Other': {
+    heading: 'Can you say more?', whisper: '',
+    chips: ['Still exploring', 'Multiple interests', 'Something unconventional', 'I will fill this in later']
   }
 };
 
@@ -102,21 +102,214 @@ function TopoBackground() {
 }
 
 const INTERSTITIALS = ['7'];
+const COLLEGE_MAP = {
+  'all-souls': 'All Souls',
+  'balliol': 'Balliol',
+  'bnc': 'Brasenose',
+  'chch': 'Christ Church',
+  'ccc': 'Corpus Christi',
+  'exeter': 'Exeter',
+  'gtc': 'Green Templeton',
+  'hmc': 'Harris Manchester',
+  'hertford': 'Hertford',
+  'jesus': 'Jesus',
+  'keble': 'Keble',
+  'kellogg': 'Kellogg',
+  'lmh': 'Lady Margaret Hall',
+  'linacre': 'Linacre',
+  'lincoln': 'Lincoln',
+  'magd': 'Magdalen',
+  'mansfield': 'Mansfield',
+  'merton': 'Merton',
+  'new': 'New College',
+  'nuffield': 'Nuffield',
+  'oriel': 'Oriel',
+  'pmb': 'Pembroke',
+  'queens': "Queen's",
+  'regents': "Regent's Park",
+  'reuben': 'Reuben',
+  'st-annes': "St Anne's",
+  'sant': "St Antony's",
+  'stcatz': "St Catherine's",
+  'stx': 'St Cross',
+  'seh': 'St Edmund Hall',
+  'st-hildas': "St Hilda's",
+  'st-hughs': "St Hugh's",
+  'sjc': "St John's",
+  'spc': "St Peter's",
+  'somerville': 'Somerville',
+  'trinity': 'Trinity',
+  'univ': 'University',
+  'wadham': 'Wadham',
+  'wolfson': 'Wolfson',
+  'worc': 'Worcester',
+  'wycliffe': 'Wycliffe Hall'
+};
+
 const deriveCollegeFromEmail = (value) => {
   const domain = value.split('@')[1] || '';
-  const collegeDomain = domain.replace(/\.ox\.ac\.uk$/i, '').trim();
+  const collegeDomain = domain.replace(/\.ox\.ac\.uk$/i, '').trim().toLowerCase();
   if (!collegeDomain) return '';
 
+  // 1. Try direct map first
+  const abbreviation = collegeDomain.split('.')[0];
+  if (COLLEGE_MAP[abbreviation]) {
+    return COLLEGE_MAP[abbreviation];
+  }
+
+  // 2. Try normalization matching
   const normalize = (input) => input.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const target = normalize(collegeDomain.split('.')[0] || collegeDomain);
+  const target = normalize(abbreviation);
   const match = OXFORD_COLLEGES.find((college) => normalize(college) === target);
   if (match) return match;
 
-  const fallback = collegeDomain
+  // 3. Fallback to capitalization
+  const fallback = abbreviation
     .replace(/[-_]+/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
     .trim();
   return fallback;
+};
+
+const VoltzStep = ({ username, onComplete, loading }) => {
+  const [state, setState] = useState('gift'); // 'gift' or 'celebration'
+  const [claimed, setClaimed] = useState(false);
+  const [confetti, setConfetti] = useState([]);
+  const confettiLayerRef = useRef(null);
+
+  const launchConfetti = () => {
+    const colors = ['#F5C842', '#9B5DE5', '#F15BB5', '#00BBF9', '#00F5D4', '#FF6B6B', '#FFD166'];
+    const newConfetti = [];
+    for (let i = 0; i < 80; i++) {
+      newConfetti.push({
+        id: Math.random(),
+        color: colors[Math.floor(Math.random() * colors.length)],
+        cx: (Math.random() - 0.5) * 120,
+        cr: (Math.random() - 0.5) * 720,
+        dur: 2 + Math.random() * 2,
+        delay: Math.random() * 0.5,
+        size: 4 + Math.random() * 6,
+        isCircle: Math.random() < 0.3
+      });
+    }
+    setConfetti(newConfetti);
+    setTimeout(() => setConfetti([]), 5000);
+  };
+
+  const handleClaim = () => {
+    if (claimed) return;
+    setClaimed(true);
+    launchConfetti();
+  };
+
+  const copyReferral = async (e) => {
+    const btn = e.currentTarget;
+    const txt = `superchargedai.app/platform-beta/r/${username || 'your-handle'}`;
+    await navigator.clipboard.writeText(txt);
+    const orig = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+  };
+
+  const shareInvite = () => {
+    const url = `superchargedai.app/platform-beta/r/${username || 'your-handle'}`;
+    if (navigator.share) {
+      navigator.share({
+        title: 'Join me on Supercharged',
+        text: 'I just joined Supercharged. Use my link and we both get 50 voltz.',
+        url: 'https://' + url
+      }).catch(() => { });
+    }
+  };
+
+  if (state === 'gift') {
+    return (
+      <div id="voltz-state-gift" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', position: 'relative' }}>
+        <div id="confetti-layer" ref={confettiLayerRef} style={{ position: 'absolute', inset: '-40px -40px auto -40px', height: 520, pointerEvents: 'none', overflow: 'hidden', zIndex: 1 }}>
+          {confetti.map(c => (
+            <div
+              key={c.id}
+              className="confetti-piece"
+              style={{
+                backgroundColor: c.color,
+                left: '50%',
+                width: c.size,
+                height: c.size,
+                borderRadius: c.isCircle ? '50%' : '1px',
+                '--cx': `${c.cx}px`,
+                '--cr': `${c.cr}deg`,
+                '--cd': `${c.dur}s`,
+                animationDelay: `${c.delay}s`
+              }}
+            />
+          ))}
+        </div>
+
+        <div style={{ position: 'relative', zIndex: 2, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <h1 className="ob-heading sm" style={{ textAlign: 'center' }}>We have a gift for you.</h1>
+          <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16, lineHeight: 1.5, color: 'var(--text)', textAlign: 'center', marginBottom: 12 }}>We're starting you off with <strong>50 voltz</strong>.</p>
+          <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, lineHeight: 1.55, color: 'var(--text)', textAlign: 'center', marginBottom: 36, maxWidth: 380 }}>Voltz let you surface matches, send first messages, and unlock deeper compatibility insights.</p>
+
+          <div
+            id="voltz-gift-card"
+            onClick={handleClaim}
+            className={claimed ? 'claimed' : ''}
+            style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '36px 40px', border: '1.5px solid var(--border-light)', borderRadius: 24, background: '#FFFEFD', width: '100%', maxWidth: 340, transition: 'all 0.3s var(--ease)', position: 'relative' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, height: 64 }}>
+              <svg width="38" height="48" viewBox="0 0 14 18" fill="none" style={{ flexShrink: 0, display: 'block' }}><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842" /></svg>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 64, lineHeight: 1, color: 'var(--text)', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center' }}>50</span>
+            </div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 12, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 4 }}>voltz</div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: claimed ? 'var(--text)' : 'var(--text3)', marginTop: 14, transition: 'all 0.3s var(--ease)', textTransform: claimed ? 'uppercase' : 'none', letterSpacing: claimed ? '0.06em' : 'normal' }}>
+              {claimed ? 'Collected' : 'Tap to collect'}
+            </div>
+          </div>
+
+          {claimed && (
+            <Motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', marginTop: 32 }}
+            >
+              <button className="btn-primary" onClick={() => setState('celebration')}>Continue</button>
+            </Motion.div>
+          )}
+
+          <div className="ob-spacer"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div id="voltz-state-celebration" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+      <h1 className="ob-heading sm" style={{ textAlign: 'left', width: '100%' }}>Now make them go further.</h1>
+      <p className="ob-subtext" style={{ textAlign: 'left', marginBottom: 40, color: 'var(--text2)' }}>The fastest way to earn more voltz is to bring your friends in with you.</p>
+
+      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text3)', marginBottom: 14 }}>Invite friends</div>
+
+      <div style={{ width: '100%', background: '#FFFEFD', border: '1.5px solid var(--text)', borderRadius: 18, padding: '30px 28px', marginBottom: 8, textAlign: 'left' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--text3)', marginBottom: 14 }}>You both earn</div>
+        <h2 style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 700, fontSize: 22, lineHeight: 1.25, color: 'var(--text)', margin: '0 0 10px', letterSpacing: '-0.015em' }}>Invite a friend, you both get <span style={{ whiteSpace: 'nowrap' }}>50 voltz.</span></h2>
+        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: 'var(--text2)', lineHeight: 1.55, margin: '0 0 26px' }}>Share your personal link. You earn every time someone joins and completes their profile.</p>
+
+        <div style={{ background: '#F5F3F0', borderRadius: 12, padding: '15px 18px', fontFamily: "'JetBrains Mono', monospace", fontSize: 13.5, fontWeight: 500, color: 'var(--text)', letterSpacing: '0.02em', marginBottom: 20, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          superchargedai.app/platform-beta/r/{username || 'your-handle'}
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+          <button onClick={copyReferral} style={{ flex: 1, padding: '14px 20px', borderRadius: 999, border: '1.5px solid var(--text)', background: 'transparent', color: 'var(--text)', fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 14, cursor: 'pointer', transition: 'all 0.18s' }}>Copy link</button>
+          <button onClick={shareInvite} style={{ flex: 1, padding: '14px 20px', borderRadius: 999, border: '1.5px solid var(--text)', background: 'var(--text)', color: '#FFFEFD', fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 14, cursor: 'pointer', transition: 'all 0.18s' }}>Share</button>
+        </div>
+      </div>
+
+      <div className="ob-spacer"></div>
+      <button className="btn-primary" disabled={loading} onClick={onComplete}>
+        {loading ? 'Finalising...' : 'Continue'}
+      </button>
+    </div>
+  );
 };
 
 const StepWrapper = ({ id, children, isInterstitial, center }) => {
@@ -136,11 +329,11 @@ const StepWrapper = ({ id, children, isInterstitial, center }) => {
   );
 };
 
-export default function NewOnboarding({ user, onComplete, onAuth }) {
+export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerified }) {
   const initialStep = user ? '1' : 'cover';
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [history, setHistory] = useState([]);
-  
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [bdayDay, setBdayDay] = useState('');
@@ -148,17 +341,17 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
   const [bdayYear, setBdayYear] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState(['','','','','','']);
+  const [code, setCode] = useState(['', '', '', '', '', '']);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [pwVisible, setPwVisible] = useState(false);
   const [confirmPwVisible, setConfirmPwVisible] = useState(false);
-  
+
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
   const [studySubject, setStudySubject] = useState('');
-  
+
   const [rank1Cat, setRank1Cat] = useState('');
   const [userGoals, setUserGoals] = useState([]);
   const [answers, setAnswers] = useState({});
@@ -171,9 +364,12 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
   const [activeFriendPopover, setActiveFriendPopover] = useState(null);
   const friendBubbleRefs = useRef([null, null, null]);
   const friendPopoverRefs = useRef([null, null, null]);
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [magicLinkSending, setMagicLinkSending] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [magicLinkPollingId, setMagicLinkPollingId] = useState(null);
   const [showEndScreen, setShowEndScreen] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [existingSessionUser, setExistingSessionUser] = useState(user || null);
@@ -192,6 +388,62 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
       document.removeEventListener('click', handleDocumentClick);
     };
   }, [activeFriendPopover]);
+
+  // Poll authGateway to see if the magic link has been verified on another device
+  useEffect(() => {
+    if (currentStep !== '5' || !magicLinkPollingId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const exec = await functions.createExecution(
+          AUTH_GATEWAY_FUNCTION_ID,
+          JSON.stringify({ action: 'check_magic_link_status', pollingId: magicLinkPollingId }),
+          false
+        );
+        const result = JSON.parse(exec.responseBody || '{}');
+        if (result.ok && result.is_used) {
+          clearInterval(interval);
+          goNext();
+        }
+      } catch (err) {
+        console.warn('Polling magic link status failed:', err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [currentStep, magicLinkPollingId]);
+
+  // Auto-advance from magic-link holding screen when token is verified in App.jsx
+  useEffect(() => {
+    if (magicLinkVerified) {
+      const verifiedEmail = sessionStorage.getItem('sc_magic_verified_email');
+      const savedState = sessionStorage.getItem('sc_magic_state');
+
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(savedState));
+          if (parsed.firstName) setFirstName(parsed.firstName);
+          if (parsed.lastName) setLastName(parsed.lastName);
+          if (parsed.bdayDay) setBdayDay(parsed.bdayDay);
+          if (parsed.bdayMonth) setBdayMonth(parsed.bdayMonth);
+          if (parsed.bdayYear) setBdayYear(parsed.bdayYear);
+          if (parsed.username) setUsername(parsed.username);
+        } catch (e) { }
+        sessionStorage.removeItem('sc_magic_state');
+      }
+
+      if (verifiedEmail) setEmail(verifiedEmail);
+
+      // If opening in a new tab or starting fresh
+      if (currentStep === 'cover' || currentStep === '1' || currentStep === '3') {
+        setCurrentStep('5pw');
+        setHistory(['cover', '1', '2bday', '2u', '3', '5']);
+      } else if (currentStep === '5') {
+        goNext();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [magicLinkVerified]);
 
   useEffect(() => {
     let isMounted = true;
@@ -217,7 +469,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
     };
   }, [user]);
 
-  
+
   const stepOrder = useMemo(() => {
     let pre = ['cover', 'login', '1', '2bday', '2u', '3', '5', '5pw', '6study', '6year', '7', '8'];
     if (user) {
@@ -248,9 +500,9 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
     } else if (rank1Cat === 'romantic') {
       cond = ['q-sexuality', 'q-romantic-status', 'q-dating', 'q-dating-appearance', 'q-dating-personality', 'q-dating-hobbies'];
     } else if (rank1Cat === 'academic') {
-      cond = ['q-intellectual-venue', 'q-conntype'];
+      cond = ['q-intellectual-topic', 'q-study-wish', 'q-intellectual-ambition', 'q-intellectual-venue', 'q-conntype'];
     }
-    const post = ['q-hobby', 'q-societies', 'q-music', 'q-friends', 'confirm'];
+    const post = ['q-hobby', 'q-societies', 'q-music', 'q-friends', 'confirm', 'q-voltz'];
     return [...pre, ...cond, ...post];
   }, [user, rank1Cat, answers, userGoals]);
 
@@ -259,12 +511,14 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
   }, [stepOrder]);
 
   const updateAnswer = (key, value) => {
-    setAnswers(prev => ({...prev, [key]: value}));
+    setAnswers(prev => ({ ...prev, [key]: value }));
   };
 
   const toggleArrayAnswer = (key, value, max = null) => {
     setAnswers(prev => {
-      const arr = prev[key] || [];
+      let arr = prev[key];
+      if (!Array.isArray(arr)) arr = [];
+
       if (arr.includes(value)) {
         return { ...prev, [key]: arr.filter(v => v !== value) };
       } else {
@@ -361,6 +615,30 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
     }
   };
 
+  const sendMagicLink = async () => {
+    if (!emailValid || magicLinkSending) return;
+    setMagicLinkSending(true);
+    setError('');
+    try {
+      const stateParams = encodeURIComponent(JSON.stringify({
+        firstName, lastName, bdayDay, bdayMonth, bdayYear, username
+      }));
+      const exec = await functions.createExecution(
+        AUTH_GATEWAY_FUNCTION_ID,
+        JSON.stringify({ action: 'send_magic_link', email, stateParams }),
+        false
+      );
+      const result = JSON.parse(exec.responseBody || '{}');
+      if (!result.ok) throw new Error(result.error || 'Failed to send link');
+      setMagicLinkSent(true);
+      goNext();
+    } catch (err) {
+      setError(err.message || 'Could not send magic link. Please try again.');
+    } finally {
+      setMagicLinkSending(false);
+    }
+  };
+
   const handleLogin = async () => {
     try {
       setLoading(true);
@@ -398,7 +676,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
     }, 50);
   };
 
-  const commitFriend = (idx, rawValue) => {
+  const commitFriend = async (idx, rawValue) => {
     const value = rawValue.trim();
     if (!value) return;
 
@@ -408,20 +686,85 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
       return next;
     });
 
-    const isOxford = /\.ox\.ac\.uk$/i.test(value);
+    // Show loading state while searching
     setFriendVisuals((prev) => {
       const next = [...prev];
-      next[idx] = isOxford ? { state: 'verified', value } : { state: 'invite', value };
+      next[idx] = { state: 'loading', value };
       return next;
     });
+
+    const isOxford = /\.ox\.ac\.uk$/i.test(value);
+    
+    // If it's an Oxford email, mark as verified
+    if (isOxford) {
+      setFriendVisuals((prev) => {
+        const next = [...prev];
+        next[idx] = { state: 'verified', value };
+        return next;
+      });
+      setActiveFriendPopover(null);
+      return;
+    }
+
+    // For names, search the profiles table to see if they're already on Supercharged
+    try {
+      const searchRes = await tables.listRows({
+        databaseId: DB_ID,
+        tableId: PROFILES_TABLE,
+        queries: [
+          Query.or([
+            Query.contains('full_name', value),
+            Query.contains('first_name', value),
+            Query.contains('last_name', value),
+          ]),
+          Query.limit(10),
+        ],
+      });
+      
+      const found = searchRes.rows && searchRes.rows.length > 0;
+      if (found) {
+        // Send connection request to the found profile
+        const targetProfile = searchRes.rows[0];
+        const firstName = targetProfile.first_name || targetProfile.full_name?.split(' ')[0] || 'there';
+        const openingMessage = `Hi ${firstName}, I just joined Supercharged`;
+        
+        try {
+          await functions.createExecution(
+            CONNECTION_GATEWAY_FUNCTION_ID,
+            JSON.stringify({
+              action: 'initiate_request',
+              target_profile_id: targetProfile.$id,
+              opening_message: openingMessage,
+            }),
+            false
+          );
+        } catch (connErr) {
+          console.warn('Failed to send connection request:', connErr);
+          // Still show verified state even if connection fails
+        }
+      }
+      
+      setFriendVisuals((prev) => {
+        const next = [...prev];
+        next[idx] = found ? { state: 'verified', value, foundProfiles: searchRes.rows } : { state: 'invite', value };
+        return next;
+      });
+    } catch (err) {
+      console.warn('Friend name search failed:', err);
+      // Fallback to invite state if search fails
+      setFriendVisuals((prev) => {
+        const next = [...prev];
+        next[idx] = { state: 'invite', value };
+        return next;
+      });
+    }
 
     setActiveFriendPopover(null);
   };
 
   const copyFriendInvite = async (button) => {
-    const link = 'https://supercharged.ox.ac.uk/invite/' + (user?.$id || '');
+    const link = `superchargedai.app/platform-beta/r/${username || user?.$id || 'user'}`;
     await navigator.clipboard.writeText(link);
-    alert('Referral link copied to clipboard!');
     if (button) {
       button.textContent = 'Copied!';
       setTimeout(() => {
@@ -434,7 +777,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
     try {
       setLoading(true);
       const u = user || await account.get();
-      
+
       const payload = {
         user_id: u.$id,
         full_name: firstName + ' ' + lastName,
@@ -457,6 +800,7 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
         desired_connections: answers['conntype'] || answers['startup-conntype'] || [],
         social_circles: answers['social'] || [],
         friendship_values: answers['friendship'] || [],
+        intellectual_identity: answers['intellect'] || '',
         intellectual_venue: answers['venue'] || '',
         intellectual_ambition: answers['intambition'] || '',
         study_wish: answers['study-wish'] || '',
@@ -500,26 +844,63 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
         });
         docId = row.$id;
       }
-      
+
       sessionStorage.removeItem('sc_referral_code');
       setLoading(false);
       setShowEndScreen(true);
-      setLoadProgress(0);
 
-      // Animate progress bar and trigger background loading
-      const startTime = Date.now();
-      const duration = 2400;
-      const progressInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min((elapsed / duration) * 100, 95);
-        setLoadProgress(progress);
-      }, 50);
+      let isMounted = true;
+      let finalDoc = null;
+      let currentProgress = 0;
 
-      setTimeout(() => {
-        clearInterval(progressInterval);
+      // Start a fake progress incrementer
+      const progressTimer = setInterval(() => {
+        if (!isMounted) return;
+        currentProgress += Math.random() * 8;
+        if (currentProgress > 95) currentProgress = 95;
+        setLoadProgress(currentProgress);
+      }, 800);
+
+      // Phase 1: Poll until indexed
+      while (isMounted) {
+        try {
+          const doc = await tables.getRow({ databaseId: DB_ID, tableId: PROFILES_TABLE, rowId: docId });
+          if (doc.is_indexed) {
+            finalDoc = doc;
+            break;
+          }
+        } catch (err) {
+          console.error('Polling error:', err);
+        }
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      // Phase 2: Refill Queue
+      if (isMounted && finalDoc?.user_id) {
+        currentProgress = 65;
+        setLoadProgress(currentProgress);
+        try {
+          if (DISCOVERY_FUNCTION_ID) {
+            await functions.createExecution(DISCOVERY_FUNCTION_ID, JSON.stringify({
+              action: 'refill_queue',
+              profile_id: finalDoc.$id
+            }), false);
+          }
+        } catch (err) {
+          console.error('Refill queue error:', err);
+        }
+
+        currentProgress = 100;
         setLoadProgress(100);
-        onComplete(docId);
-      }, 2500);
+        await new Promise(r => setTimeout(r, 600)); // Brief pause at 100%
+
+        if (isMounted) {
+          clearInterval(progressTimer);
+          onComplete(finalDoc);
+        }
+      } else {
+        clearInterval(progressTimer);
+      }
 
     } catch (err) {
       setLoading(false);
@@ -536,7 +917,9 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
   const bdayValid = getBdayAge() >= 18;
   const usernameValid = username.length >= 3 && /^[a-zA-Z0-9_]+$/.test(username);
-  const emailValid = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.ox\.ac\.uk$/.test(email.toLowerCase()) && !email.toLowerCase().endsWith('@ox.ac.uk');
+  const ADMIN_EMAILS_FE = ['gdwhastings559@gmail.com', 'bowencheung0228@outlook.com'];
+  const emailValid = ADMIN_EMAILS_FE.includes(email.toLowerCase()) ||
+    (/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.ox\.ac\.uk$/.test(email.toLowerCase()) && !email.toLowerCase().endsWith('@ox.ac.uk'));
   const codeValid = code.join('').length === 6 || code.join('') === '123456';
   const pwValid = password.length >= 8 && password === confirmPassword;
   const quickLoginLabel = existingSessionUser?.name?.trim() || existingSessionUser?.email || 'your account';
@@ -544,9 +927,9 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
   return (
     <div className="new-onboarding selection:bg-accent selection:text-text">
       <TopoBackground />
-      
+
       <div id="logo">
-        <svg width="14" height="18" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842"/></svg>
+        <svg width="14" height="18" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842" /></svg>
         <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 14, color: '#1A1A1A', letterSpacing: '-0.01em' }}>upercharged</span>
       </div>
 
@@ -571,710 +954,772 @@ export default function NewOnboarding({ user, onComplete, onAuth }) {
 
       <div id="ob-overlay" style={{ opacity: showEndScreen ? 0 : 1 }}>
         <AnimatePresence initial={false} mode="sync">
-          
+
           {currentStep === 'cover' && (
-<StepWrapper key="cover" currentStep={currentStep} id="cover">
-            <div className="cover-svg-wrap">
-              <svg viewBox="0 0 180 120" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
-                <line x1="90" y1="60" x2="40" y2="30" stroke="#DDDBD8" strokeWidth="1.2"/>
-                <line x1="90" y1="60" x2="150" y2="28" stroke="#DDDBD8" strokeWidth="1.2"/>
-                <line x1="90" y1="60" x2="155" y2="80" stroke="#DDDBD8" strokeWidth="1.2"/>
-                <line x1="90" y1="60" x2="32" y2="85" stroke="#DDDBD8" strokeWidth="1.2"/>
-                <line x1="90" y1="60" x2="100" y2="100" stroke="#DDDBD8" strokeWidth="1.2"/>
-                <circle cx="40" cy="30" r="4" fill="#DDDBD8"/>
-                <circle cx="150" cy="28" r="4" fill="#DDDBD8"/>
-                <circle cx="155" cy="80" r="4" fill="#DDDBD8"/>
-                <circle cx="32" cy="85" r="4" fill="#DDDBD8"/>
-                <circle cx="100" cy="100" r="3.5" fill="#DDDBD8"/>
-                <circle cx="90" cy="60" r="7" fill="#F5C842"/>
-              </svg>
-            </div>
-            <h1 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 300, fontSize: 40, lineHeight: 1.1, color: 'var(--text)', marginBottom: 12 }}>The network that works<br/>for you.</h1>
-            <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 36, lineHeight: 1.5 }}>Oxford University students <span style={{ fontWeight: 600 }}>only</span> &middot; Verified by email</p>
-            {!user && existingSessionUser && (
-              <button className="btn-outline" style={{ marginBottom: 12 }} onClick={continueExistingSession} disabled={loading}>
-                {loading ? 'Continuing...' : `Log in as ${quickLoginLabel}`}
-              </button>
-            )}
-            <button className="btn-accent" style={{ marginBottom: 12 }} onClick={() => { setHistory(['cover']); setCurrentStep('1'); }}>Sign up</button>
-            <button className="btn-outline" onClick={() => { setHistory(['cover']); setCurrentStep('login'); }}>Log in</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="cover" currentStep={currentStep} id="cover">
+              <div className="cover-svg-wrap">
+                <svg viewBox="0 0 180 120" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+                  <line x1="90" y1="60" x2="40" y2="30" stroke="#DDDBD8" strokeWidth="1.2" />
+                  <line x1="90" y1="60" x2="150" y2="28" stroke="#DDDBD8" strokeWidth="1.2" />
+                  <line x1="90" y1="60" x2="155" y2="80" stroke="#DDDBD8" strokeWidth="1.2" />
+                  <line x1="90" y1="60" x2="32" y2="85" stroke="#DDDBD8" strokeWidth="1.2" />
+                  <line x1="90" y1="60" x2="100" y2="100" stroke="#DDDBD8" strokeWidth="1.2" />
+                  <circle cx="40" cy="30" r="4" fill="#DDDBD8" />
+                  <circle cx="150" cy="28" r="4" fill="#DDDBD8" />
+                  <circle cx="155" cy="80" r="4" fill="#DDDBD8" />
+                  <circle cx="32" cy="85" r="4" fill="#DDDBD8" />
+                  <circle cx="100" cy="100" r="3.5" fill="#DDDBD8" />
+                  <circle cx="90" cy="60" r="7" fill="#F5C842" />
+                </svg>
+              </div>
+              <h1 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 300, fontSize: 40, lineHeight: 1.1, color: 'var(--text)', marginBottom: 12 }}>The network that works<br />for you.</h1>
+              <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 36, lineHeight: 1.5 }}>Oxford University students <span style={{ fontWeight: 600 }}>only</span> &middot; Verified by email</p>
+              {!user && existingSessionUser && (
+                <button className="btn-outline" style={{ marginBottom: 12 }} onClick={continueExistingSession} disabled={loading}>
+                  {loading ? 'Continuing...' : `Log in as ${quickLoginLabel}`}
+                </button>
+              )}
+              <button className="btn-accent" style={{ marginBottom: 12 }} onClick={() => { setHistory(['cover']); setCurrentStep('1'); }}>Sign up</button>
+              <button className="btn-outline" onClick={() => { setHistory(['cover']); setCurrentStep('login'); }}>Log in</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'login' && (
-<StepWrapper key="login" currentStep={currentStep} id="login">
-            <h1 className="ob-heading">Welcome back.</h1>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Sign in to continue to Supercharged.</p>
-            {!user && existingSessionUser && (
-              <button className="btn-outline" style={{ marginBottom: 16 }} onClick={continueExistingSession} disabled={loading}>
-                {loading ? 'Continuing...' : `Log in as ${quickLoginLabel}`}
+            <StepWrapper key="login" currentStep={currentStep} id="login">
+              <h1 className="ob-heading">Welcome back.</h1>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Sign in to continue to Supercharged.</p>
+              {!user && existingSessionUser && (
+                <button className="btn-outline" style={{ marginBottom: 16 }} onClick={continueExistingSession} disabled={loading}>
+                  {loading ? 'Continuing...' : `Log in as ${quickLoginLabel}`}
+                </button>
+              )}
+              <input className="underline-input" autoFocus type="email" placeholder="you@ox.ac.uk" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} />
+              <div className="pw-wrap" style={{ marginTop: 12 }}>
+                <input className="underline-input" type={pwVisible ? "text" : "password"} placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && loginEmail && loginPassword && handleLogin()} />
+                <button className="pw-toggle" type="button" onClick={() => setPwVisible(!pwVisible)} tabIndex="-1">
+                  <svg width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round">
+                    <path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z" />
+                    {!pwVisible ? <circle cx="10" cy="7" r="3" /> : <line x1="1" y1="7" x2="19" y2="7" />}
+                  </svg>
+                </button>
+              </div>
+              {error && <div className="input-error">{error}</div>}
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" onClick={handleLogin} disabled={loading || !loginEmail || !loginPassword}>
+                {loading ? 'Logging in...' : 'Log in'}
               </button>
-            )}
-            <input className="underline-input" autoFocus type="email" placeholder="you@ox.ac.uk" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} />
-            <div className="pw-wrap" style={{ marginTop: 12 }}>
-              <input className="underline-input" type={pwVisible ? "text" : "password"} placeholder="Password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && loginEmail && loginPassword && handleLogin()} />
-              <button className="pw-toggle" type="button" onClick={() => setPwVisible(!pwVisible)} tabIndex="-1">
-                <svg width="20" height="14" viewBox="0 0 20 14" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round">
-                  <path d="M1 7C4 1,16 1,19 7C16 13,4 13,1 7Z"/>
-                  {!pwVisible ? <circle cx="10" cy="7" r="3"/> : <line x1="1" y1="7" x2="19" y2="7"/>}
-                </svg>
-              </button>
-            </div>
-            {error && <div className="input-error">{error}</div>}
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" onClick={handleLogin} disabled={loading || !loginEmail || !loginPassword}>
-              {loading ? 'Logging in...' : 'Log in'}
-            </button>
-          </StepWrapper>
-)}
+            </StepWrapper>
+          )}
 
           {currentStep === '1' && (
-<StepWrapper key="1" currentStep={currentStep} id="1">
-            <h1 className="ob-heading sm">What's your name?</h1>
-            <p className="ob-whisper">So your matches know who they're talking to.</p>
-            <input className="underline-input" autoFocus type="text" placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ marginBottom: 20 }} />
-            <input className="underline-input" type="text" placeholder="Last name" value={lastName} onChange={e => setLastName(e.target.value)} onKeyDown={e => e.key === 'Enter' && firstName && lastName && goNext()} />
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!firstName.trim() || !lastName.trim()} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="1" currentStep={currentStep} id="1">
+              <h1 className="ob-heading sm">What's your name?</h1>
+              <p className="ob-whisper">So your matches know who they're talking to.</p>
+              <input className="underline-input" autoFocus type="text" placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} style={{ marginBottom: 20 }} />
+              <input className="underline-input" type="text" placeholder="Last name" value={lastName} onChange={e => setLastName(e.target.value)} onKeyDown={e => e.key === 'Enter' && firstName && lastName && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!firstName.trim() || !lastName.trim()} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === '2bday' && (
-<StepWrapper key="2bday" currentStep={currentStep} id="2bday">
-            <h1 className="ob-heading sm">When's your birthday?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 24 }}>Used to verify you are 18 or over and to surface age-appropriate matches.</p>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>Day</div>
-                <input autoFocus className="underline-input" type="text" inputMode="numeric" maxLength="2" placeholder="DD" style={{ fontSize: 28, textAlign: 'center' }} value={bdayDay} onChange={e => setBdayDay(e.target.value.replace(/\D/g, ''))} />
+            <StepWrapper key="2bday" currentStep={currentStep} id="2bday">
+              <h1 className="ob-heading sm">When's your birthday?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 24 }}>Used to verify you are 18 or over and to surface age-appropriate matches.</p>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>Day</div>
+                  <input autoFocus className="underline-input" type="text" inputMode="numeric" maxLength="2" placeholder="DD" style={{ fontSize: 28, textAlign: 'center' }} value={bdayDay} onChange={e => setBdayDay(e.target.value.replace(/\D/g, ''))} />
+                </div>
+                <div style={{ flex: 1.4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>Month</div>
+                  <input className="underline-input" type="text" inputMode="numeric" maxLength="2" placeholder="MM" style={{ fontSize: 28, textAlign: 'center' }} value={bdayMonth} onChange={e => setBdayMonth(e.target.value.replace(/\D/g, ''))} />
+                </div>
+                <div style={{ flex: 1.6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>Year</div>
+                  <input className="underline-input" type="text" inputMode="numeric" maxLength="4" placeholder="YYYY" style={{ fontSize: 28, textAlign: 'center' }} value={bdayYear} onChange={e => setBdayYear(e.target.value.replace(/\D/g, ''))} onKeyDown={e => e.key === 'Enter' && bdayValid && goNext()} />
+                </div>
               </div>
-              <div style={{ flex: 1.4 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>Month</div>
-                <input className="underline-input" type="text" inputMode="numeric" maxLength="2" placeholder="MM" style={{ fontSize: 28, textAlign: 'center' }} value={bdayMonth} onChange={e => setBdayMonth(e.target.value.replace(/\D/g, ''))} />
-              </div>
-              <div style={{ flex: 1.6 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text3)', marginBottom: 8 }}>Year</div>
-                <input className="underline-input" type="text" inputMode="numeric" maxLength="4" placeholder="YYYY" style={{ fontSize: 28, textAlign: 'center' }} value={bdayYear} onChange={e => setBdayYear(e.target.value.replace(/\D/g, ''))} onKeyDown={e => e.key === 'Enter' && bdayValid && goNext()} />
-              </div>
-            </div>
-            <div className="input-error">{bdayDay && bdayMonth && bdayYear.length === 4 && !bdayValid ? 'You must be 18 or over to join, or enter a valid date.' : ''}</div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!bdayValid} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+              <div className="input-error">{bdayDay && bdayMonth && bdayYear.length === 4 && !bdayValid ? 'You must be 18 or over to join, or enter a valid date.' : ''}</div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!bdayValid} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === '2u' && (
-<StepWrapper key="2u" currentStep={currentStep} id="2u">
-            <h1 className="ob-heading sm">Choose your username.</h1>
-            <p className="ob-subtext">This is your handle on Supercharged. You can change it later.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Your username is how people find and reference you before a match is made.</p>
-            <div style={{ display: 'flex', alignItems: 'flex-end', width: '100%' }}>
-              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 18, color: 'var(--text3)', paddingBottom: 14, flexShrink: 0 }}>@</span>
-              <input autoFocus className="underline-input" type="text" placeholder="username" spellCheck="false" style={{ flex: 1, fontSize: 28 }} value={username} onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20))} onKeyDown={e => e.key === 'Enter' && usernameValid && goNext()} />
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'right', marginTop: 4 }}>{username.length}/20</div>
-            <div className="input-error">{username.length > 0 && !usernameValid ? 'At least 3 characters. Only letters, numbers, and underscores.' : ''}</div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!usernameValid} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="2u" currentStep={currentStep} id="2u">
+              <h1 className="ob-heading sm">Choose your username.</h1>
+              <p className="ob-subtext">This is your handle on Supercharged. You can change it later.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Your username is how people find and reference you before a match is made.</p>
+              <div style={{ display: 'flex', alignItems: 'flex-end', width: '100%' }}>
+                <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 18, color: 'var(--text3)', paddingBottom: 14, flexShrink: 0 }}>@</span>
+                <input autoFocus className="underline-input" type="text" placeholder="username" spellCheck="false" style={{ flex: 1, fontSize: 28 }} value={username} onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20))} onKeyDown={e => e.key === 'Enter' && usernameValid && goNext()} />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'right', marginTop: 4 }}>{username.length}/20</div>
+              <div className="input-error">{username.length > 0 && !usernameValid ? 'At least 3 characters. Only letters, numbers, and underscores.' : ''}</div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!usernameValid} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === '3' && (
-<StepWrapper key="3" currentStep={currentStep} id="3">
-            <h1 className="ob-heading sm">Your Oxford email.</h1>
-            <p className="ob-subtext">We'll send a code to verify you're a current student.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>We verify your student status once. We won't email you anything else without permission.</p>
-            <input autoFocus className="underline-input" type="email" placeholder="you@college.ox.ac.uk" spellCheck="false" value={email} onChange={e => {
-              const nextEmail = e.target.value;
-              setEmail(nextEmail);
-              const inferredCollege = deriveCollegeFromEmail(nextEmail);
-              if (inferredCollege) {
-                setAnswers(prev => ({ ...prev, college: inferredCollege }));
-              }
-            }} onKeyDown={e => e.key === 'Enter' && emailValid && goNext()} />
-            <div className="input-error">{email.length > 0 && !emailValid && email.includes('@') ? 'Please use your Oxford email address ending in .ox.ac.uk' : ''}</div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!emailValid} onClick={goNext}>Send verification code</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="3" currentStep={currentStep} id="3">
+              <h1 className="ob-heading sm">Your Oxford email.</h1>
+              <p className="ob-subtext">We'll send a sign-in link to verify you're a current student.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>We verify your student status once. We won't email you anything else without permission.</p>
+              <input autoFocus className="underline-input" type="email" placeholder="you@college.ox.ac.uk" spellCheck="false" value={email} onChange={e => {
+                const nextEmail = e.target.value;
+                setEmail(nextEmail);
+                const inferredCollege = deriveCollegeFromEmail(nextEmail);
+                if (inferredCollege) {
+                  setAnswers(prev => ({ ...prev, college: inferredCollege }));
+                }
+              }} onKeyDown={e => e.key === 'Enter' && emailValid && sendMagicLink()} />
+              <div className="input-error">{error || (email.length > 0 && !emailValid && email.includes('@') ? 'Please use your Oxford email address ending in .ox.ac.uk' : '')}</div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!emailValid || magicLinkSending} onClick={sendMagicLink}>
+                {magicLinkSending ? 'Sending…' : 'Send sign-in link'}
+              </button>
+            </StepWrapper>
+          )}
 
           {currentStep === '5' && (
-<StepWrapper key="5" currentStep={currentStep} id="5">
-            <h1 className="ob-heading sm">Check your inbox.</h1>
-            <p className="ob-subtext">We sent a code to <strong>{email}</strong>.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>This confirms you're a current Oxford student, not just someone with the domain.</p>
-            <div className="code-boxes">
-              {[0,1,2,3,4,5].map(i => (
-                <input
-                  key={i}
-                  id={`code-box-${i}`}
-                  className={`code-box ${code[i] ? 'filled' : ''}`}
-                  maxLength={1} type="text" inputMode="numeric"
-                  value={code[i]}
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, '');
-                    const newCode = [...code];
-                    newCode[i] = val;
-                    setCode(newCode);
-                    if (val && i < 5) document.getElementById(`code-box-${i+1}`).focus();
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Backspace' && !code[i] && i > 0) {
-                      document.getElementById(`code-box-${i-1}`).focus();
-                    } else if (e.key === 'Enter' && code.join('').length === 6) {
-                      goNext();
-                    }
-                  }}
-                  onPaste={e => {
-                    e.preventDefault();
-                    const p = e.clipboardData.getData('text').replace(/\D/g, '');
-                    const newCode = [...code];
-                    for (let j = 0; j < p.length && i + j < 6; j++) newCode[i + j] = p[j];
-                    setCode(newCode);
-                    const nextFocus = Math.min(i + p.length, 5);
-                    document.getElementById(`code-box-${nextFocus}`).focus();
-                  }}
-                />
-              ))}
-            </div>
-            <div className="input-error" style={{ textAlign: 'center' }}></div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!codeValid} onClick={goNext}>Verify</button>
-            <p className="resend-link">Didn't get it? <span>Resend</span></p>
-          </StepWrapper>
-)}
+            <StepWrapper key="5" currentStep={currentStep} id="5">
+              <h1 className="ob-heading sm">Check your inbox.</h1>
+              <p className="ob-subtext">We sent a sign-in link to <strong>{email}</strong>.</p>
+              <p className="ob-whisper" style={{ marginBottom: 24 }}>Click the link in your email to continue. It expires in 15 minutes.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#F0EDE8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="M2 7l10 7 10-7" />
+                  </svg>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center' }}>Waiting for you to click the link…</p>
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-secondary" style={{ fontSize: 13, opacity: 0.7 }} onClick={sendMagicLink} disabled={magicLinkSending}>
+                {magicLinkSending ? 'Resending…' : "Resend link"}
+              </button>
+            </StepWrapper>
+          )}
 
           {currentStep === '5pw' && (
-<StepWrapper key="5pw" currentStep={currentStep} id="5pw">
-            <h1 className="ob-heading sm">Create a password.</h1>
-            <p className="ob-subtext">At least 8 characters.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>We use standard encryption. We never store your password in plain text.</p>
-            <div className="pw-wrap">
-              <input autoFocus className="underline-input" type={pwVisible ? "text" : "password"} placeholder="Create password" value={password} onChange={e => setPassword(e.target.value)} />
-              <button className="pw-toggle" type="button" onClick={() => setPwVisible(!pwVisible)} tabIndex="-1">
-                {pwVisible ? <EyeOff size={18} color="var(--text3)" /> : <Eye size={18} color="var(--text3)" />}
+            <StepWrapper key="5pw" currentStep={currentStep} id="5pw">
+              <h1 className="ob-heading sm">Create a password.</h1>
+              <p className="ob-subtext">At least 8 characters.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>We use standard encryption. We never store your password in plain text.</p>
+              <div className="pw-wrap">
+                <input autoFocus className="underline-input" type={pwVisible ? "text" : "password"} placeholder="Create password" value={password} onChange={e => setPassword(e.target.value)} />
+                <button className="pw-toggle" type="button" onClick={() => setPwVisible(!pwVisible)} tabIndex="-1">
+                  {pwVisible ? <EyeOff size={18} color="var(--text3)" /> : <Eye size={18} color="var(--text3)" />}
+                </button>
+              </div>
+              <div className="pw-spacer"></div>
+              <div className="pw-wrap">
+                <input className="underline-input" type={confirmPwVisible ? "text" : "password"} placeholder="Confirm password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && pwValid && handleSignUp()} />
+                <button className="pw-toggle" type="button" onClick={() => setConfirmPwVisible(!confirmPwVisible)} tabIndex="-1">
+                  {confirmPwVisible ? <EyeOff size={18} color="var(--text3)" /> : <Eye size={18} color="var(--text3)" />}
+                </button>
+              </div>
+              <div className="input-error">{error || (password.length > 0 && confirmPassword.length > 0 && password !== confirmPassword ? "Passwords don't match." : '')}</div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!pwValid || loading} onClick={handleSignUp}>
+                {loading ? 'Creating account...' : 'Continue'}
               </button>
-            </div>
-            <div className="pw-spacer"></div>
-            <div className="pw-wrap">
-              <input className="underline-input" type={confirmPwVisible ? "text" : "password"} placeholder="Confirm password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && pwValid && handleSignUp()} />
-              <button className="pw-toggle" type="button" onClick={() => setConfirmPwVisible(!confirmPwVisible)} tabIndex="-1">
-                {confirmPwVisible ? <EyeOff size={18} color="var(--text3)" /> : <Eye size={18} color="var(--text3)" />}
-              </button>
-            </div>
-            <div className="input-error">{error || (password.length > 0 && confirmPassword.length > 0 && password !== confirmPassword ? "Passwords don't match." : '')}</div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!pwValid || loading} onClick={handleSignUp}>
-              {loading ? 'Creating account...' : 'Continue'}
-            </button>
-          </StepWrapper>
-)}
+            </StepWrapper>
+          )}
 
           {currentStep === '6study' && (
-<StepWrapper key="6study" currentStep={currentStep} id="6study">
-            <h1 className="ob-heading sm">What do you study?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us match you with people in adjacent or complementary fields.</p>
-            <input autoFocus className="underline-input" type="text" placeholder="e.g. PPE, Computer Science, Law" style={{ fontSize: 26 }} value={studySubject} onChange={e => setStudySubject(e.target.value)} onKeyDown={e => e.key === 'Enter' && studySubject.trim().length >= 2 && goNext()} />
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={studySubject.trim().length < 2} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="6study" currentStep={currentStep} id="6study">
+              <h1 className="ob-heading sm">What do you study?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us match you with people in adjacent or complementary fields.</p>
+              <input autoFocus className="underline-input" type="text" placeholder="e.g. PPE, Computer Science, Law" style={{ fontSize: 26 }} value={studySubject} onChange={e => setStudySubject(e.target.value)} onKeyDown={e => e.key === 'Enter' && studySubject.trim().length >= 2 && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={studySubject.trim().length < 2} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === '6year' && (
-<StepWrapper key="6year" currentStep={currentStep} id="6year">
-            <h1 className="ob-heading sm">Which year are you in?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us calibrate the kind of connections that make sense for where you are right now.</p>
-            <div className="tap-cards">
-              {['First year', 'Second year', 'Third year', 'Fourth year', 'Postgraduate'].map(y => (
-                <div key={y} className={`tap-card ${answers['year'] === y ? 'selected' : ''}`} onClick={() => updateAnswer('year', y)}>{y}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['year']} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="6year" currentStep={currentStep} id="6year">
+              <h1 className="ob-heading sm">Which year are you in?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us calibrate the kind of connections that make sense for where you are right now.</p>
+              <div className="tap-cards">
+                {['First year', 'Second year', 'Third year', 'Fourth year', 'Postgraduate'].map(y => (
+                  <div key={y} className={`tap-card ${answers['year'] === y ? 'selected' : ''}`} onClick={() => updateAnswer('year', y)}>{y}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['year']} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === '7' && (
-<StepWrapper key="7" currentStep={currentStep} id="7">
-            <h1 className="ob-heading interstitial-heading">Your profile runs<br/>in the background.</h1>
-            <p className="ob-subtext" style={{ marginBottom: 0 }}>While you're in lectures, Supercharged is computing simulations. By the time you open the app, your best matches are already waiting.</p>
-            <div className="flow-diagram">
-              <div className="flow-node"><div className="flow-circle">&#128100;</div><div className="flow-label">Your profile</div></div>
-              <div className="flow-arrow">&#8594;</div>
-              <div className="flow-node"><div className="flow-circle" style={{ borderColor: 'var(--accent)', background: 'rgba(245,200,66,0.08)' }}>&#9889;</div><div className="flow-label">Simulate</div></div>
-              <div className="flow-arrow">&#8594;</div>
-              <div className="flow-node"><div className="flow-circle">&#129306;</div><div className="flow-label">Top matches</div></div>
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="7" currentStep={currentStep} id="7" isInterstitial>
+              <h1 className="ob-heading sm" style={{ marginBottom: 24 }}>Your profile runs in the background.</h1>
+              <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16, lineHeight: 1.6, color: 'var(--text)', marginBottom: 8 }}>While you're in lectures, Supercharged is computing simulations. By the time you open the app, your best matches are already waiting.</p>
+              <div className="flow-diagram" style={{ marginTop: 40 }}>
+                <div className="flow-node">
+                  <div className="flow-circle">
+                    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" stroke="var(--text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="16" cy="11" r="5" /><path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12" /></svg>
+                  </div>
+                  <div className="flow-label">Your profile</div>
+                </div>
+                <div className="flow-arrow">&#8594;</div>
+                <div className="flow-node">
+                  <div className="flow-circle" style={{ borderColor: 'var(--accent)', background: 'rgba(245,200,66,0.08)' }}>
+                    <svg width="16" height="20" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842" /></svg>
+                  </div>
+                  <div className="flow-label">Simulate</div>
+                </div>
+                <div className="flow-arrow">&#8594;</div>
+                <div className="flow-node">
+                  <div className="flow-circle">
+                    <svg width="28" height="20" viewBox="0 0 32 22" fill="none" stroke="var(--text)" strokeWidth="1.5"><circle cx="11" cy="11" r="7" /><circle cx="21" cy="11" r="7" /></svg>
+                  </div>
+                  <div className="flow-label">Top matches</div>
+                </div>
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === '8' && (
-<StepWrapper key="8" currentStep={currentStep} id="8">
-            <h1 className="ob-heading sm">Rank your priorities.</h1>
-            <p className="ob-subtext" style={{ marginBottom: 8 }}>Rank your priorities. Tap in order.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Your top priority determines who we surface first. You can select up to four.</p>
-            <div className="rank-cards">
-              {[
-                { id: 'professional', label: 'Professional', desc: 'Career, startups, investing' },
-                { id: 'social', label: 'Social', desc: 'Friendships, events, new people' },
-                { id: 'romantic', label: 'Romantic', desc: 'Dating and relationships' },
-                { id: 'academic', label: 'Academic', desc: 'Study partners, intellectual exchange' }
-              ].map(g => (
-                <div key={g.id} className={`rank-card ${userGoals.includes(g.id) ? 'selected' : ''}`} onClick={() => rankGoal(g.id)}>
-                  <div className="rank-badge">{userGoals.indexOf(g.id) + 1 || ''}</div>
-                  <div>{g.label}<div style={{ fontSize: 13, fontWeight: 400, color: 'var(--text3)', marginTop: 2 }}>{g.desc}</div></div>
-                </div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={userGoals.length === 0} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="8" currentStep={currentStep} id="8">
+              <h1 className="ob-heading sm">Rank your priorities.</h1>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Your top priority determines who we surface first. You can select up to four.</p>
+              <div className="rank-cards">
+                {[
+                  { id: 'professional', label: 'Professional', desc: 'Career, startups, investing' },
+                  { id: 'social', label: 'Social', desc: 'Friendships, events, new people' },
+                  { id: 'romantic', label: 'Romantic', desc: 'Dating and relationships' },
+                  { id: 'academic', label: 'Academic', desc: 'Study partners, intellectual exchange' }
+                ].map(g => (
+                  <div key={g.id} className={`rank-card ${userGoals.includes(g.id) ? 'selected' : ''}`} onClick={() => rankGoal(g.id)}>
+                    <div className="rank-badge">{userGoals.indexOf(g.id) + 1 || ''}</div>
+                    <div>{g.label}<div style={{ fontSize: 13, fontWeight: 400, color: 'var(--text3)', marginTop: 2 }}>{g.desc}</div></div>
+                  </div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={userGoals.length === 0} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {/* Dynamic Questions based on path */}
           {currentStep === 'q-career' && (
-<StepWrapper key="q-career" currentStep={currentStep} id="q-career">
-            <h1 className="ob-heading sm">What field are you heading into?</h1>
-            <p className="ob-subtext" style={{ marginBottom: 8 }}>Pick the one that fits best right now.</p>
-            <p className="ob-whisper" style={{ marginBottom: 16 }}>Used to weight your matches toward people in or adjacent to your world.</p>
-            <div className="chip-grid">
-              {Object.keys(CAREER_SUB_DATA).map(c => (
-                <div key={c} className={`chip ${answers['career'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('career', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['career']} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-career" currentStep={currentStep} id="q-career">
+              <h1 className="ob-heading sm">What field are you heading into?</h1>
+              <p className="ob-subtext" style={{ marginBottom: 8 }}>Pick the one that fits best right now.</p>
+              <p className="ob-whisper" style={{ marginBottom: 16 }}>Used to weight your matches toward people in or adjacent to your world.</p>
+              <div className="chip-grid">
+                {Object.keys(CAREER_SUB_DATA).map(c => (
+                  <div key={c} className={`chip ${answers['career'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('career', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['career']} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-career-other' && (
-<StepWrapper key="q-career-other" currentStep={currentStep} id="q-career-other">
-            <h1 className="ob-heading sm">What field are you heading into?</h1>
-            <p className="ob-subtext">Tell us in your own words.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Free-text, matched semantically. Be as specific as you like.</p>
-            <input autoFocus className="underline-input" type="text" placeholder="e.g. Science policy, Quantitative ecology..." style={{ fontSize: 22 }} value={answers['career-other'] || ''} onChange={e => updateAnswer('career-other', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['career-other']||'').trim().length >= 3 && goNext()} />
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['career-other']||'').trim().length < 3} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-career-other" currentStep={currentStep} id="q-career-other">
+              <h1 className="ob-heading sm">What field are you heading into?</h1>
+              <p className="ob-subtext">Tell us in your own words.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Free-text, matched semantically. Be as specific as you like.</p>
+              <input autoFocus className="underline-input" type="text" placeholder="e.g. Science policy, Quantitative ecology..." style={{ fontSize: 22 }} value={answers['career-other'] || ''} onChange={e => updateAnswer('career-other', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['career-other'] || '').trim().length >= 3 && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['career-other'] || '').trim().length < 3} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-career-sub' && (
-<StepWrapper key="q-career-sub" currentStep={currentStep} id="q-career-sub">
-            <h1 className="ob-heading sm">{CAREER_SUB_DATA[answers['career']]?.heading || 'Where specifically?'}</h1>
-            <p className="ob-whisper" style={{ marginBottom: 16 }}>{CAREER_SUB_DATA[answers['career']]?.whisper || "Narrows your matches to the exact corner of the field."}</p>
-            <div className="chip-grid">
-              {((CAREER_SUB_DATA[answers['career']]?.chips || []).includes('Other') ? CAREER_SUB_DATA[answers['career']].chips : [...(CAREER_SUB_DATA[answers['career']]?.chips || []), 'Other']).map(c => (
-                <div key={c} className={`chip ${answers['career-sub'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('career-sub', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['career-sub']} onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-career-sub" currentStep={currentStep} id="q-career-sub">
+              <h1 className="ob-heading sm">{CAREER_SUB_DATA[answers['career']]?.heading || 'Where specifically?'}</h1>
+              <p className="ob-whisper" style={{ marginBottom: 16 }}>{CAREER_SUB_DATA[answers['career']]?.whisper || "Narrows your matches to the exact corner of the field."}</p>
+              <div className="chip-grid">
+                {((CAREER_SUB_DATA[answers['career']]?.chips || []).includes('Other') ? CAREER_SUB_DATA[answers['career']].chips : [...(CAREER_SUB_DATA[answers['career']]?.chips || []), 'Other']).map(c => (
+                  <div key={c} className={`chip ${answers['career-sub'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('career-sub', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['career-sub']} onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-career-sub-other' && (
-<StepWrapper key="q-career-sub-other" currentStep={currentStep} id="q-career-sub-other">
-            <h1 className="ob-heading sm">Tell us more.</h1>
-            <p className="ob-subtext">Describe it in your own words.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Free-text answers are matched semantically. Be as specific as you like.</p>
-            <input autoFocus className="underline-input" type="text" placeholder={CAREER_SUB_DATA[answers['career']]?.placeholder || "Describe it..."} style={{ fontSize: 22 }} value={answers['career-sub-other'] || ''} onChange={e => updateAnswer('career-sub-other', e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} />
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-career-sub-other" currentStep={currentStep} id="q-career-sub-other">
+              <h1 className="ob-heading sm">Tell us more.</h1>
+              <p className="ob-subtext">Describe it in your own words.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Free-text answers are matched semantically. Be as specific as you like.</p>
+              <input autoFocus className="underline-input" type="text" placeholder={CAREER_SUB_DATA[answers['career']]?.placeholder || "Describe it..."} style={{ fontSize: 22 }} value={answers['career-sub-other'] || ''} onChange={e => updateAnswer('career-sub-other', e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-building-desc' && (
-<StepWrapper key="q-building-desc" currentStep={currentStep} id="q-building-desc">
-            <h1 className="ob-heading sm">What are you building?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>A sentence or two is fine. We use this to match you with people who can actually help.</p>
-            <input autoFocus className="underline-input" type="text" placeholder="e.g. An AI tool for legal research..." style={{ fontSize: 20 }} value={answers['building-desc'] || ''} onChange={e => updateAnswer('building-desc', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['building-desc']||'').trim().length >= 5 && goNext()} />
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['building-desc']||'').trim().length < 5} onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-building-desc" currentStep={currentStep} id="q-building-desc">
+              <h1 className="ob-heading sm">What are you working on?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>A sentence or two is fine. We use this to match you with people who can actually help.</p>
+              <input autoFocus className="underline-input" type="text" placeholder="e.g. A thesis on neural networks, or a platform for legal research..." style={{ fontSize: 20 }} value={answers['building-desc'] || ''} onChange={e => updateAnswer('building-desc', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['building-desc'] || '').trim().length >= 5 && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['building-desc'] || '').trim().length < 5} onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-conntype' && (
-<StepWrapper key="q-conntype" currentStep={currentStep} id="q-conntype">
-            <h1 className="ob-heading sm">What kind of connection are you after?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 8 }}>This is the single biggest driver of who we surface for you.</p>
-            <p style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text3)', marginBottom: 12 }}>Tap to select in order of priority. Max 3.</p>
-            <div className="rank-cards">
-              {['Someone 2-5 years ahead of me on this exact path', 'A peer who is as driven as I am to push me', 'Someone already inside who can give me honest, unfiltered advice', 'Someone from a completely different background who can open unexpected doors'].map(c => {
-                const arr = answers['conntype'] || [];
-                const idx = arr.indexOf(c);
-                return (
-                  <div key={c} className={`rank-card ${idx > -1 ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('conntype', c, 3)}>
-                    <div className="rank-badge">{idx > -1 ? idx + 1 : ''}</div>
-                    {c}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['conntype']||[]).length === 0} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-conntype" currentStep={currentStep} id="q-conntype">
+              <h1 className="ob-heading sm">What kind of connection are you after?</h1>
+              <p style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text3)', marginBottom: 12 }}>Tap to select in order of priority. Max 3.</p>
+              <div className="rank-cards">
+                {['Someone 2-5 years ahead of me on this exact path', 'A peer who is as driven as I am to push me', 'Someone already inside who can give me honest, unfiltered advice', 'Someone from a completely different background who can open unexpected doors'].map(c => {
+                  const arr = answers['conntype'] || [];
+                  const idx = arr.indexOf(c);
+                  return (
+                    <div key={c} className={`rank-card ${idx > -1 ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('conntype', c, 3)}>
+                      <div className="rank-badge">{idx > -1 ? idx + 1 : ''}</div>
+                      {c}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['conntype'] || []).length === 0} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-startup-conntype' && (
-<StepWrapper key="q-startup-conntype" currentStep={currentStep} id="q-startup-conntype">
-            <h1 className="ob-heading sm">What kind of co-builder are you looking for?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 8 }}>The most important decision a founder makes. Be specific.</p>
-            <p style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text3)', marginBottom: 12 }}>Tap in order of priority. Max 3.</p>
-            <div className="rank-cards">
-              {['A technical co-founder who can build what I can\'t', 'A commercial brain to own growth and revenue', 'A creative partner for product and brand', 'A domain expert who knows the space deeply', 'An accountability partner to keep me honest', 'An investor or someone who can open funding doors', 'A first customer or design partner'].map(c => {
-                const arr = answers['startup-conntype'] || [];
-                const idx = arr.indexOf(c);
-                return (
-                  <div key={c} className={`rank-card ${idx > -1 ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('startup-conntype', c, 3)}>
-                    <div className="rank-badge">{idx > -1 ? idx + 1 : ''}</div>
-                    {c}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['startup-conntype']||[]).length === 0} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-startup-conntype" currentStep={currentStep} id="q-startup-conntype">
+              <h1 className="ob-heading sm">What kind of co-builder are you looking for?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 8 }}>The most important decision a founder makes. Be specific.</p>
+              <p style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text3)', marginBottom: 12 }}>Tap in order of priority. Max 3.</p>
+              <div className="rank-cards">
+                {['A technical co-founder who can build what I can\'t', 'A commercial brain to own growth and revenue', 'A creative partner for product and brand', 'A domain expert who knows the space deeply', 'An accountability partner to keep me honest', 'An investor or someone who can open funding doors', 'A first customer or design partner'].map(c => {
+                  const arr = answers['startup-conntype'] || [];
+                  const idx = arr.indexOf(c);
+                  return (
+                    <div key={c} className={`rank-card ${idx > -1 ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('startup-conntype', c, 3)}>
+                      <div className="rank-badge">{idx > -1 ? idx + 1 : ''}</div>
+                      {c}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['startup-conntype'] || []).length === 0} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-project' && (
-<StepWrapper key="q-project" currentStep={currentStep} id="q-project">
-            <h1 className="ob-heading sm">Where are you in your project?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 16 }}>Matches you with people at a compatible stage, not just anyone building something.</p>
-            <div className="chip-grid">
-              {['Just an idea', 'Early exploration', 'Building an MVP', 'Launched and growing', 'Not working on anything yet'].map(c => (
-                <div key={c} className={`chip ${answers['project'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('project', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['project']} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-project" currentStep={currentStep} id="q-project">
+              <h1 className="ob-heading sm">Where are you in your project?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 16 }}>Matches you with people at a compatible stage, not just anyone building something.</p>
+              <div className="chip-grid">
+                {['Just an idea', 'Early exploration', 'Building an MVP', 'Launched and growing', 'Not working on anything yet'].map(c => (
+                  <div key={c} className={`chip ${answers['project'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('project', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['project']} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-social' && (
-<StepWrapper key="q-social" currentStep={currentStep} id="q-social">
-            <h1 className="ob-heading sm">What does your Oxford social life look like?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 16 }}>We use this to find people who move in overlapping circles, or usefully different ones.</p>
-            <div className="chip-grid">
-              {['College events and bops', 'Cafe culture and one-on-ones', 'Sports and fitness', 'Society dinners and formals', 'House parties', 'Arts and cultural events', 'Nights out in town', 'Mostly off-campus', 'Quiet and low-key'].map(c => (
-                <div key={c} className={`chip ${(answers['social']||[]).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('social', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['social']||[]).length === 0} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-social" currentStep={currentStep} id="q-social">
+              <h1 className="ob-heading sm">What does your Oxford social life look like?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 16 }}>We use this to find people who move in overlapping circles, or usefully different ones.</p>
+              <div className="chip-grid">
+                {['College events and bops', 'Cafe culture and one-on-ones', 'Sports and fitness', 'Society dinners and formals', 'House parties', 'Arts and cultural events', 'Nights out in town', 'Mostly off-campus', 'Quiet and low-key'].map(c => (
+                  <div key={c} className={`chip ${(answers['social'] || []).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('social', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['social'] || []).length === 0} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-sexuality' && (
-<StepWrapper key="q-sexuality" currentStep={currentStep} id="q-sexuality">
-            <h1 className="ob-heading sm">How do you describe your sexuality?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 16 }}>Only used for better matching. You can skip this if you prefer.</p>
-            <div className="tap-cards">
-              {['Straight', 'Gay', 'Lesbian', 'Bisexual', 'Pansexual', 'Queer', 'Asexual', 'Prefer not to say'].map(c => (
-                <div key={c} className={`tap-card ${answers['sexuality'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('sexuality', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['sexuality']} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-sexuality" currentStep={currentStep} id="q-sexuality">
+              <h1 className="ob-heading sm">How do you describe your sexuality?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 16 }}>Only used for better matching. You can skip this if you prefer.</p>
+              <div className="tap-cards">
+                {['Straight', 'Gay', 'Lesbian', 'Bisexual', 'Pansexual', 'Queer', 'Asexual', 'Prefer not to say'].map(c => (
+                  <div key={c} className={`tap-card ${answers['sexuality'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('sexuality', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['sexuality']} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-romantic-status' && (
-<StepWrapper key="q-romantic-status" currentStep={currentStep} id="q-romantic-status">
-            <h1 className="ob-heading sm">Where are you right now?</h1>
-            <p className="ob-subtext" style={{ marginBottom: 8 }}>Helps us set the right expectations.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Completely private. Never shown publicly without your permission.</p>
-            <div className="tap-cards">
-              {['Single', 'In a relationship', 'It\'s complicated', 'Prefer not to say'].map(c => (
-                <div key={c} className={`tap-card ${answers['relstatus'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('relstatus', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['relstatus']} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-romantic-status" currentStep={currentStep} id="q-romantic-status">
+              <h1 className="ob-heading sm">Where are you right now?</h1>
+              <p className="ob-subtext" style={{ marginBottom: 8 }}>Helps us set the right expectations.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Completely private. Never shown publicly without your permission.</p>
+              <div className="tap-cards">
+                {['Single', 'In a relationship', 'It\'s complicated', 'Prefer not to say'].map(c => (
+                  <div key={c} className={`tap-card ${answers['relstatus'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('relstatus', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['relstatus']} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-dating' && (
-<StepWrapper key="q-dating" currentStep={currentStep} id="q-dating">
-            <h1 className="ob-heading sm">What are you looking for?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>We only show you to people who want the same thing.</p>
-            <div className="tap-cards">
-              {['Something serious', 'Keeping it casual', 'Friendship first, maybe something later', 'Not sure yet, open to seeing'].map(c => (
-                <div key={c} className={`tap-card ${answers['dating'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('dating', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['dating']} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-dating" currentStep={currentStep} id="q-dating">
+              <h1 className="ob-heading sm">What are you looking for?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>We only show you to people who want the same thing.</p>
+              <div className="tap-cards">
+                {['Something serious', 'Keeping it casual', 'Friendship first, maybe something later', 'Not sure yet, open to seeing'].map(c => (
+                  <div key={c} className={`tap-card ${answers['dating'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('dating', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['dating']} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-dating-appearance' && (
-<StepWrapper key="q-dating-appearance" currentStep={currentStep} id="q-dating-appearance">
-            <h1 className="ob-heading sm">What draws you in physically?</h1>
-            <p className="ob-subtext">Pick what resonates. You can select multiple.</p>
-            <p className="ob-whisper" style={{ marginBottom: 16 }}>Used to surface people you're more likely to find genuinely attractive.</p>
-            <div className="chip-grid">
-              {['Tall', 'Petite', 'Athletic build', 'Slim', 'Curvy', 'Well-dressed', 'Natural look', 'Put-together', 'Edgy or alternative', 'Preppy', 'No strong preference'].map(c => (
-                <div key={c} className={`chip ${(answers['dapp']||[]).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('dapp', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['dapp']||[]).length === 0} onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-dating-appearance" currentStep={currentStep} id="q-dating-appearance">
+              <h1 className="ob-heading sm">What draws you in physically?</h1>
+              <p className="ob-subtext">Pick what resonates. You can select multiple.</p>
+              <p className="ob-whisper" style={{ marginBottom: 16 }}>Used to surface people you're more likely to find genuinely attractive.</p>
+              <div className="chip-grid">
+                {['Tall', 'Athletic build', 'Slim', 'Well-dressed', 'Natural look', 'Put-together', 'Edgy or alternative', 'Preppy', 'No strong preference'].map(c => (
+                  <div key={c} className={`chip ${(answers['dapp'] || []).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('dapp', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['dapp'] || []).length === 0} onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-dating-personality' && (
-<StepWrapper key="q-dating-personality" currentStep={currentStep} id="q-dating-personality">
-            <h1 className="ob-heading sm">What do you value most in a partner?</h1>
-            <p className="ob-subtext">Pick up to five.</p>
-            <p className="ob-whisper" style={{ marginBottom: 16 }}>This shapes who we think you'd genuinely connect with.</p>
-            <div className="chip-grid">
-              {['Ambition', 'Wit and humour', 'Emotional depth', 'Confidence', 'Kindness', 'Curiosity', 'Independence', 'Warmth', 'Playfulness', 'Directness', 'Creativity', 'Drive'].map(c => (
-                <div key={c} className={`chip ${(answers['dating-personality']||[]).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('dating-personality', c, 5)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['dating-personality']||[]).length === 0} onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-dating-personality" currentStep={currentStep} id="q-dating-personality">
+              <h1 className="ob-heading sm">What do you value most in a partner?</h1>
+              <p className="ob-subtext">Pick up to five.</p>
+              <p className="ob-whisper" style={{ marginBottom: 16 }}>This shapes who we think you'd genuinely connect with.</p>
+              <div className="chip-grid">
+                {['Ambition', 'Wit and humour', 'Emotional depth', 'Confidence', 'Kindness', 'Curiosity', 'Independence', 'Warmth', 'Playfulness', 'Directness', 'Creativity', 'Drive'].map(c => (
+                  <div key={c} className={`chip ${(answers['dating-personality'] || []).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('dating-personality', c, 5)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['dating-personality'] || []).length === 0} onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-dating-hobbies' && (
-<StepWrapper key="q-dating-hobbies" currentStep={currentStep} id="q-dating-hobbies">
-            <h1 className="ob-heading sm" style={{ marginTop: 12 }}>What would you want to do together?</h1>
-            <p className="ob-subtext">The kind of person who would actually fit into your life.</p>
-            <p className="ob-whisper" style={{ marginBottom: 16 }}>Compatibility on how you spend time matters as much as chemistry.</p>
-            <div className="chip-grid">
-              {['Go to exhibitions or galleries', 'Cook or eat out', 'Hike or be outdoors', 'Go to gigs or festivals', 'Travel spontaneously', 'Stay in and watch films', 'Work out together', 'Talk for hours', 'Go out and socialise', 'Do creative things together'].map(c => (
-                <div key={c} className={`chip ${(answers['dhob']||[]).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('dhob', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['dhob']||[]).length === 0} onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-dating-hobbies" currentStep={currentStep} id="q-dating-hobbies">
+              <h1 className="ob-heading sm" style={{ marginTop: 12 }}>What would you want to do together?</h1>
+              <p className="ob-subtext">The kind of person who would actually fit into your life.</p>
+              <p className="ob-whisper" style={{ marginBottom: 16 }}>Compatibility on how you spend time matters as much as chemistry.</p>
+              <div className="chip-grid">
+                {['Go to exhibitions or galleries', 'Cook or eat out', 'Hike or be outdoors', 'Go to gigs or festivals', 'Travel spontaneously', 'Stay in and watch films', 'Work out together', 'Talk for hours', 'Go out and socialise', 'Do creative things together'].map(c => (
+                  <div key={c} className={`chip ${(answers['dhob'] || []).includes(c) ? 'selected' : ''}`} onClick={() => toggleArrayAnswer('dhob', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['dhob'] || []).length === 0} onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
+
+          {currentStep === 'q-intellectual-topic' && (
+            <StepWrapper key="q-intellectual-topic" currentStep={currentStep} id="q-intellectual-topic">
+              <h1 className="ob-heading sm">What is your favourite niche intellectual topic?</h1>
+              <p className="ob-subtext">The thing you could talk about for hours that most people have not heard of.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Free-text answers are embedded and matched semantically. The more specific and honest, the better your matches.</p>
+              <input autoFocus className="underline-input" type="text" placeholder="e.g. mechanism design, Ottoman history, the semiotics of architecture" style={{ fontSize: 20 }} value={answers['intellect'] || ''} onChange={e => updateAnswer('intellect', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['intellect'] || '').trim().length >= 3 && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['intellect'] || '').trim().length < 3} onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
+
+          {currentStep === 'q-study-wish' && (
+            <StepWrapper key="q-study-wish" currentStep={currentStep} id="q-study-wish">
+              <h1 className="ob-heading sm">What field do you wish you'd studied instead?</h1>
+              <p className="ob-subtext">Or alongside your current subject.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Free-text, matched semantically. The more specific the better.</p>
+              <input autoFocus className="underline-input" type="text" placeholder="e.g. Neuroscience, Philosophy of mind, Pure mathematics" style={{ fontSize: 20 }} value={answers['study-wish'] || ''} onChange={e => updateAnswer('study-wish', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['study-wish'] || '').trim().length >= 3 && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['study-wish'] || '').trim().length < 3} onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
+
+          {currentStep === 'q-intellectual-ambition' && (
+            <StepWrapper key="q-intellectual-ambition" currentStep={currentStep} id="q-intellectual-ambition">
+              <h1 className="ob-heading sm">What do you want to do with your intellectual life?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us find people who are trying to do something meaningful with what they know, not just collect knowledge.</p>
+              <div className="tap-cards">
+                {[
+                  { id: 'Apply it', label: 'Apply it', sub: 'Turn ideas into things that actually work in the world' },
+                  { id: 'Create with it', label: 'Create with it', sub: 'Make something new, whether that\'s writing, research, or building' },
+                  { id: 'Change something with it', label: 'Change something with it', sub: 'Use knowledge to shift how people think or how systems work' },
+                  { id: 'Still figuring it out', label: 'Still figuring it out', sub: 'The interest is real, the direction is not yet' }
+                ].map(opt => (
+                  <div key={opt.id} className={`tap-card ${answers['intambition'] === opt.id ? 'selected' : ''}`} onClick={() => updateAnswer('intambition', opt.id)}>
+                    {opt.label}
+                    <div className="tap-card-sub">{opt.sub}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['intambition']} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-intellectual-venue' && (
-<StepWrapper key="q-intellectual-venue" currentStep={currentStep} id="q-intellectual-venue">
-            <h1 className="ob-heading sm">Where do your best intellectual conversations happen at Oxford?</h1>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us understand how you connect and where you are most yourself.</p>
-            <div className="tap-cards">
-              {['At tutorials or seminars', 'At dinner', 'At society talks or panels', 'One on one, on a walk or over coffee', 'Honestly, I\'m still looking for those conversations'].map(c => (
-                <div key={c} className={`tap-card ${answers['venue'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('venue', c)}>{c}</div>
-              ))}
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={!answers['venue']} onClick={goNext}>Continue</button>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-intellectual-venue" currentStep={currentStep} id="q-intellectual-venue">
+              <h1 className="ob-heading sm">Where do your best intellectual conversations happen at Oxford?</h1>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Helps us understand how you connect and where you are most yourself.</p>
+              <div className="tap-cards">
+                {['At tutorials or seminars', 'At dinner', 'At society talks or panels', 'One on one, on a walk or over coffee', 'Honestly, I\'m still looking for those conversations'].map(c => (
+                  <div key={c} className={`tap-card ${answers['venue'] === c ? 'selected' : ''}`} onClick={() => updateAnswer('venue', c)}>{c}</div>
+                ))}
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={!answers['venue']} onClick={goNext}>Continue</button>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-hobby' && (
-<StepWrapper key="q-hobby" currentStep={currentStep} id="q-hobby">
-            <h1 className="ob-heading sm">What are your hobbies?</h1>
-            <p className="ob-subtext">The things you actually do outside of work and study.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Shared interests outside of work are one of the strongest predictors of genuine connection.</p>
-            <input autoFocus className="underline-input" type="text" placeholder="e.g. climbing, producing music, reading history..." style={{ fontSize: 22 }} value={answers['hobby'] || ''} onChange={e => updateAnswer('hobby', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['hobby']||'').trim().length >= 3 && goNext()} />
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" disabled={(answers['hobby']||'').trim().length < 3} onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-hobby" currentStep={currentStep} id="q-hobby">
+              <h1 className="ob-heading sm">What are your hobbies?</h1>
+              <p className="ob-subtext">The things you actually do outside of work and study.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Shared interests outside of work are one of the strongest predictors of genuine connection.</p>
+              <input autoFocus className="underline-input" type="text" placeholder="e.g. climbing, producing music, reading history..." style={{ fontSize: 22 }} value={answers['hobby'] || ''} onChange={e => updateAnswer('hobby', e.target.value)} onKeyDown={e => e.key === 'Enter' && (answers['hobby'] || '').trim().length >= 3 && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" disabled={(answers['hobby'] || '').trim().length < 3} onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-societies' && (
-<StepWrapper key="q-societies" currentStep={currentStep} id="q-societies">
-            <h1 className="ob-heading sm">Are you in any societies?</h1>
-            <p className="ob-subtext">Clubs, sports teams, or groups at Oxford.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Shared societies are one of the strongest signals for real connection.</p>
-            <input autoFocus className="underline-input" type="text" placeholder="e.g. Oxford Union, rowing..." style={{ fontSize: 20, opacity: answers['societies'] === 'none' ? 0.35 : 1 }} disabled={answers['societies'] === 'none'} value={answers['societies'] === 'none' ? '' : (answers['societies'] || '')} onChange={e => updateAnswer('societies', e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} />
-            <p style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text3)', marginTop: 6 }}>Separate with a comma.</p>
-            <div className="tap-card" style={{ marginTop: 12, textAlign: 'center', borderColor: answers['societies'] === 'none' ? 'var(--text)' : 'var(--border2)' }} onClick={() => updateAnswer('societies', answers['societies'] === 'none' ? '' : 'none')}>
-              I'm not in any
-            </div>
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-societies" currentStep={currentStep} id="q-societies">
+              <h1 className="ob-heading sm">Are you in any societies?</h1>
+              <p className="ob-subtext">Clubs, sports teams, or groups at Oxford.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Shared societies are one of the strongest signals for real connection.</p>
+              <input autoFocus className="underline-input" type="text" placeholder="e.g. Oxford Union, rowing..." style={{ fontSize: 20, opacity: answers['societies'] === 'none' ? 0.35 : 1 }} disabled={answers['societies'] === 'none'} value={answers['societies'] === 'none' ? '' : (answers['societies'] || '')} onChange={e => updateAnswer('societies', e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} />
+              <p style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text3)', marginTop: 6 }}>Separate with a comma.</p>
+              <div className="tap-card" style={{ marginTop: 12, textAlign: 'center', borderColor: answers['societies'] === 'none' ? 'var(--text)' : 'var(--border2)' }} onClick={() => updateAnswer('societies', answers['societies'] === 'none' ? '' : 'none')}>
+                I'm not in any
+              </div>
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-music' && (
-<StepWrapper key="q-music" currentStep={currentStep} id="q-music">
-            <h1 className="ob-heading sm">What have you been listening to lately?</h1>
-            <p className="ob-subtext">An artist, a genre, or a specific album.</p>
-            <p className="ob-whisper" style={{ marginBottom: 20 }}>Music taste is embedded and matched semantically. It is a surprisingly strong signal for personality.</p>
-            <input autoFocus className="underline-input" type="text" placeholder="e.g. Kendrick Lamar, ambient techno..." style={{ fontSize: 22 }} value={answers['music'] || ''} onChange={e => updateAnswer('music', e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} />
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" onClick={goNext}>Continue</button>
-            <p className="skip-link" onClick={goNext}>Skip for now</p>
-          </StepWrapper>
-)}
+            <StepWrapper key="q-music" currentStep={currentStep} id="q-music">
+              <h1 className="ob-heading sm">What have you been listening to lately?</h1>
+              <p className="ob-subtext">An artist, a genre, or a specific album.</p>
+              <p className="ob-whisper" style={{ marginBottom: 20 }}>Music taste is embedded and matched semantically. It is a surprisingly strong signal for personality.</p>
+              <input autoFocus className="underline-input" type="text" placeholder="e.g. Kendrick Lamar, ambient techno..." style={{ fontSize: 22 }} value={answers['music'] || ''} onChange={e => updateAnswer('music', e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} />
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" onClick={goNext}>Continue</button>
+              <p className="skip-link" onClick={goNext}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'q-friends' && (
-<StepWrapper key="q-friends" currentStep={currentStep} id="q-friends">
-            <h1 className="ob-heading sm">Add your best friends.</h1>
-            <p className="ob-subtext">The people you'd actually want on here with you.</p>
-            <p className="ob-whisper" style={{ marginBottom: 24 }}>We'll connect you automatically if they're already here, and give you a link to invite them if not.</p>
+            <StepWrapper key="q-friends" currentStep={currentStep} id="q-friends">
+              <h1 className="ob-heading sm">Add your best friends.</h1>
+              <p className="ob-subtext">The people you'd actually want on here with you.</p>
+              <p className="ob-whisper" style={{ marginBottom: 24 }}>We'll connect you automatically if they're already here, and give you a link to invite them if not.</p>
 
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'nowrap', marginBottom: 8 }} id="friend-bubbles">
-              {[0, 1, 2].map((idx) => {
-                const visual = friendVisuals[idx];
-                const isActive = activeFriendPopover === idx;
-                const isVerified = visual.state === 'verified';
-                const isInvite = visual.state === 'invite';
-                return (
-                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, position: 'relative' }}>
-                    <div
-                      id={`fb-${idx}`}
-                      ref={(node) => { friendBubbleRefs.current[idx] = node; }}
-                      onClick={() => openFriendPopover(idx)}
-                      style={{
-                        width: 88,
-                        height: 88,
-                        borderRadius: '50%',
-                        border: `1.5px ${isVerified ? 'solid' : 'dashed'} ${isVerified ? 'var(--success)' : 'var(--border2)'}`,
-                        cursor: 'pointer',
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexDirection: 'column',
-                        gap: 4,
-                        transition: 'border-color 0.2s, background 0.2s',
-                        background: isVerified ? '#F0FDF4' : (isInvite ? '#FAFAF8' : 'var(--bg)'),
-                      }}
-                    >
-                      <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', width: 22, height: 22, borderRadius: '50%', background: 'var(--text)', color: '#FFFEFD', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
-                        {idx + 1}
-                      </div>
-                      {isVerified ? (
-                        <>
-                          <svg width="18" height="18" viewBox="0 0 22 22" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round">
-                            <path d="M4 11l5 5L18 6" />
-                          </svg>
-                          <span style={{ fontSize: 10, color: 'var(--text2)', textAlign: 'center', padding: '0 8px', wordBreak: 'break-all', maxWidth: 88, lineHeight: 1.3 }}>{visual.value}</span>
-                        </>
-                      ) : isInvite ? (
-                        <span style={{ fontSize: 10, color: 'var(--text2)', textAlign: 'center', padding: '0 8px', wordBreak: 'break-all', maxWidth: 88, lineHeight: 1.3 }}>{visual.value}</span>
-                      ) : (
-                        <>
-                          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="16" cy="11" r="5" />
-                            <path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12" />
-                          </svg>
-                          <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Sans',sans-serif" }}>Add</span>
-                        </>
-                      )}
-                    </div>
-
-                    <div
-                      id={`fp-${idx}`}
-                      ref={(node) => { friendPopoverRefs.current[idx] = node; }}
-                      style={{
-                        position: 'absolute',
-                        top: 110,
-                        left: idx === 0 ? 0 : (idx === 2 ? 'auto' : '50%'),
-                        right: idx === 2 ? 0 : 'auto',
-                        transform: idx === 1 ? 'translateX(-50%)' : 'none',
-                        width: 200,
-                        background: 'var(--bg)',
-                        border: '1px solid var(--border2)',
-                        borderRadius: 14,
-                        padding: 14,
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-                        zIndex: 300,
-                        display: isActive ? 'block' : 'none',
-                      }}
-                    >
-                      <input
-                        style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1.5px solid var(--border-light)', fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: 'var(--text)', padding: '4px 0', outline: 'none' }}
-                        placeholder="Name or Oxford email"
-                        autoComplete="off"
-                        value={friendInputs[idx]}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setFriendInputs((prev) => {
-                            const next = [...prev];
-                            next[idx] = value;
-                            return next;
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            commitFriend(idx, e.currentTarget.value);
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => commitFriend(idx, friendInputs[idx] || '')}
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'nowrap', marginBottom: 8 }} id="friend-bubbles">
+                {[0, 1, 2].map((idx) => {
+                  const visual = friendVisuals[idx];
+                  const isActive = activeFriendPopover === idx;
+                  const isVerified = visual.state === 'verified';
+                  const isInvite = visual.state === 'invite';
+                  const isLoading = visual.state === 'loading';
+                  return (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, position: 'relative' }}>
+                      <div
+                        id={`fb-${idx}`}
+                        ref={(node) => { friendBubbleRefs.current[idx] = node; }}
+                        onClick={() => openFriendPopover(idx)}
                         style={{
-                          position: 'absolute',
-                          right: 10,
-                          top: 10,
-                          width: 28,
-                          height: 28,
+                          width: 88,
+                          height: 88,
                           borderRadius: '50%',
-                          border: '1px solid var(--border2)',
-                          background: 'var(--bg)',
-                          color: 'var(--text)',
+                          border: `1.5px ${isVerified ? 'solid' : 'dashed'} ${isVerified ? 'var(--success)' : 'var(--border2)'}`,
+                          cursor: 'pointer',
+                          position: 'relative',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          cursor: 'pointer',
+                          flexDirection: 'column',
+                          gap: 4,
+                          transition: 'border-color 0.2s, background 0.2s',
+                          background: isVerified ? '#F0FDF4' : (isInvite ? '#FAFAF8' : 'var(--bg)'),
                         }}
-                        aria-label={`Add friend ${idx + 1}`}
                       >
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-                          <path d="M7 2v10" />
-                          <path d="M2 7h10" />
-                        </svg>
-                      </button>
+                        <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', width: 22, height: 22, borderRadius: '50%', background: 'var(--text)', color: '#FFFEFD', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                          {idx + 1}
+                        </div>
+                        {isVerified ? (
+                          <>
+                            <svg width="18" height="18" viewBox="0 0 22 22" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round">
+                              <path d="M4 11l5 5L18 6" />
+                            </svg>
+                            <span style={{ fontSize: 10, color: 'var(--text2)', textAlign: 'center', padding: '0 8px', wordBreak: 'break-all', maxWidth: 88, lineHeight: 1.3 }}>{visual.value}</span>
+                          </>
+                        ) : isLoading ? (
+                          <>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                              <circle cx="12" cy="12" r="10" />
+                              <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                            </svg>
+                            <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Sans',sans-serif" }}>Searching...</span>
+                          </>
+                        ) : isInvite ? (
+                          <span style={{ fontSize: 10, color: 'var(--text2)', textAlign: 'center', padding: '0 8px', wordBreak: 'break-all', maxWidth: 88, lineHeight: 1.3 }}>{visual.value}</span>
+                        ) : (
+                          <>
+                            <svg width="20" height="20" viewBox="0 0 32 32" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="16" cy="11" r="5" />
+                              <path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12" />
+                            </svg>
+                            <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Sans',sans-serif" }}>Add</span>
+                          </>
+                        )}
+                      </div>
+
+                      <div
+                        id={`fp-${idx}`}
+                        ref={(node) => { friendPopoverRefs.current[idx] = node; }}
+                        style={{
+                          position: 'absolute',
+                          top: 110,
+                          left: idx === 0 ? 0 : (idx === 2 ? 'auto' : '50%'),
+                          right: idx === 2 ? 0 : 'auto',
+                          transform: idx === 1 ? 'translateX(-50%)' : 'none',
+                          width: 200,
+                          background: 'var(--bg)',
+                          border: '1px solid var(--border2)',
+                          borderRadius: 14,
+                          padding: 14,
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                          zIndex: 300,
+                          display: isActive ? 'block' : 'none',
+                        }}
+                      >
+                        <input
+                          style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1.5px solid var(--border-light)', fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: 'var(--text)', padding: '4px 0', outline: 'none' }}
+                          placeholder="Name or Oxford email"
+                          autoComplete="off"
+                          value={friendInputs[idx]}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setFriendInputs((prev) => {
+                              const next = [...prev];
+                              next[idx] = value;
+                              return next;
+                            });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              commitFriend(idx, e.currentTarget.value);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => commitFriend(idx, friendInputs[idx] || '')}
+                          style={{
+                            position: 'absolute',
+                            right: 10,
+                            top: 10,
+                            width: 28,
+                            height: 28,
+                            borderRadius: '50%',
+                            border: '1px solid var(--border2)',
+                            background: 'var(--bg)',
+                            color: 'var(--text)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                          }}
+                          aria-label={`Add friend ${idx + 1}`}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+                            <path d="M7 2v10" />
+                            <path d="M2 7h10" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {isInvite && (
+                        <button
+                          type="button"
+                          onClick={(e) => copyFriendInvite(e.currentTarget)}
+                          style={{ border: '1px solid var(--border2)', borderRadius: 999, padding: '4px 10px', fontFamily: "'DM Sans',sans-serif", fontSize: 11, cursor: 'pointer', background: 'transparent', color: 'var(--text2)', marginTop: 4 }}
+                        >
+                          Invite
+                        </button>
+                      )}
                     </div>
+                  );
+                })}
+              </div>
 
-                    {isInvite && (
-                      <button
-                        type="button"
-                        onClick={(e) => copyFriendInvite(e.currentTarget)}
-                        style={{ border: '1px solid var(--border2)', borderRadius: 999, padding: '4px 10px', fontFamily: "'DM Sans',sans-serif", fontSize: 11, cursor: 'pointer', background: 'transparent', color: 'var(--text2)', marginTop: 4 }}
-                      >
-                        Invite
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="ob-spacer"></div>
-            <button className="btn-primary" onClick={goNextConditional}>Continue</button>
-            <p className="skip-link" onClick={goNextConditional}>Skip for now</p>
-          </StepWrapper>
-)}
+              <div className="ob-spacer"></div>
+              <button className="btn-primary" onClick={goNextConditional}>Continue</button>
+              <p className="skip-link" onClick={goNextConditional}>Skip for now</p>
+            </StepWrapper>
+          )}
 
           {currentStep === 'confirm' && (
-<StepWrapper key="confirm" currentStep={currentStep} id="confirm">
-            <h1 className="ob-heading em" style={{ fontSize: 52, textAlign: 'center' }}>You're in{firstName ? ` ${firstName}` : ''}</h1>
-            <p className="ob-subtext" style={{ textAlign: 'center' }}>Your profile is now live. Supercharged is already running simulations and finding who you need to meet. Expect your first matches within the hour.</p>
-            <div className="ob-spacer"></div>
-            <button className="btn-accent" disabled={loading} onClick={handleFinish}>
-              {loading ? 'Entering...' : 'Enter Supercharged'}
-            </button>
-          </StepWrapper>
-)}
+            <StepWrapper key="confirm" currentStep={currentStep} id="confirm" center>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 32px' }}>
+                <svg width="28" height="36" viewBox="0 0 14 18" fill="none"><polygon points="8,0 1,10 7,10 6,18 13,8 7,8" fill="#F5C842" /></svg>
+              </div>
+              <h1 className="ob-heading sm" style={{ textAlign: 'center', marginBottom: 24 }}>You're in.</h1>
+              <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16, lineHeight: 1.6, color: 'var(--text)', textAlign: 'center', maxWidth: 440, margin: '0 auto 8px' }}>Your profile is now live. Supercharged is already running simulations and finding who you need to meet. Expect your first matches within the hour.</p>
+              <div className="ob-spacer"></div>
+              <button className="btn-accent" onClick={goNext}>
+                Continue
+              </button>
+            </StepWrapper>
+          )}
+
+          {currentStep === 'q-voltz' && (
+            <StepWrapper key="q-voltz" currentStep={currentStep} id="q-voltz" center>
+              <VoltzStep
+                username={username}
+                onComplete={handleFinish}
+                loading={loading}
+              />
+            </StepWrapper>
+          )}
 
         </AnimatePresence>
       </div>
 
       <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: showEndScreen ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', pointerEvents: 'all' }}>
         <div style={{ textAlign: 'center', maxWidth: 340, padding: 24, animation: 'fadeUp 0.8s var(--ease) both' }}>
-          <h1 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 300, fontSize: 44, lineHeight: 1.1, marginBottom: 16 }}>You're in.</h1>
-          <p style={{ fontSize: 15, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 32 }}>Your profile is live. Supercharged is finding who you need to meet.</p>
+          <h1 style={{ fontFamily: "'Playfair Display', serif", fontWeight: 300, fontSize: 44, lineHeight: 1.1, marginBottom: 16, transition: 'opacity 0.3s ease' }}>
+            {loadProgress > 60 ? 'Finding your best matches' : 'Vectorising your profile'}
+          </h1>
+          <p style={{ fontSize: 15, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 32, transition: 'opacity 0.3s ease' }}>
+            {loadProgress > 60 ? 'Scanning thousands of Oxford profiles.' : 'Making sure the real you is shown to others.'}
+          </p>
           <div style={{ marginBottom: 12 }}>
             <div style={{ height: 4, background: 'var(--border-light)', borderRadius: 2, overflow: 'hidden', marginBottom: 8 }}>
               <div style={{ height: '100%', background: 'var(--text)', borderRadius: 2, transition: 'width 0.3s ease', width: `${loadProgress}%` }} />

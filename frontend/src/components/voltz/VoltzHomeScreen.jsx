@@ -2,6 +2,7 @@ import React from "react";
 import { C, SERIF, SANS } from "./shared/designTokens";
 import { BoltIcon, IconGear, IconHelp, IconChevronRight, IconExternal } from "./shared/icons";
 import TopNav from "./shared/TopNav";
+import { buildThumbnailUrl } from "../../lib/photos";
 
 const PlanBadge = ({ kind }) => {
   const map = {
@@ -41,6 +42,9 @@ export default function VoltzHomeScreen({
 
   const initials = (profile?.first_name?.[0] || profile?.full_name?.[0] || "?").toUpperCase();
 
+  const firstPhotoId = Array.isArray(profile?.photo_file_ids) ? profile.photo_file_ids[0] : null;
+  const photoUrl = firstPhotoId ? buildThumbnailUrl(firstPhotoId) : null;
+
   const menu = [
     { key: "usage",    label: "Usage",    icon: <BoltIcon size={20} color={C.amber} />, trailing: "chevron", onClick: onUsage    },
     { key: "settings", label: "Settings", icon: <IconGear />,                           trailing: "chevron", onClick: onSettings },
@@ -63,8 +67,11 @@ export default function VoltzHomeScreen({
               background: C.accentGreen, color: "#FFFFFF",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontFamily: SANS, fontSize: 17, fontWeight: 600, flexShrink: 0,
+              overflow: "hidden",
             }}>
-              {initials}
+              {photoUrl
+                ? <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                : initials}
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
               <div style={{

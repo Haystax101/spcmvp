@@ -24,7 +24,7 @@ function PriceBlock({ price, original, suffix, big = false }) {
   );
 }
 
-export default function PlanCard({ plan, activePlan, onAction }) {
+export default function PlanCard({ plan, activePlan, onAction, onManage }) {
   const isZenith = plan.id === "zenith";
   const isCurrent = activePlan === plan.id;
   const isDowngrade = activePlan === "zenith" && plan.id === "spark";
@@ -76,15 +76,18 @@ export default function PlanCard({ plan, activePlan, onAction }) {
       </div>
 
       {isCurrent ? (
-        <div style={{
-          width: "100%", marginTop: 20, padding: "13px 24px",
-          borderRadius: 999, background: "transparent",
-          border: `1.5px solid ${C.border}`, color: C.secondary,
-          fontSize: 14, fontWeight: 500, fontFamily: SANS,
-          textAlign: "center", cursor: "default", boxSizing: "border-box",
-        }}>
-          Current plan
-        </div>
+        <button
+          onClick={() => onManage && onManage()}
+          style={{
+            width: "100%", marginTop: 20, padding: "13px 24px",
+            borderRadius: 999, background: "transparent",
+            border: `1.5px solid ${C.borderStrong}`, color: C.text,
+            fontSize: 14, fontWeight: 500, fontFamily: SANS,
+            cursor: "pointer", boxSizing: "border-box",
+          }}
+        >
+          Manage plan
+        </button>
       ) : (
         <button
           onClick={() => onAction && onAction(plan)}

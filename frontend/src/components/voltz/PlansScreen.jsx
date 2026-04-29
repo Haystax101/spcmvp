@@ -23,7 +23,7 @@ const PlanBadge = ({ kind }) => {
   );
 };
 
-export default function PlansScreen({ profile, activePlan, voltzBalance, onBack, onSelectPlan }) {
+export default function PlansScreen({ profile, activePlan, voltzBalance, onBack, onSelectPlan, onManagePlan }) {
   const planKindMap = { spark: "Spark", zenith: "Zenith" };
   const planKind = activePlan ? planKindMap[activePlan] : "Free";
   const planLabel = activePlan
@@ -98,8 +98,8 @@ export default function PlansScreen({ profile, activePlan, voltzBalance, onBack,
           {activePlan ? "Plans" : "Choose a plan"}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <PlanCard plan={PLANS.spark}  activePlan={activePlan} onAction={onSelectPlan} />
-          <PlanCard plan={PLANS.zenith} activePlan={activePlan} onAction={onSelectPlan} />
+          <PlanCard plan={PLANS.spark}  activePlan={activePlan} onAction={onSelectPlan} onManage={onManagePlan} />
+          <PlanCard plan={PLANS.zenith} activePlan={activePlan} onAction={onSelectPlan} onManage={onManagePlan} />
         </div>
       </div>
     </div>

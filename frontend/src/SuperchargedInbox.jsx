@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { Bell, Sparkles } from 'lucide-react';
 import {
   account,
   functions,
@@ -7,17 +8,30 @@ import {
   realtime,
   DB_ID,
   PROFILES_TABLE,
+  CONNECTIONS_TABLE,
   CONNECTION_GATEWAY_FUNCTION_ID,
   MESSAGE_GATEWAY_FUNCTION_ID,
+  DISCOVERY_FUNCTION_ID,
   Query,
+  ID,
 } from "./lib/appwrite";
+import { buildThumbnailUrl } from "./lib/photos";
 import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
 import { VoltzWallet } from "./components/VoltzSystem";
 import NotificationsPanel from "./components/NotificationsPanel";
+import ProfileView from "./components/ProfileView";
 
 // ============================================================================
 // DATA
 // ============================================================================
+
+const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const C = {
+  text: "#1A1A1A",
+  secondary: "#9E9B95",
+  luminaryBg: "#FFF3E0",
+  luminaryText: "#B45309",
+};
 
 const AVATAR_COLORS = {
   purple: "#7B5CF0",
@@ -350,6 +364,9 @@ const mapConversationFromBackend = (row) => {
   const id = row.conversationId || row.id;
   if (!id) return null;
 
+  const photoUrl = row.photo_file_id ? (() => {
+    try { return String(storage.getFilePreview({ bucketId: PROFILE_PHOTOS_BUCKET_ID, fileId: row.photo_file_id, width: 100 })); } catch { return null; }
+  })() : null;
   return {
     id,
     conversationId: row.conversationId || id,
@@ -358,6 +375,7 @@ const mapConversationFromBackend = (row) => {
     role: row.role || "Oxford member",
     initials: row.initials || "??",
     color: row.color || "#7B5CF0",
+    photoUrl,
     cold: Boolean(row.cold),
     preview: row.preview || '"No messages yet"',
     previewFromYou: Boolean(row.previewFromYou),
@@ -375,11 +393,14 @@ const mapNewConnectionFromBackend = (row) => {
   const id = row.connection_id || row.id;
   if (!id) return null;
 
+  const photoUrl = row.photo_file_id ? buildThumbnailUrl(row.photo_file_id) : null;
+
   return {
     id,
     connectionId: id,
     initials: row.initials || "??",
     color: row.color || "#7B5CF0",
+    photoUrl,
     name: row.name || "Unknown user",
     role: row.role || "Oxford member",
     score: Number(row.score || 72),
@@ -387,7 +408,7 @@ const mapNewConnectionFromBackend = (row) => {
     message: row.message || "Would like to connect.",
     dots: Array.isArray(row.dots) && row.dots.length > 0
       ? row.dots
-      : ["#3DAA82", "#5B8CF5", "#9B7CF6"]
+      : ["#3DAA82", "#5B8CF6", "#9B7CF6"]
   };
 };
 
@@ -396,12 +417,14 @@ const mapSentConnectionFromBackend = (row) => {
   const id = row.connection_id || row.id;
   if (!id) return null;
   const name = row.name || 'Unknown user';
+  const photoUrl = row.photo_file_id ? buildThumbnailUrl(row.photo_file_id) : null;
   return {
     id,
     name,
     role: row.role || 'Oxford member',
     initials: row.initials || name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
     color: row.color || '#7B5CF0',
+    photoUrl,
     message: row.message || 'Awaiting response',
     time: row.initiated_at ? new Date(row.initiated_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '',
     status: row.status || 'pending',
@@ -456,7 +479,7 @@ const BoltIcon = ({ size = 11, strokeColor = "#1A1A1A" }) => {
   );
 };
 
-const Avatar = ({ initials, color, size = 46, className = "", style = {}, cold = false, fontSize }) => (
+const Avatar = ({ initials, color, size = 46, className = "", style = {}, cold = false, fontSize, src }) => (
   <div
     className={`sc-avatar ${cold ? "sc-avatar-cold" : ""} ${className}`}
     style={{
@@ -465,10 +488,12 @@ const Avatar = ({ initials, color, size = 46, className = "", style = {}, cold =
       alignItems: "center", justifyContent: "center",
       color: "#fff", fontWeight: 600,
       fontSize: fontSize ?? Math.max(10, Math.round(size / 3.07)),
-      flexShrink: 0, ...style
+      flexShrink: 0, overflow: "hidden", ...style
     }}
   >
-    {initials}
+    {src
+      ? <img src={src} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} alt="" onError={e => { e.currentTarget.style.display = "none"; }} />
+      : initials}
   </div>
 );
 
@@ -477,11 +502,8 @@ const Avatar = ({ initials, color, size = 46, className = "", style = {}, cold =
 // ============================================================================
 
 const BellButton = ({ onClick, hasPip }) => (
-  <button className="sc-bell-btn" onClick={onClick} aria-label="Notifications">
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-      <path d="M11 3a5 5 0 00-5 5v3.5c0 .8-.3 1.6-.9 2.2L4 15h14l-1.1-1.3c-.6-.6-.9-1.4-.9-2.2V8a5 5 0 00-5-5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M9 18a2 2 0 004 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
+  <button className="sc-bell-btn" onClick={onClick} aria-label="Notifications" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', position: 'relative', padding: 0 }}>
+    <Bell size={20} strokeWidth={1.6} />
     {hasPip && <span className="sc-bell-pip" />}
   </button>
 );
@@ -563,10 +585,10 @@ const TodaysMoves = ({ onOpenMove, moves = [] }) => (
   </>
 );
 
-const ConvoRow = ({ c, onOpen }) => (
+const ConvoRow = ({ c, onOpen, onViewProfile }) => (
   <div className="sc-convo" onClick={() => onOpen(c.id)}>
     {c.unread > 0 && <span className="sc-unread-dot" />}
-    <Avatar initials={c.initials} color={c.color} cold={c.cold} />
+    <Avatar initials={c.initials} color={c.color} cold={c.cold} src={c.photoUrl} />
     <div className="sc-convo-content">
       <div className={`sc-convo-name ${c.unread === 0 ? "read" : ""}`}>{c.name}</div>
       <div className="sc-convo-sub">{c.role}</div>
@@ -585,7 +607,7 @@ const EmptyState = ({ children }) => <div className="sc-empty-state">{children}<
 const SentCard = ({ conn }) => (
   <div className="sc-new-card">
     <div className="sc-new-card-top">
-      <Avatar initials={conn.initials} color={conn.color} />
+      <Avatar initials={conn.initials} color={conn.color} src={conn.photoUrl} />
       <div className="sc-new-card-info">
         <div className="sc-new-card-name">{conn.name}</div>
         <div className="sc-new-card-role">{conn.role}</div>
@@ -606,7 +628,9 @@ const SentFeed = ({ connections }) => (
     {connections.length === 0 ? (
       <EmptyState>No sent requests yet</EmptyState>
     ) : (
-      connections.map(c => <SentCard key={c.id} conn={c} />)
+      <div className="sc-new-feed" style={{ paddingTop: 18 }}>
+        {connections.map(c => <SentCard key={c.id} conn={c} />)}
+      </div>
     )}
   </div>
 );
@@ -760,11 +784,19 @@ const Inbox = ({
   notifOpen, setNotifOpen,
   onOpenConvo, onOpenMove, onOpenNewPreview, onOpenNewPreviewWithSheet,
   onNotifClick, onMarkAllRead, markingAllRead,
-  voltzBalance, onOpenVoltzModal
+  voltzBalance, onOpenVoltzModal, onViewProfile,
+  onDismissNewUser, onConnectNewUser
 }) => {
   const notifRef = useRef(null);
   const bellRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [seenNotifIds, setSeenNotifIds] = useState(new Set());
+
+  const handleMarkAllReadLocal = () => {
+    const ids = new Set(notifications.map(n => n.id || n.initials));
+    setSeenNotifIds(prev => new Set([...prev, ...ids]));
+    onMarkAllRead();
+  };
 
   // Close notif on outside click
   useEffect(() => {
@@ -831,25 +863,18 @@ const Inbox = ({
   }, [conversations]);
 
   if (notifOpen) {
-    // Transform legacy notification format to new format
+    const COLOR_MAP = { red: "#E5484D", orange: "#F97316", amber: "#F5B800", green: "#22B37A", teal: "#14B8A6", blue: "#3B82F6", purple: "#7C6BF2", pink: "#F87171" };
     const transformedNotifications = notifications.map((n) => ({
       id: n.id || n.initials,
       type: "initials",
       initials: n.initials,
-      avatarBg: {
-        "red": "#E5484D",
-        "orange": "#F97316",
-        "amber": "#F5B800",
-        "green": "#22B37A",
-        "teal": "#14B8A6",
-        "blue": "#3B82F6",
-        "purple": "#7C6BF2",
-        "pink": "#F87171"
-      }[n.color] || "#7C6BF2",
+      avatarBg: COLOR_MAP[n.color] || "#7C6BF2",
       body: n.text || n.body,
       time: n.time || "now",
       draft: false,
-      read: false,
+      read: seenNotifIds.has(n.id || n.initials),
+      isSignupCard: n.isSignupCard,
+      profile: n.profile
     }));
 
     return (
@@ -858,8 +883,10 @@ const Inbox = ({
           notifications={transformedNotifications}
           onNotificationPress={onNotifClick}
           onDraftPress={() => {}}
-          onMarkAllRead={onMarkAllRead}
+          onMarkAllRead={handleMarkAllReadLocal}
           onBack={() => setNotifOpen(false)}
+          onDismissNewUser={onDismissNewUser}
+          onConnectNewUser={onConnectNewUser}
         />
       </div>
     );
@@ -874,7 +901,7 @@ const Inbox = ({
             <div ref={bellRef} style={{ position: "relative" }}>
               <BellButton
                 onClick={(e) => { e.stopPropagation(); setNotifOpen(o => !o); }}
-                hasPip={notifications.length > 0}
+                hasPip={notifications.some(n => !seenNotifIds.has(n.id || n.initials))}
               />
             </div>
             {onOpenVoltzModal && (
@@ -906,7 +933,7 @@ const Inbox = ({
         <div className="sc-inbox-scroll">
           {filter === "all" && <TodaysMoves onOpenMove={onOpenMove} moves={todaysMoves} />}
           {visibleConvos.map(c => (
-            <ConvoRow key={c.id} c={c} onOpen={onOpenConvo} />
+            <ConvoRow key={c.id} c={c} onOpen={onOpenConvo} onViewProfile={onViewProfile} />
           ))}
         </div>
       )}
@@ -918,12 +945,12 @@ const Inbox = ({
 // CHAT — HEADER, THREAD, INPUT
 // ============================================================================
 
-const ChatHeader = ({ profile, onBack, onOpenDrawer, activeChip, onChipClick, stageProgress, contextChips }) => (
+const ChatHeader = ({ profile, onBack, onOpenDrawer, onViewProfile, activeChip, onChipClick, stageProgress, contextChips }) => (
   <div className="sc-chat-header">
     <div className="sc-chat-header-row">
       <button className="sc-back-btn" onClick={onBack} aria-label="Back">‹</button>
-      <div className="sc-chat-header-info">
-        <Avatar initials={profile.initials} color={profile.color} size={46} />
+      <div className="sc-chat-header-info" onClick={onViewProfile} style={{ cursor: 'pointer' }}>
+        <Avatar initials={profile.initials} color={profile.color} size={46} src={profile.photoUrl} />
         <div className="sc-chat-header-text">
           <div className="sc-chat-name">{profile.name}</div>
           <div className="sc-chat-role">{profile.role}</div>
@@ -978,7 +1005,7 @@ const Thread = ({ messages, profile, tooltip, onTooltipDismiss, previewMode }) =
         if (m.type === "in") {
           return (
             <div key={i} className="sc-msg-group-in">
-              <Avatar initials={profile.initials} color={profile.color} size={22} fontSize={9} />
+              <Avatar initials={profile.initials} color={profile.color} size={22} fontSize={9} src={profile.photoUrl} />
               <div className="sc-bubble-in">{m.text}</div>
             </div>
           );
@@ -998,34 +1025,44 @@ const Thread = ({ messages, profile, tooltip, onTooltipDismiss, previewMode }) =
   );
 };
 
-const AIStrip = ({ onOpenSheet, onFillInput }) => (
+const AIStrip = ({ onOpenSheet }) => (
   <div className="sc-ai-strip">
     <button className="sc-ai-primary" onClick={onOpenSheet}>
       <BoltIcon />
-      Confirm time
+      AI Draft
     </button>
-    {AI_SECONDARY_FILLS.map((p, i) => (
-      <button key={i} className="sc-ai-secondary" onClick={() => onFillInput(p.fill)}>
-        {p.label}
-      </button>
-    ))}
   </div>
 );
 
 const InputBar = ({ value, onChange, onSend, onOpenSheet }) => {
   const hasText = value.trim().length > 0;
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + "px";
+    }
+  }, [value]);
+
   return (
     <div className="sc-input-bar">
       <button className="sc-ai-orb" onClick={onOpenSheet} aria-label="AI assist">
         <BoltIcon />
       </button>
       <div className="sc-input-field">
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
+          rows={1}
           placeholder="Reply..."
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSend(); } }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onSend();
+            }
+          }}
         />
         <div className="sc-input-right">
           <button
@@ -1047,26 +1084,96 @@ const InputBar = ({ value, onChange, onSend, onOpenSheet }) => {
 // AI ASSIST BOTTOM SHEET
 // ============================================================================
 
-const AISheet = ({ open, onClose, onUseDraft }) => {
-  const [draft, setDraft] = useState(DEFAULT_DRAFT);
+const AISheet = ({ open, onClose, onUseDraft, messages, currentProfile, otherProfile, executeFunction, onUpgrade }) => {
+  const [draft, setDraft] = useState("");
   const [tone, setTone] = useState("direct");
   const [instruction, setInstruction] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [showSparkUpsell, setShowSparkUpsell] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setDraft("");
+      setGenerating(false);
+      setShowSparkUpsell(false);
+    }
+  }, [open]);
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const last4 = (messages || []).filter(m => m.type === 'in' || m.type === 'out').slice(-4);
+      
+      const result = await executeFunction(DISCOVERY_FUNCTION_ID, {
+        action: 'generate_draft',
+        messages: last4,
+        current_profile: currentProfile,
+        other_profile: otherProfile,
+        tone,
+        instruction,
+      });
+
+      if (result.draft) {
+        setDraft(result.draft);
+      } else if (result.error === 'draft_limit_reached') {
+        setShowSparkUpsell(true);
+      } else if (result.error) {
+        throw new Error(result.error);
+      }
+    } catch (e) {
+      console.error('generate_draft failed:', e);
+      if (e.message?.includes('draft_limit_reached')) {
+        setShowSparkUpsell(true);
+      }
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
     <>
-      <div className={`sc-sheet-overlay ${open ? "visible" : ""}`} onClick={onClose} />
-      <div className={`sc-sheet ${open ? "visible" : ""}`}>
+      <div className={`sc-sheet-overlay ${(open || showSparkUpsell) ? "visible" : ""}`} onClick={() => showSparkUpsell ? setShowSparkUpsell(false) : onClose()} />
+      
+      {/* Spark Upsell Modal */}
+      <div className={`sc-sheet ${showSparkUpsell ? "visible" : ""}`} style={{ zIndex: 10000, height: 'auto', bottom: showSparkUpsell ? 0 : '-100%', top: 'auto', padding: '32px 24px', textAlign: 'center' }}>
+        <div className="sc-sheet-handle" />
+        <div style={{
+          width: 48, height: 48, borderRadius: 24, background: C.luminaryBg, color: C.luminaryText,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto'
+        }}>
+          <Sparkles size={24} />
+        </div>
+        <h2 style={{ fontFamily: SANS, fontSize: 22, fontWeight: 600, color: C.text, margin: '0 0 12px 0' }}>
+          You've hit your draft limit.
+        </h2>
+        <p style={{ fontFamily: SANS, fontSize: 15, color: C.secondary, lineHeight: 1.5, margin: '0 0 24px 0' }}>
+          You've used your 10 free AI message drafts for this month. Upgrade to Spark for unlimited drafting, advanced matching filters, and more.
+        </p>
+        <button 
+          className="btn-primary" 
+          onClick={() => {
+            if (onUpgrade) onUpgrade();
+            else window.location.href = window.location.pathname + "?manage_plan=true";
+          }}
+          style={{ width: '100%', marginBottom: 12 }}
+        >
+          Upgrade to Spark
+        </button>
+        <button 
+          onClick={() => setShowSparkUpsell(false)}
+          style={{
+            background: 'transparent', border: 'none', color: C.secondary,
+            fontFamily: SANS, fontSize: 15, fontWeight: 500, cursor: 'pointer', padding: 8
+          }}
+        >
+          Maybe Later
+        </button>
+      </div>
+
+      <div className={`sc-sheet ${open && !showSparkUpsell ? "visible" : ""}`}>
         <div className="sc-sheet-handle" />
 
-        <div className="sc-sheet-label">Suggested draft</div>
-        <textarea
-          className="sc-sheet-draft"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        <div className="sc-sheet-hint">AI drafted from your profile and conversation context</div>
-
-        <div className="sc-sheet-label" style={{ marginTop: 20 }}>Tone</div>
+        <div className="sc-sheet-label">Tone</div>
         <div className="sc-tone-row">
           {TONE_OPTIONS.map(t => (
             <button
@@ -1079,7 +1186,7 @@ const AISheet = ({ open, onClose, onUseDraft }) => {
           ))}
         </div>
 
-        <div className="sc-sheet-label" style={{ marginTop: 20 }}>Or tell the AI what to say</div>
+        <div className="sc-sheet-label" style={{ marginTop: 20 }}>Tell the AI what to say</div>
         <input
           className="sc-tell-input"
           placeholder="e.g. suggest we meet next week"
@@ -1087,8 +1194,28 @@ const AISheet = ({ open, onClose, onUseDraft }) => {
           onChange={(e) => setInstruction(e.target.value)}
         />
 
-        <button className="sc-btn-outline" onClick={() => {/* placeholder */}}>Regenerate</button>
-        <button className="sc-btn-filled" onClick={() => onUseDraft(draft)}>Use this draft</button>
+        {draft ? (
+          <>
+            <div className="sc-sheet-label" style={{ marginTop: 20 }}>Suggested draft</div>
+            <textarea
+              className="sc-sheet-draft"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+          </>
+        ) : null}
+
+        <button
+          className="sc-btn-outline"
+          onClick={handleGenerate}
+          disabled={generating}
+          style={{ marginTop: 20 }}
+        >
+          {generating ? "Generating…" : "Generate Draft · 1 Voltz"}
+        </button>
+        {draft && (
+          <button className="sc-btn-filled" onClick={() => onUseDraft(draft)}>Use this draft</button>
+        )}
       </div>
     </>
   );
@@ -1350,6 +1477,7 @@ const ContextDrawer = ({ open, onClose, profile, voltz, relationshipContext }) =
           )}
         </DrawerSection>
 
+        {/* Outreach, Relationship, Notes sections commented out — not yet implemented
         <DrawerSection label="Outreach">
           {timelineRows.length === 0 ? (
             <div className="sc-rel-empty">No outreach activity recorded yet.</div>
@@ -1380,6 +1508,7 @@ const ContextDrawer = ({ open, onClose, profile, voltz, relationshipContext }) =
         <DrawerSection label="Notes">
           <div className="sc-rel-empty">No notes yet.</div>
         </DrawerSection>
+        */}
 
       </div>
     </div>
@@ -1446,7 +1575,9 @@ const Chat = ({
   sheetOpen, onCloseSheet, onUseDraft,
   voltzToast,
   previewMode, onAccept, onDecline, declined, onUndo,
-  voltz, relationshipContext
+  voltz, relationshipContext, onViewProfile,
+  currentProfile, executeFunction,
+  onUpgrade,
 }) => (
   <div className={`sc-screen sc-screen-chat ${active ? "active" : ""} ${previewMode ? "preview" : ""}`}>
     <VoltzToast amount={voltzToast.amount} visible={voltzToast.visible} />
@@ -1455,6 +1586,7 @@ const Chat = ({
       profile={profile}
       onBack={onBack}
       onOpenDrawer={() => setDrawerOpen(true)}
+      onViewProfile={onViewProfile}
       activeChip={activeChip}
       onChipClick={onChipClick}
       stageProgress={stageProgress}
@@ -1480,7 +1612,7 @@ const Chat = ({
       />
     ) : (
       <>
-        <AIStrip onOpenSheet={onOpenSheet} onFillInput={onFillInput} />
+        <AIStrip onOpenSheet={onOpenSheet} />
         <InputBar
           value={input}
           onChange={setInput}
@@ -1490,7 +1622,16 @@ const Chat = ({
       </>
     )}
 
-    <AISheet open={sheetOpen} onClose={onCloseSheet} onUseDraft={onUseDraft} />
+    <AISheet
+      open={sheetOpen}
+      onClose={onCloseSheet}
+      onUseDraft={onUseDraft}
+      messages={messages}
+      currentProfile={currentProfile}
+      otherProfile={profile}
+      executeFunction={executeFunction}
+      onUpgrade={onUpgrade}
+    />
     <ContextDrawer
       open={drawerOpen}
       onClose={() => setDrawerOpen(false)}
@@ -1505,7 +1646,7 @@ const Chat = ({
 // ROOT
 // ============================================================================
 
-export default function SuperchargedInbox({ currentUserProfile = null, voltzBalance = 0, onOpenVoltzModal }) {
+export default function SuperchargedInbox({ currentUserProfile = null, voltzBalance = 0, onOpenVoltzModal, onUpgrade, initialTab = null, onConnect }) {
   // --- data state ---
   const [conversations, setConversations] = useState([]);
   const [newConnections, setNewConnections] = useState([]);
@@ -1517,9 +1658,10 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
   const [backendReady, setBackendReady] = useState(HAS_BACKEND_GATEWAYS);
 
   // --- navigation state ---
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(initialTab || "all");
   const [chatActive, setChatActive] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [viewProfileData, setViewProfileData] = useState(null);
 
   // --- chat state ---
   const SARAH_PROFILE = { initials: "SC", color: AVATAR_COLORS.purple, name: "Sarah Chen", role: "VC Associate · Sequoia", id: "sarah" };
@@ -1553,7 +1695,12 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
 
   const executeFunction = useCallback(async (functionId, payload) => {
     const execution = await functions.createExecution(functionId, JSON.stringify(payload), false);
-    const body = JSON.parse(execution.responseBody || "{}");
+    let body = {};
+    try {
+      body = JSON.parse(execution.responseBody || "{}");
+    } catch (e) {
+      console.error(`executeFunction: failed to parse response from ${functionId}`, e);
+    }
     if (body?.error) throw new Error(body.error);
     return body;
   }, []);
@@ -1727,10 +1874,16 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
       return;
     }
 
+    console.log('[Inbox] refreshInboxData called', { 
+      profileId: (profileOverride || backendProfile)?.$id, 
+      profileOverride: profileOverride?.$id,
+      backendProfile: backendProfile?.$id,
+      options 
+    });
     const profile = profileOverride || backendProfile;
     if (!profile?.$id) {
-      setInboxLoading(false);
-      return;
+      console.warn('[Inbox] No profile available for refresh');
+      return false;
     }
 
     if (showLoading || !hasHydratedInbox) {
@@ -1741,40 +1894,66 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     const cacheKey = INBOX_CACHE_KEY(profile.$id);
     const cached = readCacheEntry(cacheKey, 15 * 60 * 1000);
     if (cached?.data) {
-      const { conversations: cachedConversations = [], newConnections: cachedNewConnections = [], notifications: cachedNotifications = [] } = cached.data;
+      const {
+        conversations: cachedConversations = [],
+        newConnections: cachedNewConnections = [],
+        notifications: cachedNotifications = [],
+        sentConnections: cachedSent = []
+      } = cached.data;
       setConversations(cachedConversations);
       setNewConnections(cachedNewConnections);
       setNotifications(cachedNotifications);
+      setSentConnections(cachedSent);
       setHasHydratedInbox(true);
       setInboxLoading(false);
-      if (!forceRefresh && Date.now() - (cached.savedAt || 0) < INBOX_CACHE_TTL_MS) {
+      // Even on cache hit, if it's a recent load but forced or we want to ensure freshness, 
+      // we can proceed. But here we respect the user's cache unless forceRefresh is true.
+      if (!forceRefresh && Date.now() - (cached.savedAt || 0) < 60 * 1000 && cached.data.sentConnections) {
+        console.log('[Inbox] Cache hit (recent), returning early', { savedAt: new Date(cached.savedAt).toLocaleTimeString() });
         return true;
       }
+      console.log('[Inbox] Cache exists but forced or older than 1m, proceeding to fetch');
+    } else {
+      console.log('[Inbox] No cache found, fetching fresh data');
     }
 
     try {
       let activeData;
       let pendingData;
 
-      // Fetch sent connections in parallel with everything else
+      console.log('[Inbox] Dispatching parallel fetches...');
+
       const sentDataPromise = executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
         action: "list_pending_from_me",
         limit: 50,
-      }).catch(() => ({ connections: [] }));
+      }).catch((err) => {
+        console.error('[Inbox] sentDataPromise FAILED:', err);
+        return { connections: [] };
+      });
 
       try {
+        console.log('[Inbox] Calling bootstrap_inbox for profile', profile.$id);
         const bootstrapData = await executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
           action: "bootstrap_inbox",
           limit: 80,
+        });
+        console.log('[Inbox] bootstrap_inbox raw response:', {
+          success: bootstrapData?.success,
+          conversations: bootstrapData?.conversations?.length ?? 'undefined',
+          pending: bootstrapData?.pending?.length ?? 'undefined',
+          total_pending: bootstrapData?.total_pending,
+          pendingSample: bootstrapData?.pending?.[0] ?? null,
         });
 
         activeData = { conversations: Array.isArray(bootstrapData?.conversations) ? bootstrapData.conversations : [] };
         pendingData = { connections: Array.isArray(bootstrapData?.pending) ? bootstrapData.pending : [] };
       } catch (bootstrapErr) {
+        console.error('[Inbox] bootstrap_inbox FAILED:', bootstrapErr?.message, bootstrapErr);
         const bootstrapMessage = String(bootstrapErr?.message || "");
         const canFallback = /Unknown action|not found/i.test(bootstrapMessage);
         if (!canFallback) throw bootstrapErr;
 
+        console.log('[Inbox] Falling back to list_active + list_pending_to_me');
         [activeData, pendingData] = await Promise.all([
           executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
             action: "list_active",
@@ -1783,37 +1962,72 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
           executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, {
             action: "list_pending_to_me",
             limit: 80,
-          }),
+          }).then(r => { console.log('[Inbox] list_pending_to_me fallback result:', { count: r?.connections?.length }); return r; }),
         ]);
       }
 
       const sentData = await sentDataPromise;
+      console.log('[Inbox] sentData received:', { count: sentData?.connections?.length });
       const mappedSent = (sentData?.connections || []).map(mapSentConnectionFromBackend).filter(Boolean);
       setSentConnections(mappedSent);
 
       const mappedConversations = (activeData?.conversations || [])
         .map(mapConversationFromBackend)
         .filter(Boolean);
-      if (mappedConversations.length > 0) {
-        setConversations(mappedConversations);
-      } else {
-        setConversations([]);
-      }
+
+      setConversations(mappedConversations || []);
 
       const activeIds = new Set(mappedConversations.map(c => c.id));
+      console.log('[Inbox] pendingData.connections before mapping:', pendingData?.connections?.length ?? 0, pendingData?.connections);
       const mappedPending = (pendingData?.connections || [])
         .map(mapNewConnectionFromBackend)
         .filter(Boolean)
         .filter(c => !activeIds.has(c.id));
+      console.log('[Inbox] mappedPending final count:', mappedPending.length, mappedPending);
       setNewConnections(mappedPending);
 
-      const nextNotifications = buildLiveNotifications(mappedConversations, mappedPending);
+      let recentSignups = [];
+      try {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const signupRes = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: PROFILES_TABLE,
+          queries: [
+            Query.greaterThan('$createdAt', thirtyDaysAgo),
+            Query.equal('is_onboarding_complete', [true]),
+            Query.orderDesc('$createdAt'),
+            Query.limit(25)
+          ]
+        });
+        
+        const dismissedRes = await tables.listRows({
+          databaseId: DB_ID, tableId: 'card_dismissals',
+          queries: [Query.equal('profile_id', profile.$id), Query.limit(100)]
+        });
+        const dismissedSet = new Set((dismissedRes?.rows || []).map(r => r.dismissed_profile_id));
+        
+        recentSignups = (signupRes?.rows || [])
+          .filter(r => r.user_id !== profile.user_id && !dismissedSet.has(r.$id) && !activeIds.has(r.$id) && !mappedPending.some(c => c.id === r.$id) && !mappedSent.some(c => c.responder_profile_id === r.$id));
+      } catch(e) {
+        console.error('Error fetching recent signups', e);
+      }
+
+      const signupNotifications = recentSignups.map(s => ({
+        id: `signup_${s.$id}`,
+        isSignupCard: true,
+        profile: s,
+        read: false,
+        time: "Recently joined"
+      }));
+
+      const nextNotifications = [...signupNotifications, ...buildLiveNotifications(mappedConversations, mappedPending)];
       setNotifications(nextNotifications);
       setHasHydratedInbox(true);
       writeCacheEntry(cacheKey, {
         conversations: mappedConversations,
         newConnections: mappedPending,
         notifications: nextNotifications,
+        sentConnections: mappedSent,
       });
     } catch (err) {
       console.error("Inbox backend sync failed:", err);
@@ -1900,6 +2114,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     const channels = [
       `tablesdb.${DB_ID}.tables.inbox_notifications.rows`,
       `tablesdb.${DB_ID}.tables.connections.rows`,
+      `tablesdb.${DB_ID}.tables.profiles.rows`,
     ];
     console.log('[Inbox Realtime] Subscribing to channels:', channels);
 
@@ -2071,7 +2286,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     const convo = conversations.find((x) => x.id === id);
     if (!convo) return;
 
-    setChatProfile({ initials: convo.initials, color: convo.color, name: convo.name, role: convo.role, id: convo.id });
+    setChatProfile({ initials: convo.initials, color: convo.color, name: convo.name, role: convo.role, id: convo.id, photoUrl: convo.photoUrl || null });
     setPreviewMode(false);
     setDeclined(false);
     setPreviewCardId(null);
@@ -2161,7 +2376,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
   };
 
   const enterPreview = (conn, alsoOpenSheet) => {
-    setChatProfile({ initials: conn.initials, color: conn.color, name: conn.name, role: conn.role, id: conn.id });
+    setChatProfile({ initials: conn.initials, color: conn.color, name: conn.name, role: conn.role, id: conn.id, photoUrl: conn.photoUrl || null });
     setMessages([
       { type: "sep", text: "Earlier today" },
       { type: "in", text: conn.message },
@@ -2226,10 +2441,16 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
         if (out?.conversation_id) {
           setActiveConversationId(out.conversation_id);
           await loadConversationMessages(out.conversation_id, backendProfile.$id);
+          openChat();
         }
 
         if (Number(out?.voltz_earned || 0) > 0) {
-          awardVoltzAmount(Number(out.voltz_earned));
+          if (out.new_voltz_balance != null) {
+            setVoltzTotal(out.new_voltz_balance);
+            showToast(Number(out.voltz_earned));
+          } else {
+            awardVoltzAmount(Number(out.voltz_earned));
+          }
         }
 
         if (acceptedConnectionId) {
@@ -2325,9 +2546,6 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     const v = input.trim();
     if (!v) return;
 
-    const now = new Date();
-    const time = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    setMessages((ms) => [...ms, { type: "out", text: v, time, read: false }]);
     setInput("");
 
     const fromDraft = nextSendFromDraft;
@@ -2374,6 +2592,26 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
     setSheetOpen(false);
   };
 
+  const handleDismissNewUser = async (profileToDismiss) => {
+    setNotifications((prev) => prev.filter(n => !(n.isSignupCard && n.profile.$id === profileToDismiss.$id)));
+    try {
+      await tables.createRow({
+        databaseId: DB_ID,
+        tableId: 'card_dismissals',
+        rowId: ID.unique(),
+        data: {
+          profile_id: backendProfile.$id,
+          dismissed_profile_id: profileToDismiss.$id,
+          dismissed_at: new Date().toISOString()
+        }
+      });
+    } catch (e) { console.error('Failed to dismiss', e); }
+  };
+
+  const handleConnectNewUser = (profileToConnect) => {
+    if (onConnect) onConnect(profileToConnect);
+  };
+
   return (
     <>
       <StyleBlock />
@@ -2400,6 +2638,9 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
               markingAllRead={markingAllRead}
               voltzBalance={voltzBalance}
               onOpenVoltzModal={onOpenVoltzModal}
+              onViewProfile={(c) => setViewProfileData({ connectionId: c.connectionId || c.id, profile: c })}
+              onDismissNewUser={handleDismissNewUser}
+              onConnectNewUser={handleConnectNewUser}
             />
             <Chat
               active={chatActive}
@@ -2430,10 +2671,24 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
               onUndo={handleUndo}
               voltz={voltzTotal}
               relationshipContext={relationshipContext}
+              onViewProfile={() => chatProfile && setViewProfileData({ connectionId: activeConversationId, profile: chatProfile })}
+              currentProfile={backendProfile}
+              executeFunction={executeFunction}
+              onUpgrade={onUpgrade}
             />
           </div>
         </div>
       </div>
+      {/* ProfileView modal */}
+      {viewProfileData && (
+        <ProfileView
+          profile={viewProfileData.profile}
+          connectionId={viewProfileData.connectionId}
+          currentUserProfileId={backendProfile?.$id}
+          onClose={() => setViewProfileData(null)}
+          context="chat"
+        />
+      )}
     </>
   );
 }
@@ -2481,10 +2736,10 @@ const StyleBlock = () => (
 .sc-avatar-cold { filter:saturate(0.2) brightness(1.08); transition:filter 1.5s ease; }
 
 /* Inbox header */
-.sc-inbox-header { padding:16px 20px 10px; }
+.sc-inbox-header { padding:16px 20px 0; }
 .sc-inbox-title-row { display:flex; justify-content:space-between; align-items:center; }
 .sc-inbox-title { font-family:'Playfair Display',serif; font-weight:300; font-size:28px; letter-spacing:-0.3px; color:var(--sc-text); margin:0; }
-.sc-bell-btn { background:none; border:none; padding:11px; margin:-11px; cursor:pointer; position:relative; color:var(--sc-text); }
+.sc-bell-btn { background:none; border:none; padding:8px; cursor:pointer; position:relative; color:var(--sc-text); display:flex; align-items:center; }
 .sc-bell-btn svg { display:block; }
 .sc-bell-pip { position:absolute; top:8px; right:8px; width:6px; height:6px; border-radius:50%; background:var(--sc-accent); }
 
@@ -2628,9 +2883,9 @@ const StyleBlock = () => (
 /* Input bar */
 .sc-input-bar { border-top:1px solid var(--sc-border-light); padding:10px 16px var(--sc-bottom-safe); display:flex; align-items:center; gap:10px; background:var(--sc-bg); flex-shrink:0; }
 .sc-ai-orb { width:36px; height:36px; border-radius:50%; border:1.5px solid var(--sc-text); background:var(--sc-bg); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
-.sc-input-field { flex:1; border:1.5px solid var(--sc-text); border-radius:999px; background:var(--sc-bg); padding:4px 4px 4px 16px; display:flex; align-items:center; gap:8px; min-height:40px; position:relative; }
-.sc-input-field input { flex:1; border:none; outline:none; background:transparent; font-family:'DM Sans',sans-serif; font-weight:400; font-size:14px; color:var(--sc-text); padding:6px 0; min-width:0; }
-.sc-input-field input::placeholder { color:var(--sc-text3); }
+.sc-input-field { flex:1; border:1.5px solid var(--sc-text); border-radius:24px; background:var(--sc-bg); padding:2px 4px 2px 16px; display:flex; align-items:center; gap:8px; min-height:40px; position:relative; }
+.sc-input-field textarea { flex:1; border:none; outline:none; background:transparent; font-family:'DM Sans',sans-serif; font-weight:400; font-size:16px; color:var(--sc-text); padding:8px 0; min-width:0; resize:none; max-height:120px; overflow-y:auto; line-height:1.4; }
+.sc-input-field textarea::placeholder { color:var(--sc-text3); }
 .sc-input-right { position:relative; width:36px; height:32px; flex-shrink:0; }
 .sc-send-btn { width:32px; height:32px; border-radius:50%; background:#F2F0EC; border:1px solid #DDD9D2; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0; pointer-events:none; transition:opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease; position:absolute; right:0; top:50%; transform:translateY(-50%); }
 .sc-send-btn.visible { opacity:1; pointer-events:auto; }

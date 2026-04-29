@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { functions, DISCOVERY_FUNCTION_ID, CONNECTION_GATEWAY_FUNCTION_ID } from '../lib/appwrite';
 import { readCacheValue, writeCacheEntry } from '../lib/cache';
+import ProfileView from './ProfileView';
 
 // ─── Design tokens (matches the HTML prototype) ──────────────────────────────
 const C = {
@@ -62,6 +63,17 @@ const SUGGESTION_CHIPS = [
   'People into deep work',
 ];
 
+const SEARCH_PLACEHOLDERS = [
+  'AI founders in Oxford',
+  'Someone to do startups with',
+  'Research collaborators in biology',
+  'People building in fintech',
+  'Co-founders who can build',
+  'Study partners for finals',
+  'Someone into deep work and philosophy',
+  'Oxford entrepreneurs in consulting',
+];
+
 const SEARCH_KEYFRAMES = `
   @keyframes sc-circle-in {
     from { clip-path: circle(0% at calc(100% - 40px) 8px); }
@@ -92,6 +104,10 @@ const SEARCH_KEYFRAMES = `
     from { transform: translateX(100%); }
     to   { transform: translateX(0); }
   }
+  @keyframes sc-placeholder-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 `;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,87 +135,135 @@ function computeSurfacedDims(match, cp = {}) {
 }
 
 function enrichMatch(m, profile, idx) {
-  const dims = computeSurfacedDims(m, profile);
-  const name = m.full_name || 'Unknown';
+  // Name-search results nest the profile row under a `profile` key.
+  // Flatten it so $id / user_id / full_name etc. are available at the top level.
+  const flat = m.profile ? { ...m.profile, ...m, profile: undefined } : m;
+
+  const dims = computeSurfacedDims(flat, profile);
+  const name = flat.full_name || 'Unknown';
   const initials = name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2) || '??';
-  const role = [m.career_field, m.college].filter(Boolean).join(' · ') || 'Oxford';
-  const score = m.score ?? Math.round((m.compatibility_score || 0) * 100);
+  const role = [flat.career_field, flat.college].filter(Boolean).join(' · ') || 'Oxford';
+  const isNameSearch = !!m.profile;
+  const dimAvg = Math.round(Object.values(dims).reduce((a, b) => a + b, 0) / 4);
+  const score = isNameSearch
+    ? dimAvg
+    : (flat.score ?? Math.round((flat.compatibility_score || 0) * 100));
 
   // Derive keyword chips from shared attributes
   const matched = [];
-  if (m.career_field) matched.push(m.career_field);
-  if (m.college && profile?.college && m.college.toLowerCase() === profile.college.toLowerCase()) matched.push('Same college');
-  if (m.primary_intent) matched.push(m.primary_intent);
-  if (matched.length === 0 && m.study_subject) matched.push(m.study_subject);
+  if (flat.career_field) matched.push(flat.career_field);
+  if (flat.college && profile?.college && flat.college.toLowerCase() === profile.college.toLowerCase()) matched.push('Same college');
+  if (flat.primary_intent) matched.push(flat.primary_intent);
+  if (matched.length === 0 && flat.study_subject) matched.push(flat.study_subject);
 
-  // Timing signal
-  const timingSignal = m.building_description
-    ? m.building_description.slice(0, 180)
-    : `${name.split(' ')[0]} is active on Supercharged and open to new connections.`;
+  // Timing signal — key facts about the person
+  const timingSignal = [flat.career_field, flat.college, flat.year_of_study]
+    .filter(Boolean).join(' · ')
+    || `${name.split(' ')[0]} is active on Supercharged.`;
 
-  // Suggested opener
+  // Suggested opener based on shared goals or career overlap
   const firstName = name.split(' ')[0];
-  const opener = m.honest_thing
-    ? `"${m.honest_thing.slice(0, 120)}"`
-    : `${firstName} is working in ${m.career_field || 'their field'} — interesting overlap with your goals. Worth a conversation.`;
+  const sharedGoals = Array.isArray(flat.goals) && Array.isArray(profile?.goals)
+    ? flat.goals.filter((g) => (profile.goals || []).some((pg) => pg.toLowerCase() === g.toLowerCase()))
+    : [];
+  const opener = sharedGoals.length > 0
+    ? `You both care about ${sharedGoals.slice(0, 2).join(' and ')} — good starting point.`
+    : flat.career_field
+    ? `${firstName} is working in ${flat.career_field}${flat.college ? ` at ${flat.college}` : ''} — worth a conversation.`
+    : `${firstName} is active on Supercharged and open to new connections.`;
 
   return {
-    ...m,
+    ...flat,
     name, initials, role, score, matched,
     timingSignal, opener,
     dims,
     palette: idx % 4,
     gradient: ['linear-gradient(160deg,#8B7FE8 0%,#5B4FCF 100%)', 'linear-gradient(160deg,#5FBCA7 0%,#1F7A6A 100%)', 'linear-gradient(160deg,#E89B85 0%,#B35A3D 100%)', 'linear-gradient(160deg,#7BA0D4 0%,#3A609E 100%)'][idx % 4],
-    is_external: !!m.is_external,
+    is_external: !!flat.is_external,
   };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SearchInput({ query, setQuery, inputRef, onSubmit }) {
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const [placeholderKey, setPlaceholderKey] = useState(0);
+
+  useEffect(() => {
+    if (query) return;
+    const t = setInterval(() => {
+      setPlaceholderIdx(i => (i + 1) % SEARCH_PLACEHOLDERS.length);
+      setPlaceholderKey(k => k + 1);
+    }, 3000);
+    return () => clearInterval(t);
+  }, [query]);
+
   const autoResize = (e) => {
     e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 160) + 'px';
+    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
   };
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: C.paper, border: `1.5px solid ${C.ink}`, borderRadius: 24, padding: '13px 16px', animation: 'sc-fade-slide-in 220ms ease-out 150ms both' }}>
-      <svg width="16" height="16" viewBox="0 0 22 22" fill="none" style={{ flexShrink: 0, marginTop: 2 }}>
-        <circle cx="10" cy="10" r="7" stroke={C.ink} strokeWidth="1.6" />
-        <path d="M15 15 L20 20" stroke={C.ink} strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
+    <div style={{ position: 'relative', background: C.paper, border: `1.5px solid ${C.ink}`, borderRadius: 16, padding: '14px 14px 52px 14px', minHeight: 110, animation: 'sc-fade-slide-in 220ms ease-out 150ms both' }}>
+      {!query && (
+        <div key={placeholderKey} style={{ position: 'absolute', top: 14, left: 14, right: 90, color: `${C.ink}55`, fontSize: 15, fontFamily: "'DM Sans', sans-serif", lineHeight: 1.4, pointerEvents: 'none', animation: 'sc-placeholder-in 300ms ease-out both', userSelect: 'none' }}>
+          {SEARCH_PLACEHOLDERS[placeholderIdx]}
+        </div>
+      )}
       <textarea
         ref={inputRef}
         value={query}
-        rows={1}
-        placeholder="Who are you looking for?"
+        rows={2}
+        placeholder=""
         onChange={(e) => { setQuery(e.target.value); autoResize(e); }}
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && query.trim()) { e.preventDefault(); onSubmit(query.trim()); } }}
-        style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 15, fontFamily: "'DM Sans', sans-serif", color: C.ink, resize: 'none', overflow: 'hidden', lineHeight: 1.4, padding: 0, minHeight: 21, maxHeight: 160 }}
+        style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none', fontSize: 16, fontFamily: "'DM Sans', sans-serif", color: C.ink, resize: 'none', overflow: 'hidden', lineHeight: 1.4, padding: 0, minHeight: 44, maxHeight: 200, display: 'block' }}
       />
+      <button
+        onClick={() => query.trim() && onSubmit(query.trim())}
+        style={{ position: 'absolute', bottom: 12, right: 12, background: C.ink, color: C.paper, border: 'none', borderRadius: 999, padding: '9px 18px', fontSize: 14, fontWeight: 600, fontFamily: "'DM Sans', sans-serif", cursor: query.trim() ? 'pointer' : 'default', opacity: query.trim() ? 1 : 0.4, display: 'flex', alignItems: 'center', gap: 5, transition: 'opacity 160ms ease' }}>
+        Find
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
     </div>
   );
 }
 
 function ScopeToggle({ scope, setScope }) {
+  const [showExternalInfo, setShowExternalInfo] = React.useState(false);
   return (
     <div style={{ marginTop: 14, animation: 'sc-fade-slide-in 220ms ease-out 180ms both' }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        {['internal', 'external'].map((s) => {
-          const active = scope === s;
-          const label = s === 'internal' ? 'Internal' : 'External';
-          return (
-            <button key={s} onClick={() => setScope(s)}
-              style={{ background: active ? C.ink : C.paper, border: `1.5px solid ${C.ink}`, borderRadius: 999, padding: '8px 22px', fontSize: 14, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", color: active ? C.paper : C.ink, cursor: 'pointer', transition: 'all 160ms ease-out', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {label}
-            </button>
-          );
-        })}
-      </div>
-      {scope === 'external' && (
-        <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#FEF3C7', color: '#92400E', fontSize: 11, fontWeight: 500, padding: '5px 11px', borderRadius: 999, animation: 'sc-fade-up 220ms ease-out both' }}>
-          <BoltIcon size={12} color="#92400E" /> 1 Voltz per external search
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {/* Internal button — fully active */}
+        <button onClick={() => setScope('internal')}
+          style={{ background: scope === 'internal' ? C.ink : C.paper, border: `1.5px solid ${C.ink}`, borderRadius: 999, padding: '8px 22px', fontSize: 14, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", color: scope === 'internal' ? C.paper : C.ink, cursor: 'pointer', transition: 'all 160ms ease-out' }}>
+          Internal
+        </button>
+
+        {/* External button — greyed out, with info dot badge */}
+        <div style={{ position: 'relative', display: 'inline-flex' }}>
+          <button disabled
+            style={{ background: C.paper, border: `1.5px solid ${C.ink}`, borderRadius: 999, padding: '8px 22px', fontSize: 14, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", color: C.ink, cursor: 'default', opacity: 0.38 }}>
+            External
+          </button>
+          {/* Notification dot badge */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowExternalInfo(v => !v); }}
+            style={{ position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%', border: `1.5px solid ${C.paper}`, background: C.ink, color: C.paper, fontSize: 10, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, lineHeight: 1, zIndex: 1 }}>
+            i
+          </button>
+          {/* Tooltip */}
+          {showExternalInfo && (
+            <div
+              onClick={() => setShowExternalInfo(false)}
+              style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 9999, background: C.ink, color: C.paper, fontSize: 12, fontWeight: 400, fontFamily: "'DM Sans', sans-serif", lineHeight: 1.5, padding: '10px 14px', borderRadius: 12, whiteSpace: 'normal', width: 220, boxShadow: '0 4px 16px rgba(0,0,0,0.18)', cursor: 'pointer' }}>
+              We're bringing the ability to search beyond Supercharged very soon.
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -245,31 +309,35 @@ function SearchView({ onBack, query, setQuery, scope, setScope, onSubmit, inputR
   };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: C.paper, animation: 'sc-circle-in 300ms ease-in-out forwards', clipPath: 'circle(0% at calc(100% - 40px) 8px)', padding: '16px 24px 32px', overflowY: 'auto' }}>
-      {/* Back */}
-      <button onClick={onBack} style={{ background: 'transparent', border: 'none', padding: 0, marginBottom: 18, fontSize: 14, fontWeight: 500, color: C.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, animation: 'sc-fade-slide-in 220ms ease-out 100ms both', fontFamily: "'DM Sans', sans-serif" }}>
-        <span style={{ fontSize: 18, lineHeight: 1 }}>‹</span> Back
-      </button>
+    <div style={{ position: 'absolute', inset: 0, background: C.paper, animation: 'sc-circle-in 300ms ease-in-out forwards', clipPath: 'circle(0% at calc(100% - 40px) 8px)', display: 'flex', flexDirection: 'column', padding: '16px 0 0', overflowY: 'auto' }}>
+      {/* Centred content block */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 24px 56px' }}>
+        
+        {/* Header */}
+        <div style={{ fontSize: 26, fontWeight: 300, fontFamily: 'var(--font-serif)', color: C.ink, marginBottom: 18, letterSpacing: '-0.015em', animation: 'sc-fade-slide-in 220ms ease-out 80ms both' }}>
+          Who are you looking for?
+        </div>
 
-      <SearchInput query={query} setQuery={setQuery} inputRef={inputRef} onSubmit={onSubmit} />
-      <ScopeToggle scope={scope} setScope={setScope} />
+        <SearchInput query={query} setQuery={setQuery} inputRef={inputRef} onSubmit={onSubmit} />
+        <ScopeToggle scope={scope} setScope={setScope} />
 
-      {/* Label */}
-      <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.07em', color: C.inkMuted, textTransform: 'uppercase', marginTop: 28, marginBottom: 14, animation: 'sc-fade-slide-in 220ms ease-out 220ms both' }}>
-        Try searching for
-      </div>
+        {/* Label */}
+        <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.07em', color: C.inkMuted, textTransform: 'uppercase', marginTop: 28, marginBottom: 14, animation: 'sc-fade-slide-in 220ms ease-out 220ms both' }}>
+          Try searching for
+        </div>
 
-      {/* Suggestion chips */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {SUGGESTION_CHIPS.map((chip, i) => {
-          const sel = selectedChips.includes(chip);
-          return (
-            <button key={chip} onClick={() => toggleChip(chip)}
-              style={{ background: sel ? C.ink : C.paper, border: `1.5px solid ${C.ink}`, color: sel ? C.paper : C.ink, fontSize: 13, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", padding: '7px 14px', borderRadius: 999, cursor: 'pointer', transition: 'all 140ms ease-out', animation: `sc-fade-up 150ms ease-out ${250 + i * 30}ms both` }}>
-              {chip}
-            </button>
-          );
-        })}
+        {/* Suggestion chips */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {SUGGESTION_CHIPS.map((chip, i) => {
+            const sel = selectedChips.includes(chip);
+            return (
+              <button key={chip} onClick={() => toggleChip(chip)}
+                style={{ background: sel ? C.ink : C.paper, border: `1.5px solid ${C.ink}`, color: sel ? C.paper : C.ink, fontSize: 13, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", padding: '7px 14px', borderRadius: 999, cursor: 'pointer', transition: 'all 140ms ease-out', animation: `sc-fade-up 150ms ease-out ${250 + i * 30}ms both` }}>
+                {chip}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -277,7 +345,7 @@ function SearchView({ onBack, query, setQuery, scope, setScope, onSubmit, inputR
 
 function ResultsView({ query, results, loading, onClear, onBack, onOpenProfile, onConnect }) {
   return (
-    <div style={{ position: 'absolute', inset: 0, background: C.paper, padding: '16px 16px 32px', overflowY: 'auto' }}>
+    <div style={{ position: 'absolute', inset: 0, background: C.paper, padding: '20px 16px 40px', overflowY: 'auto' }}>
       {/* Back */}
       <button onClick={onBack} style={{ background: 'transparent', border: 'none', padding: 0, marginBottom: 14, fontSize: 14, fontWeight: 500, color: C.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'DM Sans', sans-serif" }}>
         <span style={{ fontSize: 18, lineHeight: 1 }}>‹</span> Back
@@ -299,7 +367,7 @@ function ResultsView({ query, results, loading, onClear, onBack, onOpenProfile, 
       </div>
 
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {[0,1,2].map((i) => (
             <div key={i} style={{ height: 130, background: C.warmGrey, borderRadius: 16, animation: 'sc-shimmer 1s ease-in-out infinite' }} />
           ))}
@@ -309,7 +377,7 @@ function ResultsView({ query, results, loading, onClear, onBack, onOpenProfile, 
           No connections found in this dimensional space.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {results.map((person, i) => (
             <ResultCard key={person.user_id || i} person={person} index={i} onOpenProfile={() => onOpenProfile(person)} onConnect={() => onConnect(person)} />
           ))}
@@ -326,7 +394,7 @@ function ResultCard({ person, index, onOpenProfile, onConnect }) {
   const matchFg = s >= 85 ? '#2a4f0a' : s >= 70 ? C.amberText : C.coralText;
 
   return (
-    <div style={{ background: C.paper, border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 16, padding: 14, animation: `sc-card-in 180ms ease-out ${index * 70}ms both`, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+    <div style={{ background: C.paper, border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 16, padding: 18, animation: `sc-card-in 180ms ease-out ${index * 70}ms both`, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
       {/* Top — avatar + name + match */}
       <div onClick={onOpenProfile} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', userSelect: 'none' }}>
         <div style={{ width: 42, height: 42, borderRadius: '50%', background: p.bg, color: p.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0, fontFamily: "'DM Sans', sans-serif" }}>
@@ -371,6 +439,7 @@ function ResultCard({ person, index, onOpenProfile, onConnect }) {
 function ProfileDetailView({ person, onBack, onConnect }) {
   const [ringPct, setRingPct] = useState(0);
   const [displayedPct, setDisplayedPct] = useState(0);
+  const [showFullProfile, setShowFullProfile] = useState(false);
 
   const ringR = 44;
   const ringC = 2 * Math.PI * ringR;
@@ -410,7 +479,7 @@ function ProfileDetailView({ person, onBack, onConnect }) {
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: C.paper, animation: 'sc-push-in 300ms ease-out', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px) + 20px)' }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(180px + env(safe-area-inset-bottom, 0px))' }}>
 
         {/* Header */}
         <div style={{ padding: '14px 24px 18px', display: 'grid', gridTemplateColumns: '24px 1fr 24px', alignItems: 'center', gap: 8, animation: 'sc-fade-up 400ms ease-out 50ms both' }}>
@@ -487,12 +556,22 @@ function ProfileDetailView({ person, onBack, onConnect }) {
         </SectionLabel>
       </div>
 
-      {/* Pinned Connect CTA */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: C.paper, padding: '16px 20px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -12px 24px rgba(255,255,255,0.95)', flexShrink: 0, zIndex: 10 }}>
+      {/* Pinned CTAs */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: C.paper, padding: '12px 20px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 0px))', boxShadow: '0 -12px 24px rgba(255,255,255,0.95)', flexShrink: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button onClick={() => setShowFullProfile(true)} style={{ width: '100%', height: 44, background: 'transparent', color: C.ink, border: `1.5px solid ${C.ink}`, borderRadius: 999, fontSize: 14, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", cursor: 'pointer' }}>
+          View their profile →
+        </button>
         <button onClick={() => onConnect(person)} style={{ width: '100%', height: 52, background: C.ink, color: C.paper, border: 'none', borderRadius: 999, fontSize: 15, fontWeight: 500, fontFamily: "'DM Sans', sans-serif", cursor: 'pointer' }}>
           Connect
         </button>
       </div>
+      {showFullProfile && (
+        <ProfileView
+          profile={person}
+          onClose={() => setShowFullProfile(false)}
+          context="search"
+        />
+      )}
     </div>
   );
 }
@@ -598,8 +677,8 @@ export default function SearchScreen({ profile, onClose, onConnect }) {
           query={query}
           results={results}
           loading={loading}
-          onClear={() => { setView('search'); setResults([]); }}
-          onBack={() => setView('search')}
+          onClear={() => { setView('search'); setResults([]); setQuery(''); }}
+          onBack={() => { setView('search'); setQuery(''); }}
           onOpenProfile={(person) => { setSelectedPerson(person); setView('profile'); }}
           onConnect={onConnect}
         />

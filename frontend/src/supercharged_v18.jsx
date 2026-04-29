@@ -8,20 +8,23 @@ import {
   PROFILES_TABLE,
   PROFILE_PHOTOS_BUCKET_ID,
   CONNECTION_GATEWAY_FUNCTION_ID,
+  CONNECTIONS_TABLE,
+  VOLTZ_LEDGER_TABLE,
   Query,
   ID,
   Permission,
   Role,
 } from "./lib/appwrite";
+import SharedProfileView from "./components/SharedProfileView";
 import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
 
 // ─── CSS injected once ───────────────────────────────────────────────────────
 const GLOBAL_CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
 .sc-profile-root,.sc-profile-root *{box-sizing:border-box;margin:0;padding:0}
-.sc-profile-root{height:100%;min-height:0;display:flex;flex-direction:column}
+.sc-profile-root{height:100dvh;height:100%;min-height:0;display:flex;flex-direction:column}
 .outer{display:flex;flex:1;min-height:0;height:100%;padding:0;background:transparent}
-.phone{flex:1;width:100%;height:100%;min-height:0;display:flex;flex-direction:column;background:#EDECEA;position:relative;font-family:'DM Sans',system-ui,sans-serif;overflow:hidden}
+.phone{flex:1;width:100%;height:100dvh;height:100%;min-height:0;display:flex;flex-direction:column;background:#EDECEA;position:relative;font-family:'DM Sans',system-ui,sans-serif;overflow:hidden}
 @media (min-width:1024px){.outer{padding:16px 24px}.phone{max-width:1100px;margin:0 auto;border-radius:24px;border:1px solid rgba(0,0,0,0.08);box-shadow:0 20px 60px rgba(0,0,0,0.08)}}
 .sbar{background:#F2F2F7;border-bottom:0.5px solid #C8C8CC;padding:10px 14px 7px;flex-shrink:0;z-index:20}
 .sbar-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
@@ -101,6 +104,9 @@ const GLOBAL_CSS = `
 .soc-badge{display:inline-block;font-size:9px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;margin-top:3px}
 .soc-badge-committee{background:#CECBF6;color:#26215C}
 .soc-badge-member{background:rgba(83,74,183,0.1);color:#534AB7}
+.soc-role-input{border-radius:999px;padding:4px 12px;font-size:11px;font-weight:600;cursor:text;border:1.5px solid #534AB7;font-family:'DM Sans',sans-serif;background:rgba(83,74,183,0.06);color:#534AB7;width:110px;text-align:center;outline:none;transition:all 0.2s ease;-webkit-appearance:none}
+.soc-role-input:focus{background:#EEEDFE;border-color:#3C3489;box-shadow:0 0 0 2px rgba(83,74,183,0.1)}
+.soc-role-input::placeholder{color:rgba(83,74,183,0.4)}
 .sls{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#AFAFAF;margin-bottom:8px;padding:0 4px;margin-top:10px}
 .stats-strip{background:#FFFEFD;border-radius:18px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.07);margin-bottom:8px}
 .stat-row{display:flex;align-items:center;padding:14px 18px;border-bottom:0.5px solid #EDECEA;cursor:pointer}
@@ -137,13 +143,13 @@ const GLOBAL_CSS = `
 .lb-rank{font-size:16px;font-weight:700;color:#AFAFAF;width:24px;flex-shrink:0;text-align:center;font-family:'DM Sans',system-ui,sans-serif}
 .edit-panel{position:absolute;inset:0;z-index:60;background:rgba(237,236,234,0.92);backdrop-filter:blur(32px) saturate(1.8);-webkit-backdrop-filter:blur(32px) saturate(1.8);transform:translateY(calc(100% + 28px));transition:transform 0.42s cubic-bezier(0.16,1,0.3,1);display:flex;flex-direction:column;overflow:hidden;pointer-events:none}
 .edit-panel.open{transform:translateY(0);pointer-events:auto}
-.edit-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;background:rgba(255,254,253,0.6);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:0.5px solid rgba(0,0,0,0.1);flex-shrink:0;position:relative}
+.edit-header{display:flex;align-items:center;justify-content:space-between;padding:calc(14px + env(safe-area-inset-top, 0px)) 20px 12px;background:rgba(255,254,253,0.6);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:0.5px solid rgba(0,0,0,0.1);flex-shrink:0;position:relative}
 .edit-cancel{background:none;border:none;cursor:pointer;padding:0;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:400;color:#AFAFAF;-webkit-appearance:none}
 .edit-cancel:hover{color:#6B6B6B}
 .edit-title-text{position:absolute;left:50%;transform:translateX(-50%);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;color:#1A1A1A;letter-spacing:-0.2px}
 .edit-save{background:#1A1A1A;color:#FFFEFD;border:none;border-radius:999px;padding:7px 18px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;-webkit-appearance:none;transition:opacity 0.15s ease}
 .edit-save:hover{opacity:0.82}
-.edit-body{flex:1;overflow-y:auto;scrollbar-width:none;padding:4px 0 calc(32px + env(safe-area-inset-bottom, 0px))}
+.edit-body{flex:1;overflow-y:auto;scrollbar-width:none;padding:4px 0 calc(60px + env(safe-area-inset-bottom, 0px))}
 .edit-body::-webkit-scrollbar{display:none}
 .edit-photo-strip{margin:16px 16px 8px;display:flex;gap:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px;-webkit-overflow-scrolling:touch}
 .edit-photo-strip::-webkit-scrollbar{display:none}
@@ -190,6 +196,74 @@ const GLOBAL_CSS = `
 .growth-footer{display:flex;align-items:baseline;gap:8px}
 .growth-num{font-size:22px;font-weight:700;color:#1A1A1A;letter-spacing:-0.5px;font-family:'DM Sans',system-ui,sans-serif}
 .growth-change{font-size:12px;font-weight:500;color:#0F6E56;font-family:'DM Sans',system-ui,sans-serif}
+.completeness-bar-wrap{background:#FFFEFD;border-radius:18px;padding:16px 18px 14px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,0.07)}
+.completeness-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.completeness-label{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#AFAFAF}
+.completeness-pct{font-size:13px;font-weight:700;color:#1A1A1A;letter-spacing:-0.2px}
+.completeness-track{height:5px;background:#EDECEA;border-radius:999px;overflow:hidden;margin-bottom:12px}
+.completeness-fill{height:100%;border-radius:999px;background:linear-gradient(to right,#1A9E75,#9FE1CB);transition:width 0.5s cubic-bezier(0.4,0,0.2,1)}
+.completeness-steps{display:flex;flex-direction:column;gap:7px}
+.completeness-step{display:flex;align-items:center;gap:10px}
+.step-check{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1.5px solid #DDDAD4;transition:all 0.25s ease}
+.step-check.done{background:#1A9E75;border-color:#1A9E75}
+.step-check svg{width:10px;height:10px;stroke:#FFFEFD;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.step-text{font-size:12px;color:#6B6B6B;line-height:1.3;flex:1}
+.step-text.done{color:#AFAFAF;text-decoration:line-through}
+.step-cta{font-size:11px;font-weight:600;color:#1A9E75;cursor:pointer;white-space:nowrap}
+.completeness-wrap-done .completeness-fill{background:linear-gradient(to right,#F5C842,#E8A020)}
+.completeness-wrap-done .completeness-pct{color:#BA7517}
+.completeness-wrap-done .completeness-label{color:#C49B0A}
+.pc-romantic{background:#FEF0F4}
+.pc-romantic .p-ico{background:#F9C0D0}
+.pc-romantic .p-ico svg{stroke:#8C1A3A}
+.pc-romantic .p-label{color:#B02350}
+.pc-romantic .p-preview-name{color:#8C1A3A}
+.pc-romantic .p-preview-rest{color:#B02350}
+.pc-romantic .p-chev svg{stroke:#B02350}
+.howup-expanded{padding:0 16px 16px}
+.howup-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+.howup-row{display:flex;flex-direction:column;gap:3px}
+.howup-label{font-size:9px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#B02350;opacity:0.7}
+.howup-val{font-size:13px;font-weight:500;color:#8C1A3A}
+.intent-toggle-row{display:flex;gap:8px}
+.intent-toggle-btn{flex:1;border-radius:999px;padding:10px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s ease;text-align:center;-webkit-appearance:none}
+.intent-toggle-btn.active{background:#1A1A1A;color:#FFFEFD;border:1.5px solid #1A1A1A}
+.intent-toggle-btn.inactive{background:transparent;border:1.5px solid #DDDAD4;color:#AFAFAF}
+.howup-field-row{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:0.5px solid #EDECEA;cursor:pointer}
+.howup-field-row:last-child{border-bottom:none}
+.howup-field-left{display:flex;flex-direction:column;gap:3px}
+.howup-field-label{font-size:10px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#AFAFAF;font-family:'DM Sans',sans-serif}
+.howup-field-val{font-size:14px;color:#1A1A1A;font-family:'DM Sans',sans-serif;font-weight:400}
+.howup-field-val.empty{color:#AFAFAF;font-style:italic}
+.howup-field-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.howup-vis-badge{font-size:10px;font-weight:600;letter-spacing:0.04em;padding:3px 9px;border-radius:999px;border:1.5px solid;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.howup-vis-badge.visible{color:#0F6E56;border-color:#1A9E75;background:rgba(26,158,117,0.08)}
+.howup-vis-badge.hidden-val{color:#AFAFAF;border-color:#DDDAD4;background:transparent}
+.howup-field-caret{opacity:0.35}
+.howup-picker{position:absolute;inset:0;z-index:75;background:#EDECEA;transform:translateX(calc(100% + 28px));transition:transform 0.34s cubic-bezier(0.22,1,0.36,1);display:flex;flex-direction:column;pointer-events:none}
+.howup-picker.open{transform:translateX(0);pointer-events:auto}
+.howup-picker-nav{background:#F2F2F7;border-bottom:0.5px solid #C8C8CC;padding:11px 16px 10px;display:flex;align-items:center;position:relative;flex-shrink:0;min-height:44px}
+.howup-picker-back{display:inline-flex;align-items:center;gap:5px;background:none;border:none;cursor:pointer;color:#007AFF;font-size:14px;font-family:'DM Sans',system-ui,sans-serif;padding:0}
+.howup-picker-title{position:absolute;left:50%;transform:translateX(-50%);font-size:15px;font-weight:600;color:#1A1A1A;font-family:'DM Sans',system-ui,sans-serif;letter-spacing:-0.2px}
+.howup-picker-done{margin-left:auto;background:#1A1A1A;color:#FFFEFD;border:none;border-radius:999px;padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;-webkit-appearance:none}
+.howup-picker-body{flex:1;overflow-y:auto;padding:16px 16px 40px;scrollbar-width:none}
+.howup-picker-body::-webkit-scrollbar{display:none}
+.howup-picker-hint{font-size:11px;color:#AFAFAF;margin-bottom:14px;font-family:'DM Sans',sans-serif}
+.howup-options-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+.howup-option{background:rgba(255,254,253,0.7);border:1.5px solid #DDDAD4;border-radius:999px;padding:8px 16px;font-size:13px;font-weight:500;color:#1A1A1A;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s ease}
+.howup-option.selected{background:#1A1A1A;color:#FFFEFD;border-color:#1A1A1A}
+.howup-other-label{font-size:10px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:#AFAFAF;margin-bottom:6px;font-family:'DM Sans',sans-serif}
+.howup-other-input{font-family:'DM Sans',sans-serif;font-size:14px;color:#1A1A1A;border:none;border-bottom:1.5px solid rgba(0,0,0,0.15);background:transparent;width:100%;padding:6px 0 8px;outline:none;transition:border-color 0.2s;-webkit-text-fill-color:#1A1A1A}
+.howup-other-input:focus{border-bottom-color:#1A1A1A}
+.howup-other-input::placeholder{color:#AFAFAF;-webkit-text-fill-color:#AFAFAF}
+.howup-picker-vis-row{display:flex;align-items:center;justify-content:space-between;margin-top:24px;padding-top:16px;border-top:0.5px solid #EDECEA}
+.howup-picker-vis-label{font-size:13px;font-weight:500;color:#1A1A1A;font-family:'DM Sans',sans-serif}
+.howup-picker-vis-toggle{width:44px;height:26px;border-radius:999px;border:none;cursor:pointer;position:relative;transition:background 0.2s ease;flex-shrink:0;-webkit-appearance:none}
+.howup-picker-vis-toggle.on{background:#34C759}
+.howup-picker-vis-toggle.off{background:#DDDAD4}
+.howup-picker-vis-toggle::after{content:'';position:absolute;top:3px;width:20px;height:20px;border-radius:50%;background:#FFFEFD;transition:left 0.2s ease;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+.howup-picker-vis-toggle.on::after{left:21px}
+.howup-picker-vis-toggle.off::after{left:3px}
 `;
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -197,6 +271,39 @@ const ARTISTS = ['The Weeknd','Drake','Taylor Swift','Bad Bunny','Kendrick Lamar
 const INTERESTS = ['Football','Basketball','Tennis','Running','Hiking','Cycling','Swimming','Climbing','Yoga','Pilates','Cooking','Baking','Reading','Writing','Film','Photography','Travel','Chess','Gaming','Surfing','Skiing','Snowboarding','Boxing','Gym','Weightlifting','CrossFit','Art','Drawing','Painting','Pottery','Sculpture','Design','Theatre','Musical theatre','Dance','Ballet','Salsa','Volunteering','Podcasts','Crosswords','Meditation','Journaling','Gardening','Birdwatching','Fishing','Sailing','Horse riding','Rowing','Badminton','Squash','Table tennis','Martial arts','Kickboxing','Judo','Rock climbing','Skateboarding','Wakeboarding','Diving','Rugby','Cricket','Hockey','Golf','Frisbee','Volleyball','Netball','Lacrosse','American football','Esports','Board games','Card games','Coding','Electronics','3D printing','Astronomy','Knitting','Sewing','Calligraphy','Origami','Candle making','Cocktail making','Wine tasting','Coffee brewing','Record collecting','Songwriting','Music production','DJing','Film making','Screenwriting','Blogging','Stand-up comedy','Improv','Creative writing','Poetry','Dim sum','Street food','Fine dining','Brunch','Craft beer','Whisky tasting','Tea ceremony','Foraging','Wild swimming','Cold water dips','Parkrun','Marathon training','Triathlon','Open water swimming','Scuba diving'];
 const SOCIETIES = ['Oxford Entrepreneurs','Oxford Union','Oxford Investment Society','Oxford Consulting Group','Oxford Philosophy Society','Oxford Debate Society','Oxford Drama Society','Oxford Music Society','Oxford Film Society','Oxford Geography Society','Oxford Economics Society','Oxford Law Society','Oxford Politics Society','Oxford History Society','Oxford English Society','Oxford Mathematics Society','Oxford Science Society','Oxford Engineering Society','Oxford Medical Society','Oxford Psychology Society','Oxford Sociology Society','Oxford Architecture Society','Oxford Art Society','Oxford Fashion Society','Oxford Photography Society','Oxford Creative Writing Society','Oxford Journalism Society','Oxford Marketing Society','Oxford Finance Society','Oxford Real Estate Society','Oxford Startup Society','Oxford Tech Society','Oxford AI Society','Oxford Robotics Society','Oxford Data Science Society','Oxford Blockchain Society','Oxford Sustainability Society','Oxford Climate Society','Oxford Feminist Society','Oxford LGBTQ+ Society','Oxford International Society','Oxford African Society','Oxford Asian Society','Oxford South Asian Society','Oxford East Asian Society','Oxford Latin American Society','Oxford Middle East Society','Oxford Jewish Society','Oxford Islamic Society','Oxford Christian Union','Oxford Buddhist Society','Oxford Hindu Society','Oxford Sikh Society','Oxford Interfaith Society','Oxford Volunteer Society','Oxford RAG','Oxford Athletics Club','Oxford Swimming Club','Oxford Basketball Club','Oxford Badminton Club','Oxford Squash Club','Oxford Climbing Club','Oxford Cycling Club','Oxford Skiing Club','Oxford Rowing Club','Oxford Rugby Club','Oxford Football Club','Oxford Cricket Club','Oxford Tennis Club','Oxford Hockey Club','Oxford Fencing Club','Oxford Judo Club','Oxford Boxing Club','Oxford Dance Society','Oxford Ballet Society','Oxford Salsa Society','Oxford Choir','Oxford Orchestra','Oxford Jazz Band','Oxford A Cappella','Oxford Opera Society','Oxford Chamber Music','Cambridge Entrepreneurs','Cambridge Union','Cambridge Investment Club','LSE Consulting Society','LSE Entrepreneurs','LSE Investment Society','LSE Africa Society','LSE SU','Imperial Entrepreneurs','Imperial Robotics','UCL Entrepreneurs','UCL Investment Club','Kings Entrepreneurs','Student newspaper','Student radio','Student TV','Hackathon society','Charity committee','Environment society','Model United Nations'];
 const SUGG = { music: ARTISTS, hobbies: INTERESTS, socs: SOCIETIES };
+
+const HOWUP_FIELDS = ['relationship_status','sexuality','dating_appearance','dating_personality','dating_hobbies'];
+const HOWUP_MAP = {
+  relationship_status: 'relationshipStatus',
+  sexuality: 'sexuality',
+  dating_appearance: 'datingAppearance',
+  dating_personality: 'datingPersonality',
+  dating_hobbies: 'datingHobbies',
+};
+const HOWUP_LABELS = {
+  relationship_status: 'Relationship status',
+  sexuality: 'Sexuality',
+  dating_appearance: 'What you’re drawn to physically',
+  dating_personality: 'What matters personality-wise',
+  dating_hobbies: 'What you like doing together',
+};
+const HOWUP_DEFAULT_VIS = {
+  relationship_status: true,
+  sexuality: true,
+  dating_appearance: true,
+  dating_personality: true,
+  dating_hobbies: true,
+};
+const HOWUP_OPTIONS = {
+  relationship_status: ['Single','Dating','Seeing someone','Open relationship','Complicated','Prefer not to say'],
+  sexuality: ['Straight','Gay','Lesbian','Bisexual','Pansexual','Queer','Asexual','Questioning','Prefer not to say'],
+  dating_appearance: ['Tall','Athletic build','Slim','Well-dressed','Natural look','Put-together','Edgy or alternative','Preppy','No strong preference'],
+  dating_personality: ['Warm','Funny','Driven','Intellectual','Kind','Curious','Ambitious','Thoughtful','No strong preference'],
+  dating_hobbies: ['Coffee dates','Walks','Museums','Gym','Cooking','Reading','Travel','Films','No strong preference'],
+};
+const HOWUP_MAX = {
+  relationship_status: 1, sexuality: 1, dating_appearance: 4, dating_personality: 4, dating_hobbies: 4
+};
 
 const CHART_DATA = {
   conn: {
@@ -211,34 +318,9 @@ const CHART_DATA = {
   },
 };
 
-const CONNECTIONS = [
-  { group:'Connected this month', items:[
-    { initials:'PC', colour:'#7F77DD', name:'Pui Cheung', meta:'Co-founder, Supercharged · LSE', score:'98%', scoreClass:'score-high' },
-    { initials:'GH', colour:'#1D9E75', name:'George Hastings', meta:'Co-founder, Supercharged · Bath', score:'95%', scoreClass:'score-high' },
-    { initials:'SA', colour:'#D85A30', name:'Sofia Andersen', meta:'Founder, Kinetic Labs · Oxford', score:'83%', scoreClass:'score-high' },
-  ]},
-  { group:'Connected last month', items:[
-    { initials:'JL', colour:'#378ADD', name:'James Liu', meta:'Associate, Sequoia Capital', score:'79%', scoreClass:'score-mid' },
-    { initials:'AO', colour:'#D4537E', name:'Amara Osei', meta:'PM, Monzo · Oxford grad', score:'76%', scoreClass:'score-mid' },
-    { initials:'TW', colour:'#BA7517', name:'Tom Whitfield', meta:'IBD Analyst · Goldman Sachs', score:'71%', scoreClass:'score-mid' },
-  ]},
-  { group:'Earlier', items:[
-    { initials:'NP', colour:'#534AB7', name:'Nadia Petrov', meta:'Research, DeepMind · Oxford', score:'68%', scoreClass:'score-low' },
-    { initials:'RK', colour:'#5F5E5A', name:'Rishi Kapoor', meta:'Consultant, McKinsey London', score:'63%', scoreClass:'score-low' },
-  ]},
-];
-
-const LEADERBOARD = [
-  { rank:1, initials:'PC', colour:'#7F77DD', name:'Pui Cheung', meta:'LSE · Supercharged', voltz:'1,620', gold:true,
-    profile:{ name:'Pui Cheung', initials:'PC', colour:'#7F77DD', meta:'Co-founder, Supercharged · LSE', score:'98%', scoreClass:'score-high' }},
-  { rank:2, initials:'GH', colour:'#1D9E75', name:'George Hastings', meta:'Bath · Supercharged', voltz:'1,580' },
-  { rank:3, initials:'SA', colour:'#D85A30', name:'Sofia Andersen', meta:'Oxford · Kinetic Labs', voltz:'1,420' },
-  { rank:4, initials:'JL', colour:'#378ADD', name:'James Liu', meta:'Sequoia Capital', voltz:'1,310' },
-  { rank:5, initials:'AO', colour:'#D4537E', name:'Amara Osei', meta:'Monzo · Oxford', voltz:'1,190' },
-  { rank:6, initials:'TW', colour:'#BA7517', name:'Tom Whitfield', meta:'Goldman Sachs', voltz:'1,050' },
-  { rank:7, initials:'NP', colour:'#534AB7', name:'Nadia Petrov', meta:'DeepMind · Oxford', voltz:'890' },
-  { rank:8, initials:'RK', colour:'#5F5E5A', name:'Rishi Kapoor', meta:'McKinsey London', voltz:'740' },
-];
+const AVATAR_COLORS = ['#7B5CF0','#3B82F6','#10B981','#EF4444','#F59E0B','#8B6DD3','#2A9F7F','#C96B44','#5B8CF5'];
+function pickColor(id) { let h=0; for(let i=0;i<(id||'').length;i++) h=(h*31+id.charCodeAt(i))>>>0; return AVATAR_COLORS[h%AVATAR_COLORS.length]; }
+function scoreClass(pct) { if(pct>=80) return 'score-high'; if(pct>=60) return 'score-mid'; return 'score-low'; }
 
 // ─── Hobby icon ──────────────────────────────────────────────────────────────
 function getHobbyIcon(name) {
@@ -394,12 +476,30 @@ const DEFAULT_PROFILE_STATE = {
   music: [],
   hobbies: [],
   campus: [],
+  intentMode: 'build',
   primaryIntent: '',
   goals: [],
   desiredConnections: [],
   projectStage: '',
   careerField: '',
+  careerSubfield: '',
+  networkingStyle: '',
+  workStyle: '',
+  relationshipStatus: '',
+  sexuality: '',
+  datingAppearance: [],
+  datingPersonality: [],
+  datingHobbies: [],
   roles: {},
+  howupVals: HOWUP_FIELDS.reduce((acc, field) => {
+    acc[field] = '';
+    return acc;
+  }, {}),
+  howupVis: { ...HOWUP_DEFAULT_VIS },
+  avatarSlot: 0,
+  avatarCropX: 0.5,
+  avatarCropY: 0.3,
+  avatarCropScale: 1.0,
 };
 
 const PROFILE_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -426,13 +526,21 @@ const toHumanLabel = (value) => {
 };
 
 const deriveIntentHeading = (profileState) => {
+  const intentMode = normalizeString(profileState?.intentMode).toLowerCase();
+  if (intentMode === 'romantic') return 'Meet someone';
   const intent = normalizeString(profileState?.primaryIntent).toLowerCase();
-  if (intent === 'professional') return 'Build';
+  if (intent === 'professional' || intent === 'build') return 'Build';
   if (intent === 'social') return 'Connect';
   if (intent === 'academic') return 'Study';
-  if (intent === 'romantic') return 'Date';
+  if (intent === 'romantic') return 'Meet someone';
   if (intent) return toHumanLabel(intent);
   return profileState?.goals?.[0] ? toHumanLabel(profileState.goals[0]) : 'Build';
+};
+
+const inferIntentMode = (primaryIntent, storedMode) => {
+  const mode = normalizeString(storedMode).toLowerCase();
+  if (mode === 'romantic' || mode === 'build') return mode;
+  return normalizeString(primaryIntent).toLowerCase() === 'romantic' ? 'romantic' : 'build';
 };
 
 const normalizeStats = (stats) => ({
@@ -532,10 +640,10 @@ const buildPhotoUrl = (fileId) => {
   return String(storage.getFilePreview({
     bucketId: PROFILE_PHOTOS_BUCKET_ID,
     fileId: id,
-    width: 1800,
-    height: 1800,
-    quality: 88,
-    output: 'jpg',
+    width: 750,
+    height: 750,
+    quality: 78,
+    output: 'webp',
   }));
 };
 
@@ -641,7 +749,7 @@ function GrowthCard({ stat, titleColor, dynamicTrends }) {
 }
 
 // ─── Main App ────────────────────────────────────────────────────────────────
-export default function SuperchargedProfile() {
+export default function SuperchargedProfile({ onOpenSettings }) {
   // inject CSS once
   useEffect(() => {
     const id = 'sc-global-css';
@@ -676,11 +784,17 @@ export default function SuperchargedProfile() {
   const [photoFileIds, setPhotoFileIds] = useState([null, null, null]);
   const [photos, setPhotos] = useState([null, null, null]);
   const [photoBusySlot, setPhotoBusySlot] = useState(null);
+  // Draft photo state — only non-null while edit panel is open
+  const [draftPhotoFileIds, setDraftPhotoFileIds] = useState(null);
+  const [draftPhotos, setDraftPhotos] = useState(null);
+  const [newlyUploadedFileIds, setNewlyUploadedFileIds] = useState([]);
+  const [pendingDeleteFileIds, setPendingDeleteFileIds] = useState([]);
   const [photoIdx, setPhotoIdx] = useState(0);
   const fileRef0 = useRef(), fileRef1 = useRef(), fileRef2 = useRef();
   const touchStartXRef = useRef(null);
   const skipNextTapCycleRef = useRef(false);
   const fileRefs = [fileRef0, fileRef1, fileRef2];
+  const avatarContainerRef = useRef(null);
 
   // ── Panel state ──
   const [editOpen, setEditOpen] = useState(false);
@@ -688,13 +802,30 @@ export default function SuperchargedProfile() {
   const [voltzOpen, setVoltzOpen] = useState(false);
   const [profilePanel, setProfilePanel] = useState({ open:false, data:null });
 
+  // ── Live panel data ──
+  const [liveConnections, setLiveConnections] = useState(null);
+  const [liveLeaderboard, setLiveLeaderboard] = useState(null);
+  const [liveUserRank, setLiveUserRank] = useState(null);
+  const [liveUserVoltz, setLiveUserVoltz] = useState(null);
+  const [viewLeaderboardProfile, setViewLeaderboardProfile] = useState(null);
+  const [viewConnProfile, setViewConnProfile] = useState(null);
+  const [earnedVoltz, setEarnedVoltz] = useState(null);
+
   // ── Accordion state ──
   const [musicOpen, setMusicOpen] = useState(false);
   const [hobbiesOpen, setHobbiesOpen] = useState(false);
   const [socsOpen, setSocsOpen] = useState(false);
+  const [romanticOpen, setRomanticOpen] = useState(false);
+  const [workOpen, setWorkOpen] = useState(false);
 
   // ── Edit panel local state (initialised on open) ──
   const [editData, setEditData] = useState(null);
+  const [howupPicker, setHowupPicker] = useState({
+    open: false,
+    field: null,
+    selected: [],
+    other: '',
+  });
 
   const applyProfileRow = useCallback((row) => {
     const parsedFreeText = safeParseJson(row?.free_text_responses, {});
@@ -708,8 +839,21 @@ export default function SuperchargedProfile() {
     const goals = parseTextList(profileUi.goals ?? row?.goals, DEFAULT_PROFILE_STATE.goals);
     const desiredConnections = parseTextList(profileUi.desired_connections ?? row?.desired_connections, DEFAULT_PROFILE_STATE.desiredConnections);
     const primaryIntent = normalizeString(profileUi.primary_intent || row?.primary_intent) || DEFAULT_PROFILE_STATE.primaryIntent;
+    const intentMode = inferIntentMode(primaryIntent, profileUi.intent_mode);
     const projectStage = normalizeString(profileUi.project_stage || row?.project_stage) || DEFAULT_PROFILE_STATE.projectStage;
     const careerField = normalizeString(profileUi.career_field || row?.career_field) || DEFAULT_PROFILE_STATE.careerField;
+    const careerSubfield = normalizeString(profileUi.career_subfield || row?.career_subfield) || DEFAULT_PROFILE_STATE.careerSubfield;
+    const networkingStyle = normalizeString(profileUi.networking_style || row?.networking_style) || DEFAULT_PROFILE_STATE.networkingStyle;
+    const workStyle = normalizeString(profileUi.work_style || row?.work_style) || DEFAULT_PROFILE_STATE.workStyle;
+    const relationshipStatus = normalizeString(profileUi.relationship_status || row?.relationship_status) || DEFAULT_PROFILE_STATE.relationshipStatus;
+    const sexuality = normalizeString(profileUi.sexuality || row?.sexuality) || DEFAULT_PROFILE_STATE.sexuality;
+    const datingAppearance = parseTextList(profileUi.dating_appearance ?? row?.dating_appearance, DEFAULT_PROFILE_STATE.datingAppearance);
+    const datingPersonality = parseTextList(profileUi.dating_personality ?? row?.dating_personality, DEFAULT_PROFILE_STATE.datingPersonality);
+    const datingHobbies = parseTextList(profileUi.dating_hobbies ?? row?.dating_hobbies, DEFAULT_PROFILE_STATE.datingHobbies);
+    const avatarSlot = Math.min(2, Math.max(0, Math.round(Number(profileUi.avatar_slot ?? 0))));
+    const avatarCropX = Math.min(1, Math.max(0, Number(isNaN(Number(profileUi.avatar_crop_x)) ? 0.5 : profileUi.avatar_crop_x)));
+    const avatarCropY = Math.min(1, Math.max(0, Number(isNaN(Number(profileUi.avatar_crop_y)) ? 0.3 : profileUi.avatar_crop_y)));
+    const avatarCropScale = Math.min(3, Math.max(1, Number(isNaN(Number(profileUi.avatar_crop_scale)) ? 1.0 : profileUi.avatar_crop_scale)));
 
     const roleSource = profileUi.roles && typeof profileUi.roles === 'object' ? profileUi.roles : {};
     const roles = campus.reduce((acc, name) => {
@@ -729,12 +873,25 @@ export default function SuperchargedProfile() {
       music,
       hobbies,
       campus,
+      intentMode,
       primaryIntent,
       goals,
       desiredConnections,
       projectStage,
       careerField,
+      careerSubfield,
+      networkingStyle,
+      workStyle,
+      relationshipStatus,
+      sexuality,
+      datingAppearance,
+      datingPersonality,
+      datingHobbies,
       roles,
+      avatarSlot,
+      avatarCropX,
+      avatarCropY,
+      avatarCropScale,
     });
 
     setFreeTextResponses(parsedFreeText && typeof parsedFreeText === 'object' ? parsedFreeText : {});
@@ -758,13 +915,26 @@ export default function SuperchargedProfile() {
         music: uniqCleanList(profileState.music),
         hobbies: uniqCleanList(profileState.hobbies),
         campus: uniqCleanList(profileState.campus),
+        intent_mode: normalizeString(profileState.intentMode) || inferIntentMode(profileState.primaryIntent),
         primary_intent: normalizeString(profileState.primaryIntent),
         goals: uniqCleanList(profileState.goals),
         desired_connections: uniqCleanList(profileState.desiredConnections),
         project_stage: normalizeString(profileState.projectStage),
         career_field: normalizeString(profileState.careerField),
+        career_subfield: normalizeString(profileState.careerSubfield),
+        networking_style: normalizeString(profileState.networkingStyle),
+        work_style: normalizeString(profileState.workStyle),
+        relationship_status: normalizeString(profileState.relationshipStatus),
+        sexuality: normalizeString(profileState.sexuality),
+        dating_appearance: uniqCleanList(profileState.datingAppearance),
+        dating_personality: uniqCleanList(profileState.datingPersonality),
+        dating_hobbies: uniqCleanList(profileState.datingHobbies),
         roles: profileState.roles || {},
         photo_file_ids: normalizePhotoSlots(photoIds),
+        avatar_slot: profileState.avatarSlot ?? 0,
+        avatar_crop_x: profileState.avatarCropX ?? 0.5,
+        avatar_crop_y: profileState.avatarCropY ?? 0.3,
+        avatar_crop_scale: profileState.avatarCropScale ?? 1.0,
       },
     };
   };
@@ -804,31 +974,49 @@ export default function SuperchargedProfile() {
       setProfileError('');
       let usedCachedProfile = false;
 
+      // Instant render from persisted userId — shows profile before account.get() resolves
+      let persistedUid = null;
+      try { persistedUid = localStorage.getItem('sc:uid'); } catch { /* ignore */ }
+      if (persistedUid) {
+        const earlyCache = readCacheEntry(PROFILE_CACHE_KEY(persistedUid), PROFILE_CACHE_TTL_MS);
+        if (earlyCache?.data?.row) {
+          usedCachedProfile = true;
+          setProfileRowId(earlyCache.data.row.$id || null);
+          applyProfileRow(earlyCache.data.row);
+          const earlyStats = earlyCache.data.stats ? normalizeStats(earlyCache.data.stats) : null;
+          if (earlyStats) setStats(earlyStats);
+          if (earlyCache.data.trends) setTrends(earlyCache.data.trends);
+          setProfileLoading(false);
+        }
+      }
+
       try {
         const user = await account.get();
         if (!isMounted) return;
 
         setCurrentUserId(user.$id);
+        try { localStorage.setItem('sc:uid', user.$id); } catch { /* ignore */ }
 
-        const cached = readCacheEntry(PROFILE_CACHE_KEY(user.$id), PROFILE_CACHE_TTL_MS);
-        const cachedStats = cached?.data?.stats ? normalizeStats(cached.data.stats) : null;
-        if (cached?.data?.row) {
-          usedCachedProfile = true;
-          setProfileRowId(cached.data.row.$id || null);
-          applyProfileRow(cached.data.row);
-          if (cachedStats) {
-            setStats(cachedStats);
-          }
-          setProfileLoading(false);
+        // Different account on same device — discard the cached render
+        if (persistedUid && persistedUid !== user.$id) {
+          usedCachedProfile = false;
+          setProfileLoading(true);
         }
 
-        const result = await tables.listRows({
-          databaseId: DB_ID,
-          tableId: PROFILES_TABLE,
-          queries: [Query.equal('user_id', user.$id), Query.limit(1)],
-        });
+        // Parallel fetch: profile row + stats
+        const [rowResult, statsResult] = await Promise.all([
+          tables.listRows({
+            databaseId: DB_ID,
+            tableId: PROFILES_TABLE,
+            queries: [Query.equal('user_id', user.$id), Query.limit(1)],
+          }),
+          fetchProfileStats().catch(statsErr => {
+            console.warn('Could not load profile stats, using cached/default values.', statsErr);
+            return null;
+          }),
+        ]);
 
-        const row = result.rows?.[0] || null;
+        const row = rowResult.rows?.[0] || null;
         if (!row) {
           if (!usedCachedProfile) {
             setProfileError('No profile row found for this account.');
@@ -840,28 +1028,19 @@ export default function SuperchargedProfile() {
         setProfileRowId(row.$id);
         applyProfileRow(row);
 
-        try {
-          const result = await fetchProfileStats();
-          const { stats: nextStats, trends: nextTrends } = result;
+        const { stats: nextStats, trends: nextTrends } = statsResult || {};
+        const prevCache = readCacheEntry(PROFILE_CACHE_KEY(user.$id), PROFILE_CACHE_TTL_MS);
 
-          if (isMounted) {
+        if (isMounted) {
+          if (nextStats) {
             setStats(nextStats);
             setTrends(nextTrends);
-            writeCacheEntry(PROFILE_CACHE_KEY(user.$id), { 
-              row, 
-              stats: nextStats,
-              trends: nextTrends 
-            });
           }
-        } catch (statsErr) {
-          console.warn('Could not load profile stats, using cached/default values.', statsErr);
-          if (isMounted) {
-            writeCacheEntry(PROFILE_CACHE_KEY(user.$id), {
-              row,
-              stats: cachedStats || DEFAULT_STATS,
-              trends: cached?.data?.trends || null
-            });
-          }
+          writeCacheEntry(PROFILE_CACHE_KEY(user.$id), {
+            row,
+            stats: nextStats || prevCache?.data?.stats || DEFAULT_STATS,
+            trends: nextTrends !== undefined ? nextTrends : (prevCache?.data?.trends || null),
+          });
         }
 
       } catch (err) {
@@ -880,6 +1059,175 @@ export default function SuperchargedProfile() {
     };
   }, [applyProfileRow]);
 
+  // ── Fetch live connections when panel opens ──
+  useEffect(() => {
+    if (!connOpen || !currentUserId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const profileRes = await tables.listRows({
+          databaseId: DB_ID, tableId: PROFILES_TABLE,
+          queries: [Query.equal('user_id', currentUserId)],
+        });
+        const profileId = profileRes.rows[0]?.$id;
+        if (!profileId || cancelled) return;
+
+        const [asInitiator, asResponder] = await Promise.all([
+          tables.listRows({ databaseId: DB_ID, tableId: CONNECTIONS_TABLE, queries: [Query.equal('initiator_profile_id', profileId), Query.equal('status', 'accepted'), Query.orderDesc('$createdAt'), Query.limit(50)] }),
+          tables.listRows({ databaseId: DB_ID, tableId: CONNECTIONS_TABLE, queries: [Query.equal('responder_profile_id', profileId), Query.equal('status', 'accepted'), Query.orderDesc('$createdAt'), Query.limit(50)] }),
+        ]);
+        if (cancelled) return;
+        const seenIds = new Set();
+        const combined = [...(asInitiator.rows || []), ...(asResponder.rows || [])].filter(r => {
+          if (seenIds.has(r.$id)) return false;
+          seenIds.add(r.$id);
+          return true;
+        }).sort((a, b) => new Date(b.$createdAt) - new Date(a.$createdAt));
+        const res = { rows: combined };
+
+        const otherIds = res.rows.map(r =>
+          r.initiator_profile_id === profileId ? r.responder_profile_id : r.initiator_profile_id
+        ).filter(Boolean);
+        const compatMap = {};
+        res.rows.forEach(r => {
+          const otherId = r.initiator_profile_id === profileId ? r.responder_profile_id : r.initiator_profile_id;
+          if (otherId) compatMap[otherId] = Math.round(r.compatibility_score_snapshot || 0);
+        });
+
+        const profilesRes = otherIds.length > 0 ? await tables.listRows({
+          databaseId: DB_ID, tableId: PROFILES_TABLE,
+          queries: [Query.equal('$id', otherIds.slice(0, 25)), Query.limit(25)],
+        }) : { rows: [] };
+        if (cancelled) return;
+
+        const profileMap = {};
+        profilesRes.rows.forEach(p => { profileMap[p.$id] = p; });
+
+        const now = new Date();
+        const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+        const groups = [
+          { group: 'Connected this month', items: [] },
+          { group: 'Connected last month', items: [] },
+          { group: 'Earlier', items: [] },
+        ];
+
+        res.rows.forEach(r => {
+          const otherId = r.initiator_profile_id === profileId ? r.responder_profile_id : r.initiator_profile_id;
+          const p = profileMap[otherId];
+          const name = p?.full_name || 'Unknown';
+          const inits = ((name).split(' ').map(x=>x[0]).join('').toUpperCase().slice(0,2)) || '??';
+          const pct = compatMap[otherId] || 0;
+          const item = {
+            initials: inits, colour: pickColor(otherId), name,
+            meta: [p?.career_field, p?.college].filter(Boolean).join(' · ') || 'Oxford',
+            score: `${pct}%`, scoreClass: scoreClass(pct),
+            profileId: otherId,
+          };
+          const created = new Date(r.$createdAt);
+          if (created >= thisMonthStart) groups[0].items.push(item);
+          else if (created >= lastMonthStart) groups[1].items.push(item);
+          else groups[2].items.push(item);
+        });
+
+        setLiveConnections(groups.filter(g => g.items.length > 0));
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+  }, [connOpen, currentUserId]);
+
+  // ── Fetch live leaderboard (earned voltz only) when panel opens ──
+  useEffect(() => {
+    if (!voltzOpen || !currentUserId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Step 1: fetch all positive non-purchase ledger entries
+        const ledgerRes = await tables.listRows({
+          databaseId: DB_ID, tableId: VOLTZ_LEDGER_TABLE,
+          queries: [
+            Query.notEqual('event_type', 'purchase'),
+            Query.notEqual('event_type', 'purchase_bonus'),
+            Query.greaterThan('amount', 0),
+            Query.limit(2000),
+          ],
+        });
+        if (cancelled) return;
+
+        // Step 2: aggregate earned voltz per profile
+        const totals = {};
+        for (const row of ledgerRes.rows || []) {
+          const pid = row.profile_row_id;
+          if (pid) totals[pid] = (totals[pid] || 0) + Number(row.amount || 0);
+        }
+        const sorted = Object.entries(totals)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 20);
+        if (!sorted.length) { setLiveLeaderboard([]); return; }
+
+        // Step 3: fetch profile rows for display
+        const topIds = sorted.map(([id]) => id);
+        const profileRes = await tables.listRows({
+          databaseId: DB_ID, tableId: PROFILES_TABLE,
+          queries: [Query.equal('$id', topIds), Query.limit(20)],
+        });
+        if (cancelled) return;
+
+        const profileMap = Object.fromEntries((profileRes.rows || []).map(r => [r.$id, r]));
+
+        // Build leaderboard in ranked order
+        const board = sorted.map(([pid, earned], i) => {
+          const r = profileMap[pid] || {};
+          const name = r.full_name || 'Unknown';
+          const inits = name.split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2) || '??';
+          const isMe = r.user_id === currentUserId;
+          const photoIds = Array.isArray(r.photo_file_ids) ? r.photo_file_ids : (typeof r.photo_file_ids === 'string' ? [r.photo_file_ids] : []);
+          const photoId = photoIds[0] || null;
+          return {
+            rank: i + 1,
+            profileId: pid,
+            initials: inits,
+            colour: pickColor(pid),
+            name,
+            photoId,
+            meta: [r.career_field, r.college].filter(Boolean).join(' · ') || 'Oxford',
+            voltz: Number(earned).toLocaleString(),
+            gold: i === 0,
+            isMe,
+          };
+        });
+
+        const meEntry = board.find(lb => lb.isMe);
+        setLiveUserRank(meEntry ? meEntry.rank : null);
+        setLiveUserVoltz(meEntry ? Number(totals[topIds.find(id => profileMap[id]?.user_id === currentUserId)] || 0) : null);
+        setLiveLeaderboard(board);
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+  }, [voltzOpen, currentUserId]);
+
+  // ── Fetch earned voltz (non-purchase ledger total) ──
+  useEffect(() => {
+    if (!profileRowId) return;
+    (async () => {
+      try {
+        const res = await tables.listRows({
+          databaseId: DB_ID, tableId: VOLTZ_LEDGER_TABLE,
+          queries: [
+            Query.equal('profile_row_id', profileRowId),
+            Query.notEqual('event_type', 'purchase'),
+            Query.notEqual('event_type', 'purchase_bonus'),
+            Query.greaterThan('amount', 0),
+            Query.limit(1000),
+          ],
+        });
+        const total = (res.rows || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+        setEarnedVoltz(total);
+      } catch {}
+    })();
+  }, [profileRowId]);
+
   const openEdit = () => {
     setEditData({
       firstName: profile.firstName, lastName: profile.lastName,
@@ -887,8 +1235,85 @@ export default function SuperchargedProfile() {
       bio: profile.bio,
       music: [...profile.music], hobbies: [...profile.hobbies], campus: [...profile.campus],
       roles: { ...profile.roles },
+      intentMode: profile.intentMode,
+      relationshipStatus: profile.relationshipStatus,
+      sexuality: profile.sexuality,
+      datingAppearance: [...profile.datingAppearance],
+      datingPersonality: [...profile.datingPersonality],
+      datingHobbies: [...profile.datingHobbies],
+      careerField: profile.careerField,
+      careerSubfield: profile.careerSubfield,
+      networkingStyle: profile.networkingStyle,
+      workStyle: profile.workStyle,
+      projectStage: profile.projectStage,
+      avatarSlot: profile.avatarSlot,
+      avatarCropX: profile.avatarCropX,
+      avatarCropY: profile.avatarCropY,
+      avatarCropScale: profile.avatarCropScale,
     });
+    setDraftPhotoFileIds([...photoFileIds]);
+    setDraftPhotos([...photos]);
+    setNewlyUploadedFileIds([]);
+    setPendingDeleteFileIds([]);
     setEditOpen(true);
+  };
+
+  const openEditSection = (sectionId) => {
+    openEdit();
+    if (!sectionId) return;
+    window.setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
+  const openHowUpPicker = (field) => {
+    if (!editData) return;
+    const opts = HOWUP_OPTIONS[field] || [];
+    const val = editData[HOWUP_MAP[field]];
+    const stored = Array.isArray(val) ? val : (val ? [val] : []);
+    const selected = stored.filter((v) => opts.includes(v));
+    const otherVals = stored.filter((v) => !opts.includes(v));
+    setHowupPicker({
+      open: true,
+      field,
+      selected,
+      other: otherVals.join(', '),
+    });
+  };
+
+  const closeHowUpPicker = () => {
+    setHowupPicker((prev) => ({ ...prev, open: false, field: null }));
+  };
+
+  const toggleHowUpOption = (opt) => {
+    setHowupPicker((prev) => {
+      const field = prev.field;
+      const max = HOWUP_MAX[field] || 1;
+      if (prev.selected.includes(opt)) {
+        return { ...prev, selected: prev.selected.filter((item) => item !== opt) };
+      }
+      if (max === 1) return { ...prev, selected: [opt] };
+      if (prev.selected.length >= max) return prev;
+      return { ...prev, selected: [...prev.selected, opt] };
+    });
+  };
+
+  const saveHowUpPicker = () => {
+    const { field, selected, other } = howupPicker;
+    if (!field) return;
+    const finalVals = [...selected];
+    const otherTrim = normalizeString(other);
+    if (otherTrim) finalVals.push(otherTrim);
+
+    const max = HOWUP_MAX[field] || 1;
+    const valueToSave = max === 1 ? (finalVals[0] || '') : finalVals;
+
+    setEditData((draft) => ({
+      ...draft,
+      [HOWUP_MAP[field]]: valueToSave,
+    }));
+
+    closeHowUpPicker();
   };
 
   const saveEdit = async () => {
@@ -905,6 +1330,22 @@ export default function SuperchargedProfile() {
       hobbies: uniqCleanList(editData.hobbies),
       campus: uniqCleanList(editData.campus),
       roles: editData.roles && typeof editData.roles === 'object' ? editData.roles : {},
+      intentMode: inferIntentMode(editData.intentMode, editData.intentMode),
+      primaryIntent: inferIntentMode(editData.intentMode, editData.intentMode) === 'romantic' ? 'romantic' : 'professional',
+      careerField: normalizeString(editData.careerField),
+      careerSubfield: normalizeString(editData.careerSubfield),
+      networkingStyle: normalizeString(editData.networkingStyle),
+      workStyle: normalizeString(editData.workStyle),
+      projectStage: normalizeString(editData.projectStage),
+      relationshipStatus: normalizeString(editData.relationshipStatus),
+      sexuality: normalizeString(editData.sexuality),
+      datingAppearance: uniqCleanList(editData.datingAppearance),
+      datingPersonality: uniqCleanList(editData.datingPersonality),
+      datingHobbies: uniqCleanList(editData.datingHobbies),
+      avatarSlot: Math.min(2, Math.max(0, Math.round(Number(editData.avatarSlot ?? 0)))),
+      avatarCropX: Math.min(1, Math.max(0, Number(editData.avatarCropX ?? 0.5))),
+      avatarCropY: Math.min(1, Math.max(0, Number(editData.avatarCropY ?? 0.3))),
+      avatarCropScale: Math.min(3, Math.max(1, Number(editData.avatarCropScale ?? 1.0))),
     };
 
     const safeFirstName = p.firstName || profile.firstName || 'Oxford';
@@ -923,39 +1364,69 @@ export default function SuperchargedProfile() {
       roles: normalizedRoles,
     };
 
-    const nextFreeText = buildProfileUiPayload(nextProfile, photoFileIds);
+    const savedPhotoIds = draftPhotoFileIds || photoFileIds;
+    const nextFreeText = buildProfileUiPayload(nextProfile, savedPhotoIds);
 
     setProfileSaving(true);
     setProfileError('');
+    const payload = {
+      full_name: [safeFirstName, safeLastName].filter(Boolean).join(' ').trim(),
+      first_name: safeFirstName,
+      last_name: safeLastName,
+      primary_intent: nextProfile.primaryIntent,
+      college: nextProfile.college,
+      study_subject: nextProfile.subject,
+      year_of_study: nextProfile.year,
+      building_description: nextProfile.bio,
+      hobby: listToText(nextProfile.hobbies),
+      music: listToText(nextProfile.music),
+      societies: listToText(nextProfile.campus),
+      // Schema-backed romantic and work fields
+      relationship_status: p.relationshipStatus || null,
+      sexuality: p.sexuality || null,
+      dating_appearance: p.datingAppearance || [],
+      dating_personality: p.datingPersonality || [],
+      dating_hobbies: p.datingHobbies || [],
+      career_field: p.careerField || null,
+      career_subfield: p.careerSubfield || null,
+      networking_style: p.networkingStyle || null,
+      work_style: p.workStyle || null,
+      project_stage: p.projectStage || null,
+      free_text_responses: JSON.stringify(nextFreeText),
+    };
+
+    console.log('[saveEdit] Attempting to save profile. Payload:', payload);
+
     try {
       await tables.updateRow({
         databaseId: DB_ID,
         tableId: PROFILES_TABLE,
         rowId: profileRowId,
-        data: {
-          full_name: [safeFirstName, safeLastName].filter(Boolean).join(' ').trim(),
-          first_name: safeFirstName,
-          last_name: safeLastName,
-          college: nextProfile.college,
-          study_subject: nextProfile.subject,
-          course: nextProfile.subject,
-          year_of_study: nextProfile.year,
-          stage: nextProfile.year,
-          building_description: nextProfile.bio,
-          hobby: listToText(nextProfile.hobbies),
-          music: listToText(nextProfile.music),
-          societies: listToText(nextProfile.campus),
-          free_text_responses: JSON.stringify(nextFreeText),
-        },
+        data: payload,
       });
 
+      console.log('[saveEdit] Successfully updated document in Appwrite tables.');
+
+      // Delete photos that were removed during editing
+      const toDelete = [...pendingDeleteFileIds];
+      for (const fileId of toDelete) {
+        try { await storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, fileId); } catch { /* ignore */ }
+      }
+
+      setPhotoFileIds(savedPhotoIds);
+      setPhotos(savedPhotoIds.map((id) => buildPhotoUrl(id)));
       setFreeTextResponses(nextFreeText);
       setProfile(nextProfile);
+      setDraftPhotoFileIds(null);
+      setDraftPhotos(null);
+      setNewlyUploadedFileIds([]);
+      setPendingDeleteFileIds([]);
       setEditOpen(false);
       if (currentUserId) {
         removeCacheEntry(PROFILE_CACHE_KEY(currentUserId));
       }
     } catch (err) {
+      console.error('[saveEdit] Error updating profile row:', err);
       setProfileError(err?.message || 'Unable to save profile right now.');
     } finally {
       setProfileSaving(false);
@@ -964,18 +1435,20 @@ export default function SuperchargedProfile() {
 
   // ── Photo handlers ──
   const handlePhoto = async (idx, file) => {
-    if (!file || !profileRowId || !currentUserId) return;
+    if (!file || !currentUserId) return;
     if (file.type && !ALLOWED_PHOTO_MIME_TYPES.has(file.type)) {
       setProfileError('Please upload a JPG, PNG, WEBP, or GIF image.');
       return;
     }
 
+    // Capture snapshots before async work (photoBusySlot prevents concurrent edits)
+    const currentFileIds = draftPhotoFileIds || photoFileIds;
+    const currentUploaded = newlyUploadedFileIds;
+
     setPhotoBusySlot(idx);
     setProfileError('');
 
-    const oldFileId = photoFileIds[idx];
     let uploadedFileId = null;
-
     try {
       const uploaded = await storage.createFile(
         PROFILE_PHOTOS_BUCKET_ID,
@@ -989,24 +1462,30 @@ export default function SuperchargedProfile() {
       );
       uploadedFileId = uploaded.$id;
 
-      const nextPhotoIds = [...photoFileIds];
-      nextPhotoIds[idx] = uploadedFileId;
-      await persistPhotoSlots(nextPhotoIds);
+      const oldId = currentFileIds[idx];
+      const nextFileIds = [...currentFileIds];
+      nextFileIds[idx] = uploadedFileId;
 
-      if (oldFileId && oldFileId !== uploadedFileId) {
-        try {
-          await storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, oldFileId);
-        } catch {
-          // Ignore cleanup errors; metadata is already updated to the new file.
+      let nextUploaded = [...currentUploaded, uploadedFileId];
+      let nextPending = [...pendingDeleteFileIds];
+
+      if (oldId) {
+        if (currentUploaded.includes(oldId)) {
+          // Slot had a file uploaded this session — delete it now (never persisted)
+          storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, oldId).catch(() => {});
+          nextUploaded = nextUploaded.filter(id => id !== oldId);
+        } else {
+          nextPending = [...nextPending, oldId];
         }
       }
+
+      setDraftPhotoFileIds(nextFileIds);
+      setDraftPhotos(prev => { const next = [...(prev || photos)]; next[idx] = buildPhotoUrl(uploadedFileId); return next; });
+      setNewlyUploadedFileIds(nextUploaded);
+      setPendingDeleteFileIds(nextPending);
     } catch (err) {
       if (uploadedFileId) {
-        try {
-          await storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, uploadedFileId);
-        } catch {
-          // Ignore rollback cleanup failures.
-        }
+        try { await storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, uploadedFileId); } catch { /* ignore */ }
       }
       setProfileError(err?.message || 'Unable to upload photo right now.');
     } finally {
@@ -1014,28 +1493,21 @@ export default function SuperchargedProfile() {
     }
   };
 
-  const removePhoto = async (idx) => {
-    if (!profileRowId) return;
-    const existingFileId = photoFileIds[idx];
-    if (!existingFileId) return;
+  const removePhoto = (idx) => {
+    const currentDraft = draftPhotoFileIds || photoFileIds;
+    const oldId = currentDraft[idx];
+    if (!oldId) return;
 
-    setPhotoBusySlot(idx);
-    setProfileError('');
+    setDraftPhotoFileIds(prev => { const next = [...(prev || photoFileIds)]; next[idx] = null; return next; });
+    setDraftPhotos(prev => { const next = [...(prev || photos)]; next[idx] = null; return next; });
 
-    try {
-      const nextPhotoIds = [...photoFileIds];
-      nextPhotoIds[idx] = null;
-      await persistPhotoSlots(nextPhotoIds);
-
-      try {
-        await storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, existingFileId);
-      } catch {
-        // Ignore delete cleanup failures.
-      }
-    } catch (err) {
-      setProfileError(err?.message || 'Unable to remove photo right now.');
-    } finally {
-      setPhotoBusySlot(null);
+    if (newlyUploadedFileIds.includes(oldId)) {
+      // Never persisted to DB — delete from storage right away
+      storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, oldId).catch(() => {});
+      setNewlyUploadedFileIds(ids => ids.filter(id => id !== oldId));
+    } else {
+      // Was a pre-existing photo — queue for deletion on Save
+      setPendingDeleteFileIds(d => [...d, oldId]);
     }
   };
 
@@ -1090,11 +1562,31 @@ export default function SuperchargedProfile() {
   const photoSlotLabel = `${actualPhotoIndex}/${availablePhotoCount}`;
   const heroPhotoFallback = buildPhotoFallbackUrl(photoFileIds[photoIdx]);
 
+  const isRomantic = profile.intentMode === 'romantic';
   const intentHeading = deriveIntentHeading(profile);
-  const intentPrimaryPill = profile.goals[0] || (profile.projectStage ? `Stage: ${toHumanLabel(profile.projectStage)}` : 'Open to meaningful projects');
-  const intentSecondaryPills = (
-    (profile.desiredConnections.length ? profile.desiredConnections : profile.goals.slice(1)).filter(Boolean)
-  ).slice(0, 2);
+  const intentPrimaryPill = isRomantic
+    ? (profile.relationshipStatus || 'Open to meeting someone')
+    : (profile.goals[0] || (profile.projectStage ? `Stage: ${toHumanLabel(profile.projectStage)}` : 'Open to meaningful projects'));
+  const intentSecondaryPills = isRomantic
+    ? [profile.sexuality || 'Sexuality', ...(profile.datingAppearance.slice(0, 1)), ...(profile.datingPersonality.slice(0, 1))].filter(Boolean)
+    : ((profile.desiredConnections.length ? profile.desiredConnections : profile.goals.slice(1)).filter(Boolean)).slice(0, 2);
+
+  const visibleHowup = HOWUP_FIELDS.filter((field) => {
+    const value = profile[HOWUP_MAP[field]];
+    return Array.isArray(value) ? value.length > 0 : Boolean(value && String(value).trim());
+  });
+  const romanticNeedsDetails = isRomantic && visibleHowup.length === 0;
+
+  const completenessSteps = [
+    { id:'photo', label:'Add a profile photo', ctaLabel:'Add photo', cta:() => fileRef0.current?.click(), done: !!photos[0] },
+    { id:'bio', label:'Write your About bio', ctaLabel:'Edit', cta:() => openEdit(), done: !!(profile.bio && profile.bio.trim().length > 10) },
+    { id:'about', label:'Fill in music, hobbies & societies', ctaLabel:'Edit', cta:() => openEdit(), done: profile.music.length > 0 && profile.hobbies.length > 0 && profile.campus.length > 0 },
+    { id:'work', label:'Add work details', ctaLabel:'Edit', cta:() => openEditSection('edit-work'), done: !!(profile.careerField || profile.careerSubfield || profile.projectStage || profile.workStyle || profile.networkingStyle) },
+    { id:'intent', label:'Set your Here to intent', ctaLabel:'Edit', cta:() => openEdit(), done: !!profile.intentMode },
+    { id:'connection', label:'Make your first connection', ctaLabel:'Explore', cta:() => setConnOpen(true), done: stats.connectionsCount > 0 },
+  ];
+  const doneCount = completenessSteps.filter((step) => step.done).length;
+  const completenessPct = Math.round((doneCount / completenessSteps.length) * 100);
 
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Oxford Member';
   const subLine  = [profile.college, profile.subject, profile.year].filter(Boolean).join(' \u00a0 ');
@@ -1126,6 +1618,18 @@ export default function SuperchargedProfile() {
         <div className="scroller">
           {/* Hero */}
           <div className="hero" onClick={cyclePhoto} onTouchStart={handleHeroTouchStart} onTouchEnd={handleHeroTouchEnd}>
+            <button 
+              className="settings-cog-btn" 
+              onClick={(e) => { e.stopPropagation(); onOpenSettings?.(); }}
+              style={{
+                position: 'absolute', top: 16, left: 16, zIndex: 10,
+                width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.5)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#FFF', border: 'none', cursor: 'pointer', backdropFilter: 'blur(4px)'
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
             {hasNavigablePhotos && (
               <>
                 <div className="dots-row">
@@ -1209,10 +1713,31 @@ export default function SuperchargedProfile() {
               </div>
             )}
 
+            <div className={`completeness-bar-wrap${completenessPct===100?' completeness-wrap-done':''}`}>
+              <div className="completeness-header">
+                <span className="completeness-label">Profile completeness</span>
+                <span className="completeness-pct">{completenessPct}%</span>
+              </div>
+              <div className="completeness-track">
+                <div className="completeness-fill" style={{width: `${completenessPct}%`}}/>
+              </div>
+              <div className="completeness-steps">
+                {completenessSteps.map((step) => (
+                  <div key={step.id} className="completeness-step">
+                    <div className={`step-check${step.done ? ' done' : ''}`}>
+                      <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
+                    </div>
+                    <span className={`step-text${step.done ? ' done' : ''}`}>{step.label}</span>
+                    {!step.done && <span className="step-cta" onClick={step.cta}>{step.ctaLabel} {'>'}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Bio */}
             <div className="bio-card">
               <div className="bio-ey">About</div>
-              <div className="bio-lead">{profile.bio || 'Tell people what you are building.'}</div>
+              <div className="bio-lead">{profile.bio || 'Tell people what you are working on.'}</div>
             </div>
 
             {/* Here to */}
@@ -1231,6 +1756,53 @@ export default function SuperchargedProfile() {
             </div>
 
             <div className="slp">About me</div>
+
+            {isRomantic && (
+              <div className="p-card pc-romantic">
+                <div
+                  className="p-header"
+                  onClick={() => (romanticNeedsDetails ? openEditSection('edit-howup') : setRomanticOpen((open) => !open))}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="p-ico">
+                    <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </div>
+                  <div className="p-txt">
+                    <div className="p-label">How you show up</div>
+                    {!romanticOpen && !romanticNeedsDetails && (
+                      <>
+                        <div className="p-preview-name">{visibleHowup[0] ? (Array.isArray(profile[HOWUP_MAP[visibleHowup[0]]]) ? profile[HOWUP_MAP[visibleHowup[0]]].join(', ') : profile[HOWUP_MAP[visibleHowup[0]]]) : 'Tap to add details'}</div>
+                        <div className="p-preview-rest">{visibleHowup.slice(1, 4).map((field) => {
+                          const val = profile[HOWUP_MAP[field]];
+                          return Array.isArray(val) ? val.join(', ') : val;
+                        }).filter(Boolean).join(' · ')}</div>
+                      </>
+                    )}
+                    {!romanticOpen && romanticNeedsDetails && (
+                      <>
+                        <div className="p-preview-name">Tap to add details</div>
+                        <div className="p-preview-rest">This opens the edit modal.</div>
+                      </>
+                    )}
+                  </div>
+                  <div className={`p-chev${romanticOpen?' open':''}`}>
+                    <svg width="12" height="7" viewBox="0 0 12 7" fill="none" stroke="#B02350" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l5 5 5-5"/></svg>
+                  </div>
+                </div>
+                <div className={`p-body${romanticOpen?' open':''}`}>
+                  <div className="howup-expanded">
+                    <div className="howup-grid">
+                      {visibleHowup.map((field) => (
+                        <div key={field} className="howup-row">
+                          <span className="howup-label">{HOWUP_LABELS[field]}</span>
+                          <span className="howup-val">{Array.isArray(profile[HOWUP_MAP[field]]) ? profile[HOWUP_MAP[field]].join(', ') : profile[HOWUP_MAP[field]]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Music card */}
             <div className="p-card pc-music">
@@ -1256,10 +1828,36 @@ export default function SuperchargedProfile() {
                       <span key={m} className={i===0?'music-tag-primary':'music-tag-secondary'}>{m}</span>
                     ))}
                   </div>
-                  <div className="music-note">Currently on a Blonde loop. Anything with texture.</div>
                 </div>
               </div>
             </div>
+
+            {(profile.careerField || profile.careerSubfield || profile.projectStage || profile.workStyle || profile.networkingStyle) && (
+              <div className="p-card" style={{ background: '#FEF3E2', border: '1px solid rgba(217,119,6,0.15)' }}>
+                <div className="p-header" onClick={() => setWorkOpen((open) => !open)}>
+                  <div className="p-ico" style={{ background: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                    </svg>
+                  </div>
+                  <div className="p-txt">
+                    <div className="p-label" style={{ color: '#92400E' }}>Work</div>
+                    {!workOpen && <>
+                      <div className="p-preview-name" style={{ color: '#1A1A1A' }}>{profile.careerField || 'Tap to add work details'}</div>
+                      {(profile.careerSubfield || profile.projectStage) && <div className="p-preview-rest" style={{ color: '#92400E' }}>{[profile.careerSubfield, profile.projectStage].filter(Boolean).join(' · ')}</div>}
+                    </>}
+                  </div>
+                  <div className={`p-chev${workOpen?' open':''}`}>
+                    <svg width="12" height="7" viewBox="0 0 12 7" fill="none" stroke="#854F0B" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l5 5 5-5"/></svg>
+                  </div>
+                </div>
+                <div className={`p-body${workOpen?' open':''}`}>
+                  <div style={{ padding: '0 16px 16px', fontSize: 12, color: '#92400E', lineHeight: 1.5 }}>
+                    {[profile.workStyle, profile.networkingStyle].filter(Boolean).join(' · ') || 'Add work details from Edit profile.'}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Hobbies card */}
             <div className="p-card pc-hobbies">
@@ -1350,7 +1948,7 @@ export default function SuperchargedProfile() {
                   </svg>
                 </div>
                 <div className="stat-text">
-                  <div className="stat-num y">{stats.voltzBalance.toLocaleString()}</div>
+                  <div className="stat-num y">{(earnedVoltz ?? stats.voltzBalance).toLocaleString()}</div>
                   <div className="stat-desc">voltz earned</div>
                   <div className="stat-growth" style={{color:'#BA7517'}}>+{stats.voltzGrowth.toLocaleString()} this week</div>
                 </div>
@@ -1368,18 +1966,22 @@ export default function SuperchargedProfile() {
         {/* ── Connections panel ── */}
         <div className={`conn-panel${connOpen?' open':''}`}>
           <div className="conn-nav">
-            <button className="conn-back" onClick={() => setConnOpen(false)}>
-              <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#007AFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 7.5 8 14"/></svg> Back
+            <button className="conn-back" onClick={() => { setConnOpen(false); setLiveConnections(null); }}>
+              <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#1A1A1A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 7.5 8 14"/></svg>
             </button>
-            <div className="conn-nav-title">31 Connections</div>
+            <div className="conn-nav-title">{liveConnections ? `${liveConnections.reduce((s,g)=>s+g.items.length,0)} Connections` : 'Connections'}</div>
           </div>
           <div className="conn-score-header">Grouped by recency · <span>sorted by match</span></div>
           <div className="conn-list">
-            {CONNECTIONS.map((g,gi) => (
+            {liveConnections === null ? (
+              <div style={{padding:'24px 16px',textAlign:'center',color:'#AFAFAF',fontSize:13}}>Loading…</div>
+            ) : liveConnections.length === 0 ? (
+              <div style={{padding:'24px 16px',textAlign:'center',color:'#AFAFAF',fontSize:13}}>No connections yet</div>
+            ) : liveConnections.map((g,gi) => (
               <div key={gi}>
                 <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'#AFAFAF',padding:`${gi===0?4:12}px 4px 6px`,fontFamily:"'DM Sans',system-ui,sans-serif"}}>{g.group}</div>
                 {g.items.map(p => (
-                  <div key={p.name} className="conn-item" style={{cursor:'pointer'}} onClick={() => openConnProfile(p)}>
+                  <div key={p.name} className="conn-item" style={{cursor:'pointer'}} onClick={() => p.profileId && setViewConnProfile(p.profileId)}>
                     <div className="conn-av" style={{background:p.colour}}>{p.initials}</div>
                     <div className="conn-info">
                       <div className="conn-name">{p.name}</div>
@@ -1397,13 +1999,17 @@ export default function SuperchargedProfile() {
         <div className={`conn-panel${profilePanel.open?' open':''}`} style={{zIndex:55}}>
           <div className="conn-nav">
             <button className="conn-back" onClick={() => setProfilePanel({open:false,data:null})}>
-              <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#007AFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 7.5 8 14"/></svg> Back
+              <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#1A1A1A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 7.5 8 14"/></svg>
             </button>
             <div className="conn-nav-title">{profilePanel.data?.name || 'Profile'}</div>
           </div>
           {profilePanel.data && (
             <div className="conn-list" style={{display:'flex',flexDirection:'column',alignItems:'center',paddingTop:32}}>
-              <div style={{width:56,height:56,borderRadius:'50%',background:profilePanel.data.colour,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:600,color:'#FFFEFD',marginBottom:14}}>{profilePanel.data.initials}</div>
+              {profilePanel.data.photoId ? (
+                <img src={buildPhotoUrl(profilePanel.data.photoId)} alt="" style={{width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', marginBottom: 14}} />
+              ) : (
+                <div style={{width:56,height:56,borderRadius:'50%',background:profilePanel.data.colour,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:600,color:'#FFFEFD',marginBottom:14}}>{profilePanel.data.initials}</div>
+              )}
               <div style={{fontFamily:"'Cormorant Garamond',Georgia,serif",fontWeight:300,fontSize:30,color:'#1A1A1A',letterSpacing:'-0.3px',marginBottom:4,textAlign:'center'}}>{profilePanel.data.name}</div>
               <div style={{fontSize:13,color:'#AFAFAF',marginBottom:14,textAlign:'center'}}>{profilePanel.data.meta}</div>
               <div className={`csb ${profilePanel.data.scoreClass}`} style={{marginBottom:28}}>{profilePanel.data.score}</div>
@@ -1417,29 +2023,44 @@ export default function SuperchargedProfile() {
         {/* ── Voltz leaderboard panel ── */}
         <div className={`conn-panel${voltzOpen?' open':''}`}>
           <div className="conn-nav">
-            <button className="conn-back" onClick={() => setVoltzOpen(false)}>
-              <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#007AFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 7.5 8 14"/></svg> Back
+            <button className="conn-back" onClick={() => { setVoltzOpen(false); setLiveLeaderboard(null); }}>
+              <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#1A1A1A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 7.5 8 14"/></svg>
             </button>
             <div className="conn-nav-title">⚡ Voltz</div>
           </div>
           <div style={{margin:'12px 12px 0',background:'linear-gradient(135deg,#2A2820,#3A3628)',borderRadius:16,padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
             <div>
               <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'rgba(255,254,253,0.4)',marginBottom:4,fontFamily:"'DM Sans',sans-serif"}}>Your rank</div>
-              <div style={{fontSize:28,fontWeight:700,color:'#F5C842',letterSpacing:'-0.5px',fontFamily:"'DM Sans',sans-serif"}}>#1</div>
+              <div style={{fontSize:28,fontWeight:700,color:'#F5C842',letterSpacing:'-0.5px',fontFamily:"'DM Sans',sans-serif"}}>
+                {liveUserRank ? `#${liveUserRank}` : '—'}
+              </div>
             </div>
             <div style={{textAlign:'right'}}>
               <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'rgba(255,254,253,0.4)',marginBottom:4,fontFamily:"'DM Sans',sans-serif"}}>Voltz</div>
-              <div style={{fontSize:28,fontWeight:700,color:'#FFFEFD',letterSpacing:'-0.5px',fontFamily:"'DM Sans',sans-serif"}}>1,620 <span style={{fontSize:16}}>⚡</span></div>
+              <div style={{fontSize:28,fontWeight:700,color:'#FFFEFD',letterSpacing:'-0.5px',fontFamily:"'DM Sans',sans-serif"}}>
+                {liveUserVoltz !== null ? Number(liveUserVoltz).toLocaleString() : '—'} <span style={{fontSize:16}}>⚡</span>
+              </div>
             </div>
           </div>
-          <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'#AFAFAF',padding:'14px 16px 6px',fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>All connections</div>
+          <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'#AFAFAF',padding:'14px 16px 6px',fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>Top 20</div>
           <div className="conn-list">
-            {LEADERBOARD.map(lb => (
-              <div key={lb.rank} className="conn-item" style={lb.profile?{cursor:'pointer'}:{}} onClick={lb.profile?()=>openConnProfile(lb.profile):undefined}>
+            {liveLeaderboard === null ? (
+              <div style={{padding:'24px 16px',textAlign:'center',color:'#AFAFAF',fontSize:13}}>Loading…</div>
+            ) : liveLeaderboard.map(lb => (
+              <div
+                key={lb.rank}
+                className="conn-item"
+                style={{fontWeight: lb.isMe ? 600 : undefined, cursor: lb.isMe ? 'default' : 'pointer'}}
+                onClick={() => !lb.isMe && lb.profileId && setViewLeaderboardProfile(lb.profileId)}
+              >
                 <div className="lb-rank" style={lb.gold?{color:'#F5C842'}:{}}>{lb.rank}</div>
-                <div className="conn-av" style={{background:lb.colour,width:38,height:38,fontSize:12,flexShrink:0}}>{lb.initials}</div>
+                {lb.photoId ? (
+                  <img src={buildPhotoUrl(lb.photoId)} alt="" style={{width: 38, height: 38, borderRadius: '50%', flexShrink: 0, objectFit: 'cover'}} />
+                ) : (
+                  <div className="conn-av" style={{background:lb.colour,width:38,height:38,fontSize:12,flexShrink:0}}>{lb.initials}</div>
+                )}
                 <div className="conn-info">
-                  <div className="conn-name">{lb.name}</div>
+                  <div className="conn-name">{lb.name}{lb.isMe ? ' (you)' : ''}</div>
                   <div className="conn-meta">{lb.meta}</div>
                 </div>
                 <div style={{fontSize:lb.gold?14:13,fontWeight:lb.gold?700:600,color:lb.gold?'#C49B0A':'#AFAFAF',flexShrink:0}}>{lb.voltz} ⚡</div>
@@ -1451,7 +2072,17 @@ export default function SuperchargedProfile() {
         {/* ── Edit panel ── */}
         <div className={`edit-panel${editOpen?' open':''}`}>
           <div className="edit-header">
-            <button className="edit-cancel" onClick={() => setEditOpen(false)}>Cancel</button>
+            <button className="edit-cancel" onClick={() => {
+              // Delete any files uploaded this session (never persisted to DB)
+              newlyUploadedFileIds.forEach(id => {
+                storage.deleteFile(PROFILE_PHOTOS_BUCKET_ID, id).catch(() => {});
+              });
+              setDraftPhotoFileIds(null);
+              setDraftPhotos(null);
+              setNewlyUploadedFileIds([]);
+              setPendingDeleteFileIds([]);
+              setEditOpen(false);
+            }}>Cancel</button>
             <span className="edit-title-text">Edit profile</span>
             <button className="edit-save" onClick={saveEdit} disabled={profileSaving || photoBusySlot !== null} style={(profileSaving || photoBusySlot !== null) ? { opacity: 0.55, cursor: 'default' } : undefined}>
               {profileSaving ? 'Saving...' : 'Save'}
@@ -1460,49 +2091,174 @@ export default function SuperchargedProfile() {
           {editData && (
             <div className="edit-body">
               {/* Photo strip */}
-              <div className="edit-photo-strip">
-                {[0,1,2].map(i => (
-                  <div key={i} className="edit-photo-slot" onClick={() => fileRefs[i].current?.click()}>
-                    {photos[i] ? (
-                      <img
-                        src={photos[i]}
-                        data-fallback-src={buildPhotoFallbackUrl(photoFileIds[i]) || ''}
-                        alt=""
-                        style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}
-                        onError={(e) => {
-                          const fallback = e.currentTarget.dataset.fallbackSrc;
-                          if (fallback && e.currentTarget.src !== fallback) {
-                            e.currentTarget.src = fallback;
-                            return;
-                          }
-                          setPhotos((prev) => {
-                            if (!prev[i]) return prev;
-                            const next = [...prev];
-                            next[i] = null;
-                            return next;
-                          });
-                        }}
-                      />
-                    ) : (
-                      <>
-                        <svg className="slot-icon" viewBox="0 0 24 24">
-                          {i===0 ? <><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></> : <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>}
-                        </svg>
-                        <div className="slot-label">{i===0?'Main photo':`Photo ${i+1}`}</div>
-                      </>
-                    )}
-                    {photos[i] && (
-                      <div className="edit-photo-slot-actions">
-                        <button className="edit-photo-slot-btn" onClick={e=>{e.stopPropagation();fileRefs[i].current?.click()}}>Change</button>
-                        <button className="edit-photo-slot-btn" onClick={e=>{e.stopPropagation();removePhoto(i)}}>Remove</button>
+              <div id="edit-photos" className="edit-photo-strip">
+                {[0,1,2].map(i => {
+                  const displayPhoto = draftPhotos ? draftPhotos[i] : photos[i];
+                  const displayFileId = draftPhotoFileIds ? draftPhotoFileIds[i] : photoFileIds[i];
+                  return (
+                    <div key={i} className="edit-photo-slot" onClick={() => fileRefs[i].current?.click()}>
+                      {displayPhoto ? (
+                        <img
+                          src={displayPhoto}
+                          data-fallback-src={buildPhotoFallbackUrl(displayFileId) || ''}
+                          alt=""
+                          style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'}}
+                          onError={(e) => {
+                            const fallback = e.currentTarget.dataset.fallbackSrc;
+                            if (fallback && e.currentTarget.src !== fallback) {
+                              e.currentTarget.src = fallback;
+                              return;
+                            }
+                            setDraftPhotos((prev) => {
+                              if (!prev || !prev[i]) return prev;
+                              const next = [...prev];
+                              next[i] = null;
+                              return next;
+                            });
+                          }}
+                        />
+                      ) : photoBusySlot === i ? (
+                        <div className="slot-label">Uploading...</div>
+                      ) : (
+                        <>
+                          <svg className="slot-icon" viewBox="0 0 24 24">
+                            {i===0 ? <><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></> : <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>}
+                          </svg>
+                          <div className="slot-label">{i===0?'Main photo':`Photo ${i+1}`}</div>
+                        </>
+                      )}
+                      {displayPhoto && (
+                        <div className="edit-photo-slot-actions">
+                          <button className="edit-photo-slot-btn" onClick={e=>{e.stopPropagation();fileRefs[i].current?.click()}}>Change</button>
+                          <button className="edit-photo-slot-btn" onClick={e=>{e.stopPropagation();removePhoto(i)}}>Remove</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Avatar Crop Editor */}
+              {(() => {
+                const currentPhotos = draftPhotos || photos;
+                const avatarPhoto = currentPhotos[editData.avatarSlot] || currentPhotos[0];
+                if (!avatarPhoto) return null;
+
+                const cx = editData.avatarCropX ?? 0.5;
+                const cy = editData.avatarCropY ?? 0.3;
+                const scale = editData.avatarCropScale ?? 1.0;
+
+                const handleDrag = (e) => {
+                  const rect = avatarContainerRef.current?.getBoundingClientRect();
+                  if (!rect) return;
+                  const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                  const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                  setEditData(d => ({ ...d, avatarCropX: x, avatarCropY: y }));
+                };
+
+                return (
+                  <div className="edit-section">
+                    <div className="edit-section-label">Profile Picture</div>
+                    <div style={{ fontSize: 12, color: '#9A9A9A', marginBottom: 10 }}>
+                      Tap or drag to position your avatar circle
+                    </div>
+
+                    {/* Photo slot selector (only shown when multiple photos exist) */}
+                    {currentPhotos.filter(Boolean).length > 1 && (
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                        {[0, 1, 2].map(i => {
+                          const p = currentPhotos[i];
+                          if (!p) return null;
+                          return (
+                            <div key={i}
+                              onClick={() => setEditData(d => ({ ...d, avatarSlot: i }))}
+                              style={{
+                                width: 52, height: 52, borderRadius: 10, overflow: 'hidden',
+                                cursor: 'pointer', flexShrink: 0,
+                                border: `2.5px solid ${editData.avatarSlot === i ? '#1A1A1A' : 'rgba(0,0,0,0.1)'}`,
+                                boxSizing: 'border-box',
+                              }}
+                            >
+                              <img src={p} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
+
+                    {/* Drag surface */}
+                    <div
+                      ref={avatarContainerRef}
+                      style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', cursor: 'crosshair', touchAction: 'none', userSelect: 'none' }}
+                      onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); handleDrag(e); }}
+                      onPointerMove={e => { if (e.buttons === 0) return; handleDrag(e); }}
+                    >
+                      <img
+                        src={avatarPhoto}
+                        style={{ display: 'block', width: '100%', height: 'auto', pointerEvents: 'none' }}
+                        alt="" draggable={false}
+                      />
+                      {/* Circular crop indicator */}
+                      <div style={{
+                        position: 'absolute',
+                        left: `${cx * 100}%`,
+                        top: `${cy * 100}%`,
+                        width: 160, height: 160,
+                        borderRadius: '50%',
+                        boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
+                        border: '2px solid rgba(255,255,255,0.9)',
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'none',
+                      }} />
+                    </div>
+
+                    {/* Zoom slider */}
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 12, color: '#9A9A9A', flexShrink: 0 }}>Zoom</span>
+                      <input
+                        type="range" min={1} max={3} step={0.05}
+                        value={scale}
+                        onChange={e => setEditData(d => ({ ...d, avatarCropScale: Number(e.target.value) }))}
+                        style={{ flex: 1, accentColor: '#1A1A1A' }}
+                      />
+                    </div>
+
+                    {/* Preview */}
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 60, height: 60, borderRadius: '50%', overflow: 'hidden', border: '1.5px solid rgba(0,0,0,0.12)', flexShrink: 0 }}>
+                        <img
+                          src={avatarPhoto}
+                          style={{
+                            width: '100%', height: '100%', objectFit: 'cover',
+                            transform: `scale(${scale}) translate(${(0.5 - cx) * 100 / scale}%, ${(0.5 - cy) * 100 / scale}%)`,
+                            transformOrigin: 'center',
+                          }}
+                          alt=""
+                        />
+                      </div>
+                      <span style={{ fontSize: 11, color: '#B0B0B0', lineHeight: 1.4 }}>Preview — how others see you</span>
+                    </div>
                   </div>
-                ))}
+                );
+              })()}
+
+              <div className="edit-section">
+                <div className="edit-section-label">Here to</div>
+                <div className="intent-toggle-row">
+                  {[['build','Build'],['romantic','Meet someone']].map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={`intent-toggle-btn ${editData.intentMode===value ? 'active' : 'inactive'}`}
+                      onClick={() => setEditData((draft) => ({ ...draft, intentMode: value }))}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* About */}
-              <div className="edit-section">
+              <div id="edit-about" className="edit-section">
                 <div className="edit-section-label">About</div>
                 <textarea className="edit-textarea" value={editData.bio}
                   onChange={e => setEditData(d=>({...d,bio:e.target.value}))}
@@ -1512,8 +2268,43 @@ export default function SuperchargedProfile() {
                 <div className="edit-count" style={{color:editData.bio.length>200?'#E24B4A':'#AFAFAF'}}>{editData.bio.length} / 200</div>
               </div>
 
+              {/* Work */}
+              <div id="edit-work" className="edit-section">
+                <div className="edit-section-label">Work</div>
+                <div className="edit-field">
+                  <div className="edit-label">Career field</div>
+                  <input className="edit-input" type="text" value={editData.careerField}
+                    onChange={e => setEditData(d=>({...d,careerField:e.target.value}))}
+                    placeholder="e.g. Product design, Law, Finance"/>
+                </div>
+                <div className="edit-field">
+                  <div className="edit-label">Career subfield</div>
+                  <input className="edit-input" type="text" value={editData.careerSubfield}
+                    onChange={e => setEditData(d=>({...d,careerSubfield:e.target.value}))}
+                    placeholder="e.g. UX research, Corporate law"/>
+                </div>
+                <div className="edit-field">
+                  <div className="edit-label">Project stage</div>
+                  <input className="edit-input" type="text" value={editData.projectStage || ''}
+                    onChange={e => setEditData(d=>({...d,projectStage:e.target.value}))}
+                    placeholder="e.g. Researching, building, shipping"/>
+                </div>
+                <div className="edit-field">
+                  <div className="edit-label">Work style</div>
+                  <input className="edit-input" type="text" value={editData.workStyle}
+                    onChange={e => setEditData(d=>({...d,workStyle:e.target.value}))}
+                    placeholder="e.g. Deep work, collaborative, remote-first"/>
+                </div>
+                <div className="edit-field">
+                  <div className="edit-label">Networking style</div>
+                  <input className="edit-input" type="text" value={editData.networkingStyle}
+                    onChange={e => setEditData(d=>({...d,networkingStyle:e.target.value}))}
+                    placeholder="e.g. 1:1 coffee chats, intro-first"/>
+                </div>
+              </div>
+
               {/* Identity */}
-              <div className="edit-section">
+              <div id="edit-identity" className="edit-section">
                 <div className="edit-section-label">Identity</div>
                 {[
                   ['First name','firstName'],['Last name','lastName'],
@@ -1528,7 +2319,7 @@ export default function SuperchargedProfile() {
               </div>
 
               {/* Music */}
-              <div className="edit-section">
+              <div id="edit-music" className="edit-section">
                 <div className="edit-section-label">Listening to</div>
                 <div className="tag-chips-wrap">
                   {editData.music.map(m => (
@@ -1541,7 +2332,7 @@ export default function SuperchargedProfile() {
               </div>
 
               {/* Hobbies */}
-              <div className="edit-section">
+              <div id="edit-hobbies" className="edit-section">
                 <div className="edit-section-label">Outside of work</div>
                 <div className="tag-chips-wrap">
                   {editData.hobbies.map(h => (
@@ -1554,7 +2345,7 @@ export default function SuperchargedProfile() {
               </div>
 
               {/* Societies */}
-              <div className="edit-section">
+              <div id="edit-societies" className="edit-section">
                 <div className="edit-section-label">On campus</div>
                 <div className="tag-chips-wrap">
                   {editData.campus.map(s => (
@@ -1572,13 +2363,13 @@ export default function SuperchargedProfile() {
                       return (
                         <div key={soc} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'0.5px solid rgba(0,0,0,0.07)'}}>
                           <span style={{fontSize:13,color:'#1A1A1A',fontFamily:"'DM Sans',sans-serif"}}>{soc}</span>
-                          <button onClick={() => setEditData(d=>({...d,roles:{...d.roles,[soc]:isCom?'Member':'Committee'}}))}
-                            style={{borderRadius:999,padding:'4px 12px',fontSize:11,fontWeight:600,cursor:'pointer',border:'1.5px solid',fontFamily:"'DM Sans',sans-serif",
-                              background:isCom?'#CECBF6':'rgba(83,74,183,0.08)',
-                              color:isCom?'#26215C':'#534AB7',
-                              borderColor:isCom?'#26215C':'#534AB7'}}>
-                            {role}
-                          </button>
+                          <input
+                            className="soc-role-input"
+                            type="text"
+                            value={editData.roles[soc] || ''}
+                            placeholder="Member"
+                            onChange={e => setEditData(d => ({ ...d, roles: { ...d.roles, [soc]: e.target.value } }))}
+                          />
                         </div>
                       );
                     })}
@@ -1586,11 +2377,95 @@ export default function SuperchargedProfile() {
                 )}
                 <TagInput type="socs" chips={editData.campus} setChips={v => setEditData(d=>({...d,campus:typeof v==='function'?v(d.campus):v}))} placeholder="Add a society or club..."/>
               </div>
+
+              {editData.intentMode === 'romantic' && (
+                <div id="edit-howup" className="edit-section">
+                  <div className="edit-section-label">How you show up</div>
+                  <p style={{fontSize:11,color:'#AFAFAF',marginBottom:6,lineHeight:1.5,fontFamily:"'DM Sans',sans-serif"}}>
+                    These fields are stored directly in the profile row.
+                  </p>
+                  <div>
+                    {HOWUP_FIELDS.map((field) => {
+                      const value = editData[HOWUP_MAP[field]];
+                      const isEmpty = Array.isArray(value) ? value.length === 0 : !value || !String(value).trim();
+                      const display = Array.isArray(value) ? value.join(', ') : value;
+                      return (
+                        <div key={field} className="howup-field-row" onClick={() => openHowUpPicker(field)}>
+                          <div className="howup-field-left">
+                            <span className="howup-field-label">{HOWUP_LABELS[field]}</span>
+                            <span className={`howup-field-val${isEmpty ? ' empty' : ''}`}>
+                              {isEmpty ? `Add ${HOWUP_LABELS[field].toLowerCase()}` : display}
+                            </span>
+                          </div>
+                          <div className="howup-field-right">
+                            <span className="howup-field-caret">
+                              <svg width="7" height="12" viewBox="0 0 7 12" fill="none" stroke="#1A1A1A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l5 5-5 5"/></svg>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
+          <div className={`howup-picker${howupPicker.open?' open':''}`}>
+            <div className="howup-picker-nav">
+              <button className="howup-picker-back" onClick={closeHowUpPicker}>
+                <svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="#007AFF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 7.5 8 14"/></svg>
+                Back
+              </button>
+              <div className="howup-picker-title">{howupPicker.field ? HOWUP_LABELS[howupPicker.field] : ''}</div>
+              <button className="howup-picker-done" onClick={saveHowUpPicker}>Done</button>
+            </div>
+            <div className="howup-picker-body">
+              {howupPicker.field && (() => {
+                const max = HOWUP_MAX[howupPicker.field] || 1;
+                const options = HOWUP_OPTIONS[howupPicker.field] || [];
+                return (
+                  <>
+                    <div className="howup-picker-hint">{max === 1 ? 'Select one' : `Select up to ${max}`}</div>
+                    <div className="howup-options-wrap">
+                      {options.map((option) => (
+                        <div
+                          key={option}
+                          className={`howup-option${howupPicker.selected.includes(option) ? ' selected' : ''}`}
+                          onClick={() => toggleHowUpOption(option)}
+                        >
+                          {option}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="howup-other-label">Something else</div>
+                    <input
+                      className="howup-other-input"
+                      type="text"
+                      placeholder="Type your own answer..."
+                      value={howupPicker.other}
+                      onChange={(e) => setHowupPicker((prev) => ({ ...prev, other: e.target.value }))}
+                    />
+                  </>
+                );
+              })()}
+            </div>
+          </div>
       </div>
       </div>
       </div>
+      {viewLeaderboardProfile && (
+        <SharedProfileView
+          profileId={viewLeaderboardProfile}
+          onClose={() => setViewLeaderboardProfile(null)}
+        />
+      )}
+      {viewConnProfile && (
+        <SharedProfileView
+          profileId={viewConnProfile}
+          onClose={() => setViewConnProfile(null)}
+        />
+      )}
     </div>
   );
 }

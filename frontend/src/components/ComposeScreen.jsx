@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { ArrowUp } from 'lucide-react';
 import { functions, CONNECTION_GATEWAY_FUNCTION_ID } from '../lib/appwrite';
 
 const COMPOSE_CSS = `
-.csc-wrap { position:absolute; inset:0; display:flex; flex-direction:column; background:#FFFEFD; border-radius:44px; overflow:hidden; z-index:30; font-family:'DM Sans',sans-serif; }
+.csc-wrap { position:absolute; inset:0; display:flex; flex-direction:column; background:#FFFEFD; border-radius:44px 44px 0 0; overflow:hidden; z-index:30; font-family:'DM Sans',sans-serif; }
 .csc-header { padding:10px 20px; border-bottom:1px solid #DDDBD8; flex-shrink:0; }
 .csc-header-row { display:flex; align-items:center; gap:12px; }
 .csc-back-btn { background:none; border:none; font-size:26px; color:#1A1A1A; font-weight:400; padding:6px 10px 6px 0; margin-left:-4px; cursor:pointer; min-height:44px; display:flex; align-items:center; line-height:1; }
@@ -21,21 +22,21 @@ const COMPOSE_CSS = `
 .csc-bubble-in { background:#F0EDE8; border:none; border-radius:22px; padding:10px 14px; font-weight:400; font-size:14px; color:#1A1A1A; line-height:1.55; max-width:100%; }
 .csc-bubble-out-wrap { align-self:flex-end; max-width:78%; display:flex; flex-direction:column; align-items:flex-end; }
 .csc-bubble-out { background:#1A1A1A; border:none; border-radius:22px; padding:10px 14px; font-weight:400; font-size:14px; color:#FFFEFD; line-height:1.55; }
-.csc-input-bar { border-top:1px solid #DDDBD8; border-bottom:none; padding:10px 16px 18px; display:flex; align-items:center; gap:10px; background:#FFFEFD; flex-shrink:0; }
-.csc-ai-orb { width:36px; height:36px; border-radius:50%; border:1.5px solid #1A1A1A; background:#FFFEFD; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#F59E0B; }
-.csc-input-field { flex:1; border:1.5px solid #1A1A1A; border-radius:999px; background:#FFFEFD; padding:4px 4px 4px 16px; display:flex; align-items:center; gap:8px; min-height:40px; position:relative; border-bottom:none; }
-.csc-input-field textarea { flex:1; border:none; outline:none; background:transparent; font-family:'DM Sans',sans-serif; font-weight:400; font-size:16px; color:#1A1A1A; padding:6px 0; min-width:0; resize:none; max-height:100px; overflow-y:auto; line-height:1.5; }
+.csc-input-bar { border-top:1px solid #DDDBD8; padding:12px 16px; display:flex; align-items:center; gap:10px; background:#FFFEFD; flex-shrink:0; }
+.csc-ai-orb { width:36px; height:36px; border-radius:50%; border:1px solid #1A1A1A; background:#FFFEFD; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; color:#F59E0B; }
+.csc-input-field { flex:1; border:1px solid #1A1A1A; border-radius:24px; background:#FFFEFD; padding:2px 4px 2px 16px; display:flex; align-items:center; gap:8px; min-height:40px; position:relative; }
+.csc-input-field textarea { flex:1; border:none; outline:none; background:transparent; font-family:'DM Sans',sans-serif; font-weight:400; font-size:16px; color:#1A1A1A; padding:8px 0; min-width:0; resize:none; max-height:120px; overflow-y:auto; line-height:1.4; }
 .csc-input-field textarea::placeholder { color:#AFAFAF; }
-.csc-send-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; flex-shrink:0; transition:all 0.15s ease; }
-.csc-send-btn.active { background:#007AFF; }
-.csc-send-btn.inactive { background:#F2F0EC; opacity:0.5; cursor:not-allowed; }
+.csc-send-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; flex-shrink:0; transition:opacity 0.15s ease, background 0.15s ease; background:#007AFF; }
+.csc-send-btn.active { opacity:1; pointer-events:auto; }
+.csc-send-btn.inactive { opacity:0; pointer-events:none; }
 .csc-ai-sheet-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.3); z-index:50; }
 .csc-ai-sheet { position:absolute; left:0; right:0; bottom:0; background:#FFFEFD; border-radius:22px 22px 0 0; padding:0 20px 32px; z-index:51; }
 .csc-ai-sheet-handle { width:40px; height:4px; background:#DDDBD8; border-radius:999px; margin:14px auto 18px; }
 .csc-ai-label { font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#AFAFAF; }
-.csc-ai-draft-area { width:100%; border:none; border-bottom:1.5px solid #1A1A1A; background:transparent; font-family:'Playfair Display',serif; font-weight:300; font-size:17px; color:#1A1A1A; line-height:1.65; padding:12px 0; outline:none; resize:none; margin-top:8px; min-height:90px; }
+.csc-ai-draft-area { width:100%; border:none; border-bottom:1px solid #1A1A1A; background:transparent; font-family:'Playfair Display',serif; font-weight:300; font-size:17px; color:#1A1A1A; line-height:1.65; padding:12px 0; outline:none; resize:none; margin-top:8px; min-height:90px; }
 .csc-ai-draft-hint { font-weight:400; font-size:12px; color:#AFAFAF; font-style:italic; margin-top:8px; }
-.csc-btn-outline { width:100%; border:1.5px solid #1A1A1A; border-radius:999px; padding:14px; font-weight:600; font-size:14px; color:#1A1A1A; background:#FFFEFD; cursor:pointer; margin-top:16px; }
+.csc-btn-outline { width:100%; border:1px solid #1A1A1A; border-radius:999px; padding:14px; font-weight:600; font-size:14px; color:#1A1A1A; background:#FFFEFD; cursor:pointer; margin-top:16px; }
 .csc-btn-filled { width:100%; background:#1A1A1A; border:none; border-radius:999px; padding:14px; font-weight:600; font-size:14px; color:#FFFEFD; cursor:pointer; margin-top:10px; }
 `;
 
@@ -63,10 +64,16 @@ export default function ComposeScreen({ person, onClose, onSend }) {
     return () => {};
   }, []);
 
-  const autoResize = (e) => {
-    e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
+  const autoResize = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+    }
   };
+
+  useEffect(() => {
+    autoResize();
+  }, [text]);
 
   const handleDraftAI = async () => {
     if (!person) return;
@@ -102,7 +109,10 @@ export default function ComposeScreen({ person, onClose, onSend }) {
   const handleUseDraft = () => {
     setText(aiDraft);
     setAiOpen(false);
-    setTimeout(() => textareaRef.current?.focus(), 100);
+    setTimeout(() => {
+      textareaRef.current?.focus();
+      autoResize();
+    }, 100);
   };
 
   const handleSend = () => {
@@ -162,13 +172,7 @@ export default function ComposeScreen({ person, onClose, onSend }) {
 
       {/* Thread */}
       <div className="csc-thread">
-        {text.trim() ? (
-          <div className="csc-bubble-out-wrap">
-            <div className="csc-bubble-out">{text}</div>
-          </div>
-        ) : (
-          <div className="csc-empty-hint">Write your opening message below</div>
-        )}
+        <div className="csc-empty-hint">Write your opening message below</div>
       </div>
 
       {/* Input bar */}
@@ -195,7 +199,7 @@ export default function ComposeScreen({ person, onClose, onSend }) {
             ref={textareaRef}
             rows={1}
             value={text}
-            onChange={(e) => { setText(e.target.value); autoResize(e); }}
+            onChange={(e) => { setText(e.target.value); }}
             placeholder="Write your message..."
             disabled={drafting}
           />
@@ -204,10 +208,7 @@ export default function ComposeScreen({ person, onClose, onSend }) {
             onClick={handleSend}
             disabled={!canSend}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={canSend ? '#FFFEFD' : '#AFAFAF'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
+            <ArrowUp size={16} color="#fff" strokeWidth={2.5} />
           </button>
         </div>
       </div>

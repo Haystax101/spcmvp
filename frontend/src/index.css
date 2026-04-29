@@ -192,12 +192,12 @@ body {
 
 @media (max-width: 700px) {
   .flow-diagram {
-    flex-direction: column;
-    gap: 12px;
+    flex-direction: row;
+    gap: 0;
   }
 
   .flow-arrow {
-    margin-bottom: 0;
-    transform: rotate(90deg);
+    margin-bottom: 20px;
+    transform: none;
   }
 }

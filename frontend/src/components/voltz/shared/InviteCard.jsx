@@ -56,7 +56,7 @@ export default function InviteCard({ referralCode }) {
             Invite Friends
           </div>
           <div style={{ fontFamily: SANS, fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.5, maxWidth: 200 }}>
-            Earn 100 voltz for every friend who joins using your link.
+            Earn 5 voltz for every friend who joins using your link.
           </div>
         </div>
         <div style={{
@@ -65,7 +65,7 @@ export default function InviteCard({ referralCode }) {
           fontFamily: SANS, fontSize: 12, fontWeight: 600,
           color: "rgba(255,255,255,0.8)",
         }}>
-          +100 each
+          +5 each
         </div>
       </div>
 

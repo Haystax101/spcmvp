@@ -1,6 +1,40 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
 
+// Each rendered card gets its own x/rotate MotionValues so exit animations
+// on the departing card never bleed into the entering card's initial position.
+const DraggableCard = ({ swipeDir, index, deckLength, onAdvance, children }) => {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-200, 0, 200], [-3, 0, 3]);
+
+  const handleDragEnd = useCallback((_, info) => {
+    const direction = info.offset.x < 0 ? 1 : -1;
+    const oob = index + direction < 0 || index + direction >= deckLength;
+    if ((Math.abs(info.offset.x) > 90 || Math.abs(info.velocity.x) > 500) && !oob) {
+      onAdvance(direction);
+    } else {
+      animate(x, 0, { type: 'spring', stiffness: 500, damping: 40, mass: 1 });
+    }
+  }, [index, deckLength, onAdvance, x]);
+
+  return (
+    <motion.div
+      drag="x"
+      dragConstraints={{ left: -120, right: 120 }}
+      dragElastic={0.5}
+      onDragEnd={handleDragEnd}
+      style={{ x, rotate, touchAction: 'pan-y', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+      custom={swipeDir}
+      initial={(d) => d === 0 ? { opacity: 0, scale: 0.98 } : { x: d > 0 ? 360 : -360, opacity: 0, scale: 0.98 }}
+      animate={{ x: 0, opacity: 1, scale: 1 }}
+      exit={(d) => ({ x: d > 0 ? -380 : 380, opacity: 0, rotate: d > 0 ? -6 : 6, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } })}
+      transition={{ x: { type: 'spring', stiffness: 320, damping: 34 }, opacity: { duration: 0.25 }, scale: { duration: 0.3 } }}
+    >
+      {children}
+    </motion.div>
+  );
+};
+
 export const compatColor = (score) => {
   if (score >= 85) return 'var(--success)';
   if (score >= 70) return 'var(--dim-network)';
@@ -14,7 +48,7 @@ export const BoltIcon = ({ size = 12 }) => (
 );
 
 export const CardPhoto = ({ p, onCompatTap }) => (
-  <div style={{ position: 'relative', width: '100%', height: '65%', overflow: 'hidden', flexShrink: 0, background: p.color || p.accent }}>
+  <div onClick={onCompatTap} style={{ position: 'relative', width: '100%', height: 315, overflow: 'hidden', flexShrink: 0, background: p.color || p.accent, cursor: 'pointer' }}>
     {(p.photo_url || p.photo) && (
       <img
         src={p.photo_url || p.photo}
@@ -80,18 +114,20 @@ export const NewConnectionCard = ({ p, onAccept, onDecline, onCompatTap }) => (
   <>
     <CardPhoto p={p} onCompatTap={onCompatTap} />
     <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', background: 'var(--bg)', minHeight: 0 }}>
-      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 }}
-        style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 10, color: 'var(--text2)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-        THEY WROTE
-      </motion.div>
-      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.22 }}
-        style={{ marginTop: 6, fontFamily: 'var(--font-sans)', fontWeight: 400, fontSize: 14, color: 'var(--text)', lineHeight: 1.55, flex: 1 }}>
-        "{p.message}"
-      </motion.div>
-      <div style={{ marginTop: 12, display: 'flex', flexWrap: 'nowrap', gap: 6, overflow: 'hidden' }}>
-        {(p.compat_chips || p.chips || []).slice(0, 3).map((c, i) => (
-          <Chip key={i} chip={c} delay={0.3 + i * 0.04} />
-        ))}
+      <div onClick={onCompatTap} style={{ flex: 1, display: 'flex', flexDirection: 'column', cursor: 'pointer', minHeight: 0 }}>
+        <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 }}
+          style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 10, color: 'var(--text2)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+          THEY WROTE
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.22 }}
+          style={{ marginTop: 6, fontFamily: 'var(--font-sans)', fontWeight: 400, fontSize: 14, color: 'var(--text)', lineHeight: 1.55, flex: 1 }}>
+          "{p.message}"
+        </motion.div>
+        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'nowrap', gap: 6, overflow: 'hidden' }}>
+          {(p.compat_chips || p.chips || []).slice(0, 3).map((c, i) => (
+            <Chip key={i} chip={c} delay={0.3 + i * 0.04} />
+          ))}
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
         <CardButton variant="secondary" onClick={onDecline}>Decline</CardButton>
@@ -106,30 +142,31 @@ export const SurfacedCard = ({ p, onSkip, onConnect, onCompatTap }) => {
     p.primary_intent && { label: p.primary_intent, dot: 'var(--dim-intent)', border: 'rgba(61,170,130,0.3)', bg: 'rgba(61,170,130,0.08)' },
     p.college && { label: `${p.college} alumni`, dot: 'var(--dim-resonance)', border: 'rgba(155,124,246,0.3)', bg: 'rgba(155,124,246,0.08)' },
     p.year_of_study && { label: p.year_of_study, dot: '#F59E0B', border: 'rgba(245,158,11,0.3)', bg: 'rgba(245,158,11,0.08)' },
-    (p.career_field || p.study_subject) && { label: p.career_field || p.study_subject, dot: 'var(--text3)', border: 'rgba(175,175,175,0.3)', bg: 'rgba(175,175,175,0.08)' },
+    (p.career_field || p.study_subject) && { label: p.career_field || p.study_subject, dot: '#3B82F6', border: 'rgba(59,130,246,0.3)', bg: 'rgba(59,130,246,0.08)' },
   ].filter(Boolean).slice(0, 4);
 
   return (
     <>
       <CardPhoto p={p} onCompatTap={onCompatTap} />
       <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', background: 'var(--bg)', minHeight: 0 }}>
-        <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.12 }}
-          style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 10, color: 'var(--success)', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <BoltIcon size={10} />
-          WHY YOU'D WANT TO TALK
-        </motion.div>
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
-          style={{ marginTop: 6, fontFamily: 'var(--font-serif)', fontWeight: 400, fontSize: 18, color: 'var(--text)', lineHeight: 1.3, letterSpacing: '-0.01em', flex: 1,
-            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {p.hook || p.building_description || p.match_reason || `${p.career_field || 'Building'} · ${p.college || 'Oxford'}`}
-        </motion.div>
-        <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {pills.map((pill, i) => (
-            <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${pill.border}`, borderRadius: 999, padding: '4px 10px', background: pill.bg, fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 11, color: pill.dot, whiteSpace: 'nowrap' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: pill.dot, flexShrink: 0 }} />
-              {String(pill.label).length > 20 ? String(pill.label).slice(0, 20) + '…' : pill.label}
-            </div>
-          ))}
+        <div onClick={onCompatTap} style={{ flex: 1, display: 'flex', flexDirection: 'column', cursor: 'pointer', minHeight: 0 }}>
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.12 }}
+            style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 10, color: 'var(--success)', letterSpacing: '0.12em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <BoltIcon size={10} />
+            WHY YOU'D WANT TO TALK
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
+            style={{ marginTop: 6, fontFamily: 'var(--font-serif)', fontWeight: 400, fontSize: 18, color: 'var(--text)', lineHeight: 1.3, letterSpacing: '-0.01em', flex: 1, overflow: 'hidden' }}>
+            {p.hook || p.building_description || p.match_reason || `${p.career_field || 'Building'} · ${p.college || 'Oxford'}`}
+          </motion.div>
+          <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {pills.map((pill, i) => (
+              <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${pill.border}`, borderRadius: 999, padding: '4px 10px', background: pill.bg, fontFamily: 'var(--font-sans)', fontWeight: 500, fontSize: 11, color: pill.dot, whiteSpace: 'nowrap' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: pill.dot, flexShrink: 0 }} />
+                {String(pill.label).length > 20 ? String(pill.label).slice(0, 20) + '…' : pill.label}
+              </div>
+            ))}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
           <CardButton variant="secondary" onClick={onSkip}>Skip</CardButton>
@@ -140,34 +177,22 @@ export const SurfacedCard = ({ p, onSkip, onConnect, onCompatTap }) => {
   );
 };
 
-export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap, onViewInbox }) => {
+export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap, onViewInbox, onSkip }) => {
   const [index, setIndex] = useState(0);
   const [swipeDir, setSwipeDir] = useState(0);
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 0, 200], [-3, 0, 3]);
 
   useEffect(() => { setIndex(0); }, [tab]);
 
+  // Clamp index when deck shrinks (e.g. after a skip removes the last card)
+  useEffect(() => {
+    if (deck.length > 0 && index >= deck.length) setIndex(deck.length - 1);
+  }, [deck.length]);
+
   const advance = useCallback((dir) => {
-    if (index + dir < 0 || index + dir >= deck.length) {
-      animate(x, 0, { type: 'spring', stiffness: 400, damping: 32 });
-      return;
-    }
+    if (index + dir < 0 || index + dir >= deck.length) return;
     setSwipeDir(dir);
     setIndex((i) => i + dir);
-    x.set(0);
-  }, [index, deck.length, x]);
-
-  const handleDragEnd = (_, info) => {
-    const direction = info.offset.x < 0 ? 1 : -1;
-    const wouldBeOutOfBounds = index + direction < 0 || index + direction >= deck.length;
-
-    if ((Math.abs(info.offset.x) > 90 || Math.abs(info.velocity.x) > 500) && !wouldBeOutOfBounds) {
-      advance(direction);
-    } else {
-      animate(x, 0, { type: 'spring', stiffness: 500, damping: 40, mass: 1 });
-    }
-  };
+  }, [index, deck.length]);
 
   if (!deck.length) return (
     <motion.div
@@ -179,6 +204,9 @@ export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap, onViewI
     </motion.div>
   );
 
+  // Guard: briefly null while the clamping effect fires after a skip
+  if (index >= deck.length) return null;
+
   const p = deck[index];
   const next = deck[index + 1];
 
@@ -187,22 +215,16 @@ export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap, onViewI
       <div style={{ position: 'relative', width: '100%', height: 560 }}>
         {next && (
           <div style={{ position: 'absolute', top: 8, left: 8, right: 8, bottom: 0, borderRadius: 20, background: 'var(--bg)', border: '1.5px solid var(--border-light)', transform: 'scale(0.96)', opacity: 0.6, pointerEvents: 'none', overflow: 'hidden' }}>
-            <img src={next.photo_url || next.photo} alt="" style={{ width: '100%', height: '65%', objectFit: 'cover', objectPosition: 'center top', display: 'block', filter: 'blur(1px)' }} onError={(e) => { e.target.style.display = 'none'; }} />
+            <img src={next.photo_url || next.photo} alt="" style={{ width: '100%', height: 220, objectFit: 'cover', objectPosition: 'center top', display: 'block', filter: 'blur(1px)' }} onError={(e) => { e.target.style.display = 'none'; }} />
           </div>
         )}
         <AnimatePresence custom={swipeDir} initial={false}>
-          <motion.div
+          <DraggableCard
             key={`${tab}-${index}`}
-            custom={swipeDir}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.4}
-            onDragEnd={handleDragEnd}
-            style={{ x, rotate, touchAction: 'pan-y', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
-            initial={(d) => d === 0 ? { opacity: 0, scale: 0.98, x: 0 } : { x: d > 0 ? 360 : -360, opacity: 0, scale: 0.98 }}
-            animate={{ x: 0, opacity: 1, scale: 1 }}
-            exit={(d) => ({ x: d > 0 ? -380 : 380, opacity: 0, rotate: d > 0 ? -6 : 6, transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } })}
-            transition={{ x: { type: 'spring', stiffness: 320, damping: 34 }, opacity: { duration: 0.25 }, scale: { duration: 0.3 } }}
+            swipeDir={swipeDir}
+            index={index}
+            deckLength={deck.length}
+            onAdvance={advance}
           >
             <div style={{ width: '100%', height: 560, borderRadius: 20, overflow: 'hidden', background: 'var(--bg)', border: '1.5px solid var(--border)', display: 'flex', flexDirection: 'column', willChange: 'transform, opacity' }}>
               {tab === 'new' ? (
@@ -215,13 +237,13 @@ export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap, onViewI
               ) : (
                 <SurfacedCard
                   p={p}
-                  onSkip={() => advance(1)}
+                  onSkip={() => onSkip?.(p)}
                   onConnect={() => onConnect(p)}
                   onCompatTap={() => onCompatTap(p, 'surfaced')}
                 />
               )}
             </div>
-          </motion.div>
+          </DraggableCard>
         </AnimatePresence>
       </div>
       <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6 }}>

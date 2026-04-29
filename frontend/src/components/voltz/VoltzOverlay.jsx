@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion as Motion, AnimatePresence } from "framer-motion";
-import { account, tables, DB_ID, PROFILES_TABLE } from "../../lib/appwrite";
+import { account, tables, functions, DB_ID, PROFILES_TABLE } from "../../lib/appwrite";
 import { track, captureError } from "../../lib/tracking";
 import { C } from "./shared/designTokens";
 import VoltzHomeScreen    from "./VoltzHomeScreen";
@@ -77,6 +77,25 @@ export default function VoltzOverlay({
       }
     }, 500);
   }, [profile, onProfileUpdate]);
+
+  const handleManagePlan = useCallback(async () => {
+    try {
+      const response = await functions.createExecution(
+        "stripeGateway",
+        JSON.stringify({
+          action: "create_portal_session",
+          userId: profile?.user_id,
+          returnUrl: window.location.href,
+        }),
+        false
+      );
+      if (!response?.responseBody) return;
+      const data = JSON.parse(response.responseBody);
+      if (data?.url) window.location.href = data.url;
+    } catch (err) {
+      captureError(err, { context: "manage_plan" });
+    }
+  }, [profile?.user_id]);
 
   // Reset to home when overlay opens, unless we have an initialScreen
   useEffect(() => {
@@ -242,6 +261,7 @@ export default function VoltzOverlay({
                         voltzBalance={voltzBalance}
                         onBack={goBack}
                         onSelectPlan={(plan) => openCheckout({ type: "plan", item: plan }, "plans")}
+                        onManagePlan={handleManagePlan}
                       />
                     )}
 

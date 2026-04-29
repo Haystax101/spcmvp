@@ -9,11 +9,14 @@ import {
   Search,
   Home as HomeIcon,
   Inbox as InboxIcon,
-  UserCircle
+  UserCircle,
+  Search as DiscoverIcon
 } from 'lucide-react'
-import { tables, account, functions, DB_ID, PROFILES_TABLE, DISCOVERY_FUNCTION_ID, ID, Query } from './lib/appwrite'
+import { tables, account, functions, DB_ID, PROFILES_TABLE, DISCOVERY_FUNCTION_ID, AUTH_GATEWAY_FUNCTION_ID, CONNECTION_GATEWAY_FUNCTION_ID, ID, Query } from './lib/appwrite'
 import { track, captureError, identifyUser, logoutUser } from './lib/tracking'
 import SearchScreen from './components/SearchScreen'
+import ComposeScreen from './components/ComposeScreen'
+import ConnectionResult from './components/ConnectionResult'
 import NewOnboarding from './NewOnboarding'
 import SuperchargedInbox from './SuperchargedInbox'
 import SuperchargedProfile from './supercharged_v18'
@@ -1208,48 +1211,6 @@ function OnboardingScreen({ user, onComplete }) {
   )
 }
 
-// ─── Loading Screen ───────────────────────────────────────────────────────────
-function LoadingScreen({ docId, onReady }) {
-  useEffect(() => {
-    if (!docId) return
-    const interval = setInterval(async () => {
-      try {
-        const doc = await tables.getRow({
-          databaseId: DB_ID,
-          tableId: PROFILES_TABLE,
-          rowId: docId
-        })
-        if (doc.is_indexed) {
-          clearInterval(interval)
-          onReady(doc)
-        }
-      } catch (err) {
-        console.error('Polling error:', err)
-      }
-    }, 2500)
-    return () => clearInterval(interval)
-  }, [docId, onReady])
-
-  return (
-    <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden bg-bg">
-      <TopoBackground />
-      <div className="text-center relative z-10">
-        <Motion.div 
-          animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          className="w-20 h-20 bg-accent/10 border border-accent/20 rounded-full flex items-center justify-center text-3xl mx-auto mb-8"
-        >
-          ✨
-        </Motion.div>
-        <h3 className="font-playfair text-3xl mb-4 font-light tracking-tight">Vectorizing your personality...</h3>
-        <p className="text-text2 text-sm max-w-xs mx-auto leading-relaxed">
-          Gemini 3.1 is embedding your responses into 1,536-dimensional space to find your best matches.
-        </p>
-      </div>
-    </div>
-  )
-}
-
 // ─── Match Card ───────────────────────────────────────────────────────────────
 function MatchCard({ match, rank }) {
   return (
@@ -1317,6 +1278,12 @@ function MainApp({ profile: initialProfile, onProfileUpdate, user }) {
   const [activeScreen, setActiveScreen] = useState('home')
   const [showVoltzModal, setShowVoltzModal] = useState(false)
   const [pendingConfirmation, setPendingConfirmation] = useState(null)
+  const [inboxInitialTab, setInboxInitialTab] = useState(null)
+  const [discoverComposePerson, setDiscoverComposePerson] = useState(null)
+  const [discoverComposeOpen, setDiscoverComposeOpen] = useState(false)
+  const [discoverResultPerson, setDiscoverResultPerson] = useState(null)
+  const [discoverResultOpen, setDiscoverResultOpen] = useState(false)
+  const [voltzInitialScreen, setVoltzInitialScreen] = useState(null)
 
   const handleProfileUpdate = (updatedProfile) => {
     setProfile(updatedProfile)
@@ -1368,9 +1335,10 @@ function MainApp({ profile: initialProfile, onProfileUpdate, user }) {
   }, [])
 
   const navItems = [
-    { key: 'home', label: 'Home', Icon: HomeIcon },
-    { key: 'inbox', label: 'Inbox', Icon: InboxIcon },
-    { key: 'profile', label: 'Profile', Icon: UserCircle }
+    { key: 'home',     label: 'Home',     Icon: HomeIcon     },
+    { key: 'discover', label: 'Discover', Icon: DiscoverIcon },
+    { key: 'inbox',    label: 'Inbox',    Icon: InboxIcon    },
+    { key: 'profile',  label: 'Profile',  Icon: UserCircle   },
   ]
 
   return (
@@ -1382,51 +1350,115 @@ function MainApp({ profile: initialProfile, onProfileUpdate, user }) {
         <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}>
           <HomeScreen
             profile={profile}
-            onNavigateToInbox={() => setActiveScreen('inbox')}
-            onNavigateToSearch={() => setActiveScreen('search')}
+            onNavigateToInbox={(tab) => { setInboxInitialTab(tab || null); setActiveScreen('inbox'); }}
             voltzBalance={profile?.current_voltz ?? 0}
             onOpenVoltzModal={() => setShowVoltzModal(true)}
           />
         </div>
       )}
-      {activeScreen === 'search' && (
-        <div className="h-full min-h-0 box-border bg-bg" style={{ paddingBottom: 'var(--sc-nav-clearance)', zIndex: 100, position: 'relative' }}>
-          <SearchScreen 
-            profile={profile} 
-            onClose={() => setActiveScreen('home')} 
-            onConnect={(p) => { 
-               // Pass to HomeScreen somehow or implement internally, for now navigating to inbox
-               setActiveScreen('inbox')
-            }}
+      {(activeScreen === 'search' || activeScreen === 'discover') && (
+        <div className="h-full min-h-0 box-border bg-bg" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}>
+          <SearchScreen
+            profile={profile}
+            onClose={() => setActiveScreen('home')}
+            onConnect={(p) => { setDiscoverComposePerson(p); setDiscoverComposeOpen(true); }}
             onCompatTap={(p, kind) => {}}
           />
         </div>
       )}
-      {activeScreen === 'inbox' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedInbox currentUserProfile={profile} voltzBalance={profile?.current_voltz ?? 0} onOpenVoltzModal={() => setShowVoltzModal(true)} /></div>}
-      {activeScreen === 'profile' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedProfile /></div>}
+      {activeScreen === 'inbox' && (
+        <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}>
+          <SuperchargedInbox
+            currentUserProfile={profile}
+            voltzBalance={profile?.current_voltz ?? 0}
+            onOpenVoltzModal={() => setShowVoltzModal(true)}
+            onUpgrade={() => {
+              setActiveScreen('home');
+              setVoltzInitialScreen('plans');
+              setShowVoltzModal(true);
+            }}
+            initialTab={inboxInitialTab}
+            onConnect={(p) => {
+              setDiscoverComposePerson(p);
+              setDiscoverComposeOpen(true);
+            }}
+          />
+        </div>
+      )}
+      {activeScreen === 'profile' && <div className="h-full min-h-0 box-border" style={{ paddingBottom: 'var(--sc-nav-clearance)' }}><SuperchargedProfile onOpenSettings={() => { setVoltzInitialScreen('settings'); setShowVoltzModal(true); }} /></div>}
 
       <VoltzOverlay
         open={showVoltzModal}
-        onClose={() => { setShowVoltzModal(false); setPendingConfirmation(null); }}
+        onClose={() => { setShowVoltzModal(false); setPendingConfirmation(null); setVoltzInitialScreen(null); }}
         profile={profile}
         onProfileUpdate={handleProfileUpdate}
-        initialScreen={pendingConfirmation ? 'confirmation' : undefined}
+        initialScreen={voltzInitialScreen || (pendingConfirmation ? 'confirmation' : undefined)}
         initialResult={pendingConfirmation}
       />
 
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 'var(--sc-nav-clearance)', pointerEvents: discoverComposeOpen ? 'auto' : 'none', zIndex: 40 }}>
+        <AnimatePresence>
+        {discoverComposeOpen && discoverComposePerson && (
+          <ComposeScreen
+            person={discoverComposePerson}
+            onClose={() => { setDiscoverComposeOpen(false); setDiscoverComposePerson(null); }}
+            onSend={(message) => {
+              const target = discoverComposePerson;
+              setDiscoverComposeOpen(false);
+              setDiscoverComposePerson(null);
+              setDiscoverResultPerson(target);
+              setDiscoverResultOpen(true);
+              functions.createExecution(
+                CONNECTION_GATEWAY_FUNCTION_ID,
+                JSON.stringify({
+                  action: 'initiate_request',
+                  target_profile_id: target?.$id || target?.user_id,
+                  target_user_id: target?.user_id,
+                  opening_message: message,
+                }),
+                false
+              ).catch((e) => console.error('Discover compose send error', e));
+            }}
+          />
+        )}
+        </AnimatePresence>
+      </div>
+
+      <AnimatePresence>
+        {discoverResultOpen && discoverResultPerson && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 'var(--sc-nav-clearance)', zIndex: 41 }}>
+            <ConnectionResult
+              person={discoverResultPerson}
+              type="sent"
+              onStartChatting={() => {
+                setDiscoverResultOpen(false);
+                setDiscoverResultPerson(null);
+                setInboxInitialTab('sent');
+                setActiveScreen('inbox');
+              }}
+              onBack={() => {
+                setDiscoverResultOpen(false);
+                setDiscoverResultPerson(null);
+              }}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
       <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-3">
         <div className="pointer-events-auto w-[min(92vw,430px)] rounded-[22px] border border-border-light bg-white/88 p-2 shadow-[0_14px_40px_rgba(0,0,0,0.15)] backdrop-blur-xl">
-          <div className="grid grid-cols-3 gap-1">
+          <div className="grid grid-cols-4 gap-1">
             {navItems.map((item) => {
-              const isActive = activeScreen === item.key
+              const isActive = activeScreen === item.key ||
+                (item.key === 'discover' && activeScreen === 'search')
               return (
                 <button
                   key={item.key}
                   type="button"
-                  onClick={() => setActiveScreen(item.key)}
+                  onClick={() => { setInboxInitialTab(null); setActiveScreen(item.key); }}
                   aria-current={isActive ? 'page' : undefined}
                   className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2 text-[11px] font-medium transition-colors ${
-                    (isActive || (item.key === 'home' && activeScreen === 'search')) ? 'text-text bg-white border border-border-light shadow-sm' : 'text-text3 hover:text-text'
+                    isActive ? 'text-text bg-white border border-border-light shadow-sm' : 'text-text3 hover:text-text'
                   }`}
                 >
                   <item.Icon size={18} />
@@ -1449,11 +1481,56 @@ function App() {
   const [step, setStep] = useState('checking')
   const [docId, setDocId] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [magicLinkVerified, setMagicLinkVerified] = useState(false)
 
-  // Capture referral code from URL on first load
+  // Capture referral code and verify magic link token from URL on first load
   useEffect(() => {
-    const refCode = new URLSearchParams(window.location.search).get('ref')
-    if (refCode) sessionStorage.setItem('sc_referral_code', refCode)
+    let currentPath = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    let refCode = params.get('ref');
+
+    // Parse /platform-beta/r/username
+    const rMatch = currentPath.match(/^\/platform-beta\/r\/([^\/]+)\/?$/);
+    if (rMatch) {
+      refCode = rMatch[1];
+      currentPath = '/platform-beta/';
+    }
+
+    if (refCode) {
+      sessionStorage.setItem('sc_referral_code', refCode);
+    }
+
+    const token = params.get('token');
+    const stateParam = params.get('state');
+
+    // Always clean up /r/ path even if there's no token
+    if (rMatch && !token) {
+      window.history.replaceState({}, '', currentPath + window.location.search);
+    }
+
+    if (token && AUTH_GATEWAY_FUNCTION_ID) {
+      // Strip token and state from URL without reloading
+      const cleanParams = new URLSearchParams();
+      if (refCode && !rMatch) cleanParams.set('ref', refCode);
+      const q = cleanParams.toString();
+      const clean = currentPath + (q ? `?${q}` : '');
+      window.history.replaceState({}, '', clean);
+
+      functions.createExecution(
+        AUTH_GATEWAY_FUNCTION_ID,
+        JSON.stringify({ action: 'verify_magic_link', token }),
+        false
+      ).then(exec => {
+        const result = JSON.parse(exec.responseBody || '{}')
+        if (result.ok && result.verified) {
+          setMagicLinkVerified(true)
+          sessionStorage.setItem('sc_magic_verified_email', result.email || '')
+          if (stateParam) {
+            sessionStorage.setItem('sc_magic_state', stateParam)
+          }
+        }
+      }).catch(() => {})
+    }
   }, [])
 
   const checkSession = async () => {
@@ -1512,13 +1589,10 @@ function App() {
   const handleAuth = () => {
     checkSession()
   }
-  const handleOnboardingComplete = (id) => {
+  const handleOnboardingComplete = (doc) => {
     track.onboardingCompleted()
-    setDocId(id)
-    setStep('loading')
-  }
-  const handleSynced = (doc) => {
     setProfile(doc)
+    setDocId(doc.$id)
     setStep('discovery')
   }
 
@@ -1529,8 +1603,7 @@ function App() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text" />
         </div>
       )}
-      {step === 'onboarding' && <NewOnboarding user={user} onAuth={handleAuth} onComplete={handleOnboardingComplete} />}
-      {step === 'loading' && <LoadingScreen docId={docId} onReady={handleSynced} />}
+      {step === 'onboarding' && <NewOnboarding user={user} onAuth={handleAuth} onComplete={handleOnboardingComplete} magicLinkVerified={magicLinkVerified} />}
       {step === 'discovery' && (
         <MainApp
           profile={profile}

@@ -39,24 +39,19 @@ export default function ConnectionResult({ person, type, onStartChatting, onBack
             </div>
           )}
         </div>
-        {/* Accepted/Sent badge top-right */}
-        <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: [0, 1.15, 1], opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.2, times: [0, 0.7, 1] }}
-          style={{ position: 'absolute', top: 20, right: 20, width: 52, height: 52, borderRadius: '50%', background: isAccepted ? 'var(--success)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }}
-        >
-          {isAccepted ? (
+        {/* Accepted badge top-right — only show for accepted state */}
+        {isAccepted && (
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: [0, 1.15, 1], opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2, times: [0, 0.7, 1] }}
+            style={{ position: 'absolute', top: 20, right: 20, width: 52, height: 52, borderRadius: '50%', background: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }}
+          >
             <motion.svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <motion.polyline points="20 6 9 17 4 12" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.4, delay: 0.45 }} />
             </motion.svg>
-          ) : (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          )}
-        </motion.div>
+          </motion.div>
+        )}
       </div>
 
       {/* Bottom sheet */}
