@@ -8,6 +8,7 @@ const TOKEN_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const ADMIN_EMAILS = [
   'gdwhastings559@gmail.com',
   'bowencheung0228@outlook.com',
+  'joseph@tingala.plus.com',
 ];
 
 class HttpError extends Error {

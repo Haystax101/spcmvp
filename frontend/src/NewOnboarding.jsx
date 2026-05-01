@@ -694,7 +694,7 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
     });
 
     const isOxford = /\.ox\.ac\.uk$/i.test(value);
-    
+
     // If it's an Oxford email, mark as verified
     if (isOxford) {
       setFriendVisuals((prev) => {
@@ -720,14 +720,14 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
           Query.limit(10),
         ],
       });
-      
+
       const found = searchRes.rows && searchRes.rows.length > 0;
       if (found) {
         // Send connection request to the found profile
         const targetProfile = searchRes.rows[0];
         const firstName = targetProfile.first_name || targetProfile.full_name?.split(' ')[0] || 'there';
         const openingMessage = `Hi ${firstName}, I just joined Supercharged`;
-        
+
         try {
           await functions.createExecution(
             CONNECTION_GATEWAY_FUNCTION_ID,
@@ -743,7 +743,7 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
           // Still show verified state even if connection fails
         }
       }
-      
+
       setFriendVisuals((prev) => {
         const next = [...prev];
         next[idx] = found ? { state: 'verified', value, foundProfiles: searchRes.rows } : { state: 'invite', value };
@@ -917,7 +917,7 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
 
   const bdayValid = getBdayAge() >= 18;
   const usernameValid = username.length >= 3 && /^[a-zA-Z0-9_]+$/.test(username);
-  const ADMIN_EMAILS_FE = ['gdwhastings559@gmail.com', 'bowencheung0228@outlook.com'];
+  const ADMIN_EMAILS_FE = ['gdwhastings559@gmail.com', 'bowencheung0228@outlook.com', 'joseph@tingala.plus.com'];
   const emailValid = ADMIN_EMAILS_FE.includes(email.toLowerCase()) ||
     (/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.ox\.ac\.uk$/.test(email.toLowerCase()) && !email.toLowerCase().endsWith('@ox.ac.uk'));
   const codeValid = code.join('').length === 6 || code.join('') === '123456';
