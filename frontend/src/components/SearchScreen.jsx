@@ -347,7 +347,10 @@ function SearchView({ onBack, query, setQuery, scope, setScope, onSubmit, inputR
   );
 }
 
-function ResultsView({ query, results, loading, onClear, onBack, onOpenProfile, onConnect }) {
+function ResultsView({ query, results, loading, onClear, onBack, onOpenProfile, onConnect, onReSearch }) {
+  const [editQuery, setEditQuery] = React.useState(query);
+  const inputRef = React.useRef(null);
+
   return (
     <div style={{ position: 'absolute', inset: 0, background: C.paper, padding: '20px 16px 40px', overflowY: 'auto' }}>
       {/* Back */}
@@ -355,14 +358,22 @@ function ResultsView({ query, results, loading, onClear, onBack, onOpenProfile, 
         <span style={{ fontSize: 18, lineHeight: 1 }}>‹</span> Back
       </button>
 
-      {/* Query bar */}
+      {/* Query bar — now editable */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.warmGrey, border: `1px solid ${C.warmGreyBorder}`, borderRadius: 999, padding: '11px 16px' }}>
         <svg width="16" height="16" viewBox="0 0 22 22" fill="none">
           <circle cx="10" cy="10" r="7" stroke={C.ink} strokeWidth="1.6" />
           <path d="M15 15 L20 20" stroke={C.ink} strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-        <span style={{ flex: 1, fontSize: 15, color: C.ink, fontFamily: "'DM Sans', sans-serif" }}>{query}</span>
-        <button onClick={onClear} style={{ background: C.ink, color: C.paper, border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+        <input
+          ref={inputRef}
+          value={editQuery}
+          onChange={(e) => setEditQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && editQuery.trim()) { e.preventDefault(); onReSearch(editQuery.trim()); } }}
+          style={{ flex: 1, fontSize: 15, color: C.ink, fontFamily: "'DM Sans', sans-serif", border: 'none', background: 'transparent', outline: 'none', minWidth: 0 }}
+        />
+        {editQuery.length > 0 && (
+          <button onClick={() => setEditQuery('')} style={{ background: C.ink, color: C.paper, border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+        )}
       </div>
 
       {/* Count */}
@@ -689,6 +700,7 @@ export default function SearchScreen({ profile, onClose, onConnect }) {
           onBack={() => { setView('search'); setQuery(''); }}
           onOpenProfile={(person) => { setSelectedPerson(person); setView('profile'); }}
           onConnect={onConnect}
+          onReSearch={(q) => { setQuery(q); handleSubmit(q); }}
         />
       )}
 
