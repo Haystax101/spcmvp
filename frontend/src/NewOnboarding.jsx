@@ -184,16 +184,17 @@ const VoltzStep = ({ username, onComplete, loading }) => {
       newConfetti.push({
         id: Math.random(),
         color: colors[Math.floor(Math.random() * colors.length)],
-        cx: (Math.random() - 0.5) * 120,
+        startX: 10 + Math.random() * 80,
+        cx: (Math.random() - 0.5) * 300,
         cr: (Math.random() - 0.5) * 720,
-        dur: 2 + Math.random() * 2,
-        delay: Math.random() * 0.5,
+        dur: 2.5 + Math.random() * 2.5,
+        delay: Math.random() * 1.2,
         size: 4 + Math.random() * 6,
         isCircle: Math.random() < 0.3
       });
     }
     setConfetti(newConfetti);
-    setTimeout(() => setConfetti([]), 5000);
+    setTimeout(() => setConfetti([]), 6000);
   };
 
   const handleClaim = () => {
@@ -232,7 +233,7 @@ const VoltzStep = ({ username, onComplete, loading }) => {
               className="confetti-piece"
               style={{
                 backgroundColor: c.color,
-                left: '50%',
+                left: `${c.startX}%`,
                 width: c.size,
                 height: c.size,
                 borderRadius: c.isCircle ? '50%' : '1px',
