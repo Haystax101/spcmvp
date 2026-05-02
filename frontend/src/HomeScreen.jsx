@@ -413,12 +413,7 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
     load();
   }, []);
 
-  // ── Auto-tab switching ──────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!loading && pending.length === 0 && tab === 'new') {
-      setTab('surfaced');
-    }
-  }, [pending.length, loading, tab]);
+  // ── Auto-tab switching removed — user can always click new connections tab ──
 
   // ── Fetch surfaced recommendations ─────────────────────────────────────────
   useEffect(() => {
