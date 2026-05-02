@@ -212,7 +212,7 @@ export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap, onViewI
 
   return (
     <div style={{ padding: '16px 20px 24px', position: 'relative' }}>
-      <div style={{ position: 'relative', width: '100%', height: 560 }}>
+      <div style={{ position: 'relative', width: '100%', height: 600 }}>
         {next && (
           <div style={{ position: 'absolute', top: 8, left: 8, right: 8, bottom: 0, borderRadius: 20, background: 'var(--bg)', border: '1.5px solid var(--border-light)', transform: 'scale(0.96)', opacity: 0.6, pointerEvents: 'none', overflow: 'hidden' }}>
             <img src={next.photo_url || next.photo} alt="" style={{ width: '100%', height: 220, objectFit: 'cover', objectPosition: 'center top', display: 'block', filter: 'blur(1px)' }} onError={(e) => { e.target.style.display = 'none'; }} />
@@ -226,7 +226,7 @@ export const CardStack = ({ deck, tab, onAccept, onConnect, onCompatTap, onViewI
             deckLength={deck.length}
             onAdvance={advance}
           >
-            <div style={{ width: '100%', height: 560, borderRadius: 20, overflow: 'hidden', background: 'var(--bg)', border: '1.5px solid var(--border)', display: 'flex', flexDirection: 'column', willChange: 'transform, opacity' }}>
+            <div style={{ width: '100%', height: 600, borderRadius: 20, overflow: 'hidden', background: 'var(--bg)', border: '1.5px solid var(--border)', display: 'flex', flexDirection: 'column', willChange: 'transform, opacity' }}>
               {tab === 'new' ? (
                 <NewConnectionCard
                   p={p}

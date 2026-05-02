@@ -17,6 +17,7 @@ import {
 } from "./lib/appwrite";
 import { buildThumbnailUrl, getProfilePhotoUrl, PHOTO_SIZES } from "./lib/photos";
 import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
+import { track } from "./lib/tracking";
 import { VoltzWallet } from "./components/VoltzSystem";
 import NotificationsPanel from "./components/NotificationsPanel";
 import ProfileView from "./components/ProfileView";
@@ -2291,7 +2292,9 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
       role: convo.role, 
       id: convo.id, 
       connectionId: convo.connectionId,
-      photoUrl: convo.photoUrl || null 
+      photoUrl: convo.photoUrl || null,
+      user_id: convo.user_id || null,
+      profile_id: convo.profile_id || null
     });
     setPreviewMode(false);
     setDeclined(false);
@@ -2299,6 +2302,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
 
     const conversationId = convo.conversationId || convo.id;
     const connectionId = convo.connectionId || null;
+    track.conversationOpened(conversationId);
     setActiveConversationId(conversationId);
 
     if (connectionId) {
@@ -2580,6 +2584,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
         body: v,
       });
 
+      track.messageSent(activeConversationId);
       if (Number(out?.voltz_earned || 0) > 0) {
         awardVoltzAmount(Number(out.voltz_earned));
       } else {
@@ -2652,7 +2657,7 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
               markingAllRead={markingAllRead}
               voltzBalance={voltzBalance}
               onOpenVoltzModal={onOpenVoltzModal}
-              onViewProfile={(c) => setViewProfileData({ connectionId: c.connectionId || c.id, profile: c })}
+              onViewProfile={(c) => setViewProfileData({ connectionId: c.connectionId || c.id, profile: { ...c, user_id: c.user_id, $id: c.profile_id } })}
               onDismissNewUser={handleDismissNewUser}
               onConnectNewUser={handleConnectNewUser}
             />
@@ -2685,7 +2690,10 @@ export default function SuperchargedInbox({ currentUserProfile = null, voltzBala
               onUndo={handleUndo}
               voltz={voltzTotal}
               relationshipContext={relationshipContext}
-              onViewProfile={() => chatProfile && setViewProfileData({ connectionId: chatProfile.connectionId || (chatProfile.id?.startsWith('conn_') ? chatProfile.id : null), profile: chatProfile })}
+              onViewProfile={() => chatProfile && setViewProfileData({ 
+                connectionId: chatProfile.connectionId || (chatProfile.id?.startsWith('conn_') ? chatProfile.id : null), 
+                profile: { ...chatProfile, $id: chatProfile.profile_id } 
+              })}
               currentProfile={backendProfile}
               executeFunction={executeFunction}
               onUpgrade={onUpgrade}

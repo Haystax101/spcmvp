@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
 import { Bell } from 'lucide-react';
+import { track } from './lib/tracking';
 import {
   functions,
   tables,
@@ -22,7 +23,6 @@ import NotificationsPanel from './components/NotificationsPanel';
 import { CardPhoto, Chip, CardButton, NewConnectionCard, SurfacedCard, CardStack } from './components/HomeCards';
 import { VoltzWallet } from './components/VoltzSystem';
 // ─── Cache TTLs ───────────────────────────────────────────────────────────────
-const HOME_FEED_TTL = 2 * 60 * 1000;
 const SURFACED_TTL = 5 * 60 * 1000;
 
 // ─── Execute an Appwrite function ─────────────────────────────────────────────
@@ -140,24 +140,35 @@ const NetworkPulse = ({ stats }) => {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, delay: 0.2 }}
           style={{
-            background: 'linear-gradient(135deg, var(--panel-bg) 0%, #FAF9F6 100%)',
-            borderRadius: 22,
-            padding: '24px 22px',
+            background: 'linear-gradient(165deg, #1A1A1A 0%, #2D2D2D 100%)',
+            borderRadius: 24,
+            padding: '32px 28px',
             display: 'flex',
             flexDirection: 'column',
-            border: '1px solid rgba(0,0,0,0.03)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.12)',
+            position: 'relative',
+            overflow: 'hidden'
           }}
         >
-          <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 300, fontSize: 22, color: 'var(--text)', lineHeight: 1.2, letterSpacing: '-0.01em', marginBottom: 8 }}>
-            Your network is taking shape.
+          {/* Subtle accent glow */}
+          <div style={{ position: 'absolute', top: -40, right: -40, width: 120, height: 120, borderRadius: '50%', background: 'var(--accent)', filter: 'blur(60px)', opacity: 0.2 }} />
+          
+          <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 300, fontSize: 26, color: '#FFFEFD', lineHeight: 1.2, letterSpacing: '-0.02em', marginBottom: 12 }}>
+            Build your baseline.
           </div>
-          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--text2)', lineHeight: 1.5, maxWidth: '90%' }}>
-            Connect with surfaced matches below to start seeing your compatibility trends and response metrics here.
+          <div style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'rgba(255,254,253,0.7)', lineHeight: 1.6, maxWidth: '90%', marginBottom: 24 }}>
+            Connect with surfaced matches below to unlock your compatibility trends, response metrics, and networking velocity.
           </div>
-          <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 10px var(--success)' }} />
-            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--success)', letterSpacing: '0.02em' }}>Ready for new connections</span>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(34,168,90,0.15)', padding: '6px 12px', borderRadius: 999 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 8px var(--success)' }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--success)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Discovery Active</span>
+            </div>
+          </div>
+
+          <div style={{ position: 'absolute', bottom: -10, right: 20, fontSize: 80, opacity: 0.03, pointerEvents: 'none', color: '#FFF' }}>
+            <BoltIcon />
           </div>
         </motion.div>
       </motion.div>
@@ -286,6 +297,15 @@ const CompatPanel = ({ person, fromNew, onClose, onCTA, currentUserProfileId }) 
           })()}
         </motion.div>
 
+        {/* Why you'd connect */}
+        {person.match_reason && (
+          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.25 }}
+            style={{ marginTop: 16, padding: '14px 16px', borderRadius: 14, background: 'var(--bubble)' }}>
+            <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>WHY YOU'D CONNECT</div>
+            <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 400, fontSize: 13, color: 'var(--text)', lineHeight: 1.55 }}>{person.match_reason}</div>
+          </motion.div>
+        )}
+
         {/* Dims breakdown */}
         <SectionLabel label="COMPATIBILITY BREAKDOWN" help="4 dimensions" />
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.3 }}
@@ -382,36 +402,71 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
   const [resultPerson, setResultPerson] = useState(null);
   const [resultType, setResultType] = useState('');
 
-  // ── Fetch home feed (pending + stats) ──────────────────────────────────────
+  // ── Stats: read instantly from profile, refresh in background ───────────────
   useEffect(() => {
+    if (!profile) return;
+    if (profile.home_stats_json) {
+      try { setStats(JSON.parse(profile.home_stats_json)); } catch {}
+    }
+    if (CONNECTION_GATEWAY_FUNCTION_ID) {
+      executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, { action: 'get_home_feed' })
+        .then(data => { if (data?.success) { setStats(data.stats); if (data.pending?.length) setPending(data.pending); } })
+        .catch(() => {});
+    }
+  }, [profile?.$id]);
+
+  // ── Pending connections: fetch directly from DB ───────────────────────────
+  useEffect(() => {
+    if (!profile?.$id) return;
     const load = async () => {
-      const cached = readCacheValue('home_feed', HOME_FEED_TTL);
-      if (cached) {
-        setPending(cached.pending || []);
-        setStats(cached.stats || null);
-        setLoading(false);
-      }
       try {
-        console.log('[HomeFeed] Calling get_home_feed...');
-        const data = await executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, { action: 'get_home_feed' });
-        console.log('[HomeFeed] get_home_feed response:', {
-          success: data?.success,
-          pendingCount: data?.pending?.length ?? 'undefined',
-          pendingSample: data?.pending?.[0] ?? null,
+        const res = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: 'connections',
+          queries: [
+            Query.equal('responder_profile_id', profile.$id),
+            Query.equal('status', 'pending'),
+            Query.orderDesc('initiated_at'),
+            Query.limit(10),
+          ],
         });
-        if (data.success) {
-          setPending(data.pending || []);
-          setStats(data.stats || null);
-          writeCacheEntry('home_feed', { pending: data.pending, stats: data.stats });
-        }
+        const rows = res?.rows || [];
+        if (!rows.length) { setLoading(false); return; }
+        const initiatorIds = [...new Set(rows.map(r => r.initiator_profile_id).filter(Boolean))];
+        const profRes = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: PROFILES_TABLE,
+          queries: [Query.equal('$id', initiatorIds), Query.limit(initiatorIds.length)],
+        });
+        const profMap = Object.fromEntries((profRes?.rows || []).map(p => [p.$id, p]));
+        const enriched = rows.map(r => {
+          const p = profMap[r.initiator_profile_id];
+          if (!p) return null;
+          return {
+            ...p,
+            id: r.$id,
+            connection_id: r.$id,
+            initiated_at: r.initiated_at,
+            message: r.opening_message_preview || 'They would like to connect.',
+            score: r.compatibility_score_snapshot ?? 0,
+            compat_chips: [],
+            name: p.full_name || 'Oxford Member',
+            photo_url: getProfilePhotoUrl(p, PHOTO_SIZES.large),
+            initials: ((p.full_name || '').split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2)) || '??',
+            color: '#7B5CF0',
+            role: [p.career_field, p.study_subject].filter(Boolean).join(' · ') || p.college || 'Oxford',
+            profile_id: p.$id,
+          };
+        }).filter(Boolean);
+        setPending(enriched);
       } catch (e) {
-        console.error('HomeScreen: home_feed error', e);
+        console.error('HomeScreen: pending fetch error', e);
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, []);
+  }, [profile?.$id]);
 
   // ── Auto-tab switching ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -435,26 +490,38 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
       const skippedIds = new Set(skippedRaw ? JSON.parse(skippedRaw) : []);
       LOG('Skipped IDs:', skippedIds.size);
 
-      // ── Step 1: Fetch queue rows ───────────────────────────────────────────
+      // ── Steps 1+2: Fetch queue rows and sent IDs in parallel ─────────────
       let queueItems = [];
+      let sentIds = new Set();
       try {
-        const queueRes = await tables.listRows({
-          databaseId: DB_ID,
-          tableId: DISCOVERY_QUEUE_TABLE,
-          queries: [
-            Query.equal('profile_id', profile.$id),
-            Query.equal('status', 'pending'),
-            Query.orderDesc('score'),
-            Query.limit(30),
-          ],
-        });
+        const [queueRes, sentRes] = await Promise.all([
+          tables.listRows({
+            databaseId: DB_ID,
+            tableId: DISCOVERY_QUEUE_TABLE,
+            queries: [
+              Query.equal('profile_id', profile.$id),
+              Query.equal('status', 'pending'),
+              Query.orderDesc('score'),
+              Query.limit(30),
+            ],
+          }),
+          tables.listRows({
+            databaseId: DB_ID,
+            tableId: 'connections',
+            queries: [
+              Query.equal('initiator_profile_id', profile.$id),
+              Query.equal('status', ['pending', 'accepted']),
+              Query.limit(200),
+            ],
+          }),
+        ]);
         queueItems = queueRes?.rows || [];
-        LOG('Queue rows fetched:', queueItems.length, '| sample:', queueItems[0] ? JSON.stringify({ id: queueItems[0].$id, status: queueItems[0].status, target: queueItems[0].target_profile_id, score: queueItems[0].score }) : 'none');
+        sentIds = new Set((sentRes?.rows || []).map(r => r.responder_profile_id).filter(Boolean));
+        LOG('Queue rows fetched:', queueItems.length, '| Sent IDs:', sentIds.size);
       } catch (e) {
-        console.error('[Surfaced] Queue fetch FAILED:', e?.message, e);
-        // Retry without notEqual in case SDK version doesn't support it
+        console.error('[Surfaced] Parallel fetch FAILED:', e?.message, e);
+        // Fallback: fetch queue alone without status filter
         try {
-          LOG('Retrying queue fetch without notEqual filter...');
           const retryRes = await tables.listRows({
             databaseId: DB_ID,
             tableId: DISCOVERY_QUEUE_TABLE,
@@ -465,27 +532,20 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
             ],
           });
           queueItems = (retryRes?.rows || []).filter(r => r.status === 'pending');
-          LOG('Retry queue rows:', queueItems.length);
+          LOG('Fallback queue rows:', queueItems.length);
         } catch (e2) {
-          console.error('[Surfaced] Retry also failed:', e2?.message);
+          console.error('[Surfaced] Fallback also failed:', e2?.message);
         }
-      }
-
-      // ── Step 2: Fetch sent IDs ─────────────────────────────────────────────
-      let sentIds = new Set();
-      try {
-        const sentData = await executeFunction(CONNECTION_GATEWAY_FUNCTION_ID, { action: 'list_pending_from_me', limit: 100 });
-        sentIds = new Set((sentData?.connections || []).map((c) => c.responder_profile_id).filter(Boolean));
-        LOG('Sent profile IDs:', sentIds.size);
-      } catch (e) {
-        LOG('Sent IDs fetch failed (non-fatal):', e?.message);
       }
       setSentProfileIds(sentIds);
 
-      // Trigger background refill if queue is sparse
-      if (queueItems.length < 5 && DISCOVERY_FUNCTION_ID) {
-        LOG('Queue sparse (<5), triggering refill_queue');
-        executeFunction(DISCOVERY_FUNCTION_ID, { action: 'refill_queue', profile_id: profile.$id }).catch(() => { });
+      // Trigger background refill if queue is sparse, then silently append new items
+      if (queueItems.length < 8 && DISCOVERY_FUNCTION_ID) {
+        LOG('Queue sparse (<8), triggering refill_queue');
+        const shownIds = new Set(queueItems.map(item => item.target_profile_id));
+        executeFunction(DISCOVERY_FUNCTION_ID, { action: 'refill_queue', profile_id: profile.$id })
+          .then(() => appendNewQueueItems(profile.$id, shownIds, sentIds, skippedIds))
+          .catch(() => { });
       }
 
       // ── Step 3: Filter + sort ─────────────────────────────────────────────
@@ -587,6 +647,65 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
       setSurfaced(enriched);
       writeCacheEntry('home_surfaced', enriched);
     };
+
+    // Fetch new queue items after a refill and append them to the displayed list
+    const appendNewQueueItems = async (profileId, shownIds, sentIds, skippedIds) => {
+      try {
+        const newQueueRes = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: DISCOVERY_QUEUE_TABLE,
+          queries: [
+            Query.equal('profile_id', profileId),
+            Query.equal('status', 'pending'),
+            Query.orderDesc('score'),
+            Query.limit(30),
+          ],
+        });
+        const newItems = (newQueueRes?.rows || []).filter(
+          item => !shownIds.has(item.target_profile_id)
+            && !sentIds.has(item.target_profile_id)
+            && !skippedIds.has(item.target_profile_id)
+        );
+        if (!newItems.length) return;
+
+        const newTargetIds = newItems.map(item => item.target_profile_id);
+        const profileRes = await tables.listRows({
+          databaseId: DB_ID,
+          tableId: PROFILES_TABLE,
+          queries: [Query.equal('$id', newTargetIds), Query.limit(newTargetIds.length)],
+        });
+        const newProfileRows = profileRes?.rows || [];
+
+        const newCards = newItems.map(item => {
+          const p = newProfileRows.find(r => r.$id === item.target_profile_id);
+          if (!p) return null;
+          return {
+            ...p,
+            queue_id: item.$id,
+            queue_status: item.status,
+            score: item.score ?? 0,
+            match_reason: item.match_reason || '',
+            photo_url: getProfilePhotoUrl(p, PHOTO_SIZES.large),
+            initials: ((p.full_name || '').split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2)) || '??',
+            color: '#7B5CF0',
+            name: p.full_name || 'Unknown',
+            role: [p.career_field, p.study_subject].filter(Boolean).join(' · ') || p.college || 'Oxford',
+            surfaced_dims: computeSurfacedDims(p, profile),
+          };
+        }).filter(Boolean);
+
+        if (newCards.length) {
+          setSurfaced(prev => {
+            const combined = [...prev, ...newCards];
+            writeCacheEntry('home_surfaced', combined);
+            return combined;
+          });
+        }
+      } catch (e) {
+        console.error('[Surfaced] appendNewQueueItems failed:', e?.message);
+      }
+    };
+
     loadSurfaced();
   }, [profile?.$id]);
 
@@ -600,6 +719,7 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
     } catch (e) {
       console.error('HomeScreen: accept error', e);
     }
+    track.connectionAccepted(p.connection_id || p.id);
     setPending((prev) => prev.filter((c) => c.id !== p.id));
     setResultPerson(p);
     setResultType('accepted');
@@ -620,6 +740,7 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
     } catch (e) {
       console.error('HomeScreen: decline error', e);
     }
+    track.connectionDeclined(p.connection_id || p.id);
     setPending((prev) => prev.filter((c) => c.id !== p.id));
   }, []);
 
@@ -633,6 +754,7 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
         : computeSharedContext(p, profile),
     });
     setCompatFromNew(isNew);
+    track.compatPanelOpened(p.$id || p.profile_id, p.score ?? p.compat ?? 0);
     setCompatOpen(true);
   }, [profile]);
 
@@ -649,6 +771,7 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
   }, [compatFromNew, compatPerson, onNavigateToInbox]);
 
   const handleSkip = useCallback((p) => {
+    track.surfacedCardSkipped(p.target_profile_id || p.$id);
     if (p?.queue_id) {
       executeFunction(DISCOVERY_FUNCTION_ID, {
         action: 'update_queue_status',
@@ -658,14 +781,43 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
     }
     setSurfaced((prev) => {
       const next = prev.filter((x) => (x.queue_id || x.$id) !== (p.queue_id || p.$id));
-      if (next.length < 5 && DISCOVERY_FUNCTION_ID && profile?.$id) {
-        executeFunction(DISCOVERY_FUNCTION_ID, { action: 'refill_queue', profile_id: profile.$id }).catch(() => { });
+      if (next.length < 8 && DISCOVERY_FUNCTION_ID && profile?.$id) {
+        const shownIds = new Set(next.map(x => x.target_profile_id || x.$id));
+        const skipped = new Set(JSON.parse(localStorage.getItem(`sc_skipped_${profile.$id}`) || '[]'));
+        executeFunction(DISCOVERY_FUNCTION_ID, { action: 'refill_queue', profile_id: profile.$id })
+          .then(() => tables.listRows({
+            databaseId: DB_ID,
+            tableId: DISCOVERY_QUEUE_TABLE,
+            queries: [Query.equal('profile_id', profile.$id), Query.equal('status', 'pending'), Query.orderDesc('score'), Query.limit(30)],
+          }))
+          .then(async (qRes) => {
+            const newItems = (qRes?.rows || []).filter(item =>
+              !shownIds.has(item.target_profile_id) && !sentProfileIds.has(item.target_profile_id) && !skipped.has(item.target_profile_id));
+            if (!newItems.length) return;
+            const ids = newItems.map(i => i.target_profile_id);
+            const pRes = await tables.listRows({ databaseId: DB_ID, tableId: PROFILES_TABLE, queries: [Query.equal('$id', ids), Query.limit(ids.length)] });
+            const cards = newItems.map(item => {
+              const p2 = (pRes?.rows || []).find(r => r.$id === item.target_profile_id);
+              if (!p2) return null;
+              return {
+                ...p2, queue_id: item.$id, score: item.score ?? 0, match_reason: item.match_reason || '',
+                photo_url: getProfilePhotoUrl(p2, PHOTO_SIZES.large),
+                initials: ((p2.full_name || '').split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2)) || '??',
+                color: '#7B5CF0', name: p2.full_name || 'Unknown',
+                role: [p2.career_field, p2.study_subject].filter(Boolean).join(' · ') || p2.college || 'Oxford',
+                surfaced_dims: computeSurfacedDims(p2, profile),
+              };
+            }).filter(Boolean);
+            if (cards.length) setSurfaced(prev2 => { const c = [...prev2, ...cards]; writeCacheEntry('home_surfaced', c); return c; });
+          })
+          .catch(() => {});
       }
       return next;
     });
-  }, [profile?.$id]);
+  }, [profile?.$id, sentProfileIds]);
 
   const handleConnect = useCallback((p) => {
+    track.userAction('connect_button_tapped', { targetId: p.$id || p.profile_id, score: p.score ?? 0 });
     setComposePerson(p);
     setComposeOpen(true);
   }, []);
@@ -690,6 +842,7 @@ export default function HomeScreen({ profile, onNavigateToInbox, voltzBalance = 
     }
 
     // Show result immediately
+    track.connectionSent(target?.$id || target?.profile_id);
     setResultPerson(target);
     setResultType('sent');
     setResultOpen(true);

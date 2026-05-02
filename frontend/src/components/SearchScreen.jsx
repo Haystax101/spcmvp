@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { functions, DISCOVERY_FUNCTION_ID, CONNECTION_GATEWAY_FUNCTION_ID } from '../lib/appwrite';
 import { getProfilePhotoUrl, PHOTO_SIZES } from '../lib/photos';
 import { readCacheValue, writeCacheEntry } from '../lib/cache';
+import { track } from '../lib/tracking';
 import ProfileView from './ProfileView';
 
 // ─── Design tokens (matches the HTML prototype) ──────────────────────────────
@@ -656,6 +657,7 @@ export default function SearchScreen({ profile, onClose, onConnect }) {
 
       const raw = data.results || data.matches || [];
       const enriched = raw.map((m, i) => enrichMatch({ ...m, is_external: m.is_on_app === false }, profile, i));
+      track.searchPerformed(q, enriched.length);
       setResults(enriched);
     } catch (e) {
       console.error('SearchScreen search error', e);
@@ -687,7 +689,7 @@ export default function SearchScreen({ profile, onClose, onConnect }) {
           loading={loading}
           onClear={() => { setView('search'); setResults([]); setQuery(''); }}
           onBack={() => { setView('search'); setQuery(''); }}
-          onOpenProfile={(person) => { setSelectedPerson(person); setView('profile'); }}
+          onOpenProfile={(person) => { track.searchResultViewed(person.$id || person.user_id, results.indexOf(person)); setSelectedPerson(person); setView('profile'); }}
           onConnect={onConnect}
         />
       )}

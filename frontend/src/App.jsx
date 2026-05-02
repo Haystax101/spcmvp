@@ -97,15 +97,23 @@ function AuthScreen({ onAuth }) {
   const [mode, setMode] = useState('signup')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-// Removed name state as it's handled in onboarding
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [forgotSent, setForgotSent] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
     try {
+      if (mode === 'forgot') {
+        const redirectUrl = window.location.href.split('?')[0]
+        await account.createRecovery(email, redirectUrl)
+        setForgotSent(true)
+        setLoading(false)
+        return
+      }
+
       try {
         await account.deleteSession('current')
       } catch {
@@ -134,10 +142,12 @@ function AuthScreen({ onAuth }) {
     }
   }
 
+  const switchMode = (next) => { setMode(next); setError(''); setForgotSent(false) }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
       <TopoBackground />
-      <Motion.div 
+      <Motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md bg-white p-12 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-border-light relative z-10"
@@ -149,14 +159,18 @@ function AuthScreen({ onAuth }) {
         </div>
 
         <h1 className="font-playfair text-4xl text-center mb-2 font-light tracking-tight">
-          {mode === 'signup' ? 'Join the network' : 'Welcome back'}
+          {mode === 'forgot' ? 'Reset password' : mode === 'signup' ? 'Join the network' : 'Welcome back'}
         </h1>
         <p className="text-center text-text2 text-sm mb-10 font-sans">
-          {mode === 'signup' ? 'Oxford University students only · Verified by email' : 'Sign in to see your matches'}
+          {mode === 'forgot'
+            ? "We'll send a reset link to your email"
+            : mode === 'signup'
+            ? 'Oxford University students only · Verified by email'
+            : 'Sign in to see your matches'}
         </p>
 
         {error && (
-          <Motion.div 
+          <Motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             className="mb-8 p-4 bg-red-50 border border-red-100 text-xs text-error font-medium"
@@ -165,41 +179,188 @@ function AuthScreen({ onAuth }) {
           </Motion.div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <div className="relative">
-            <input
-              type="email" required value={email} placeholder="you@ox.ac.uk"
-              onChange={e => setEmail(e.target.value)}
-              className="w-full bg-transparent border-b border-border-light py-3 font-playfair text-2xl focus:border-text focus:outline-none transition-colors placeholder:text-text3"
-            />
-          </div>
-          <div className="relative">
-            <input
-              type="password" required value={password} placeholder="Password"
-              onChange={e => setPassword(e.target.value)}
-              className="w-full bg-transparent border-b border-border-light py-3 font-playfair text-2xl focus:border-text focus:outline-none transition-colors placeholder:text-text3"
-            />
-          </div>
-
-          <div className="pt-6">
+        {forgotSent ? (
+          <div className="text-center space-y-6">
+            <div className="text-4xl">📬</div>
+            <p className="text-sm text-text2 font-sans leading-relaxed">
+              Reset link sent to <span className="font-semibold text-text">{email}</span>. Check your inbox.
+            </p>
             <button
-              type="submit" disabled={loading}
-              className="w-full bg-text text-white py-5 rounded-full text-sm font-semibold tracking-wide hover:bg-black transition-all disabled:opacity-30 disabled:cursor-not-allowed transform active:scale-[0.98]"
+              onClick={() => switchMode('login')}
+              className="text-sm text-text font-semibold hover:underline underline-offset-2"
             >
-              {loading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full mx-auto" /> : mode === 'signup' ? 'Create Account' : 'Sign In'}
+              Back to sign in
             </button>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="relative">
+              <input
+                type="email" required value={email} placeholder="you@ox.ac.uk"
+                onChange={e => setEmail(e.target.value)}
+                className="w-full bg-transparent border-b border-border-light py-3 font-playfair text-2xl focus:border-text focus:outline-none transition-colors placeholder:text-text3"
+              />
+            </div>
 
-        <div className="mt-12 text-center text-sm text-text2 underline-offset-4">
-          {mode === 'signup' ? 'Already have an account?' : 'No account yet?'}
-          <button
-            onClick={() => { setMode(mode === 'signup' ? 'login' : 'signup'); setError('') }}
-            className="ml-2 text-text font-semibold hover:underline"
-          >
-            {mode === 'signup' ? 'Log in' : 'Sign up'}
-          </button>
+            {mode !== 'forgot' && (
+              <>
+                <div className="relative">
+                  <input
+                    type="password" required value={password} placeholder="Password"
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full bg-transparent border-b border-border-light py-3 font-playfair text-2xl focus:border-text focus:outline-none transition-colors placeholder:text-text3"
+                  />
+                </div>
+                {mode === 'login' && (
+                  <div className="text-right -mt-4">
+                    <button
+                      type="button"
+                      onClick={() => switchMode('forgot')}
+                      className="text-xs text-text2 hover:text-text hover:underline underline-offset-2"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="pt-6">
+              <button
+                type="submit" disabled={loading}
+                className="w-full bg-text text-white py-5 rounded-full text-sm font-semibold tracking-wide hover:bg-black transition-all disabled:opacity-30 disabled:cursor-not-allowed transform active:scale-[0.98]"
+              >
+                {loading
+                  ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full mx-auto" />
+                  : mode === 'forgot' ? 'Send reset link' : mode === 'signup' ? 'Create Account' : 'Sign In'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {!forgotSent && (
+          <div className="mt-12 text-center text-sm text-text2 underline-offset-4">
+            {mode === 'forgot' ? (
+              <>
+                Remembered it?{' '}
+                <button onClick={() => switchMode('login')} className="ml-1 text-text font-semibold hover:underline">
+                  Sign in
+                </button>
+              </>
+            ) : mode === 'signup' ? (
+              <>
+                Already have an account?{' '}
+                <button onClick={() => switchMode('login')} className="ml-1 text-text font-semibold hover:underline">
+                  Log in
+                </button>
+              </>
+            ) : (
+              <>
+                No account yet?{' '}
+                <button onClick={() => switchMode('signup')} className="ml-1 text-text font-semibold hover:underline">
+                  Sign up
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </Motion.div>
+    </div>
+  )
+}
+
+// ─── Reset Password Screen ─────────────────────────────────────────────────────
+function ResetPasswordScreen({ credentials, onComplete }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (password !== confirm) { setError("Passwords don't match."); return }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return }
+    setLoading(true)
+    setError('')
+    try {
+      await account.updateRecovery(credentials.userId, credentials.secret, password)
+      setDone(true)
+    } catch (err) {
+      setError(err.message || 'Reset failed. The link may have expired.')
+      captureError(err, { context: 'password_reset' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+      <TopoBackground />
+      <Motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-white p-12 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-border-light relative z-10"
+      >
+        <div className="flex justify-center mb-10">
+          <div className="w-14 h-14 rounded-full bg-accent/10 border border-accent/30 flex items-center justify-center text-2xl">
+            ⚡
+          </div>
         </div>
+
+        {done ? (
+          <div className="text-center space-y-6">
+            <div className="text-4xl">✅</div>
+            <h1 className="font-playfair text-4xl text-center font-light tracking-tight">Password updated</h1>
+            <p className="text-sm text-text2 font-sans">You can now sign in with your new password.</p>
+            <button
+              onClick={onComplete}
+              className="w-full bg-text text-white py-5 rounded-full text-sm font-semibold tracking-wide hover:bg-black transition-all"
+            >
+              Sign in
+            </button>
+          </div>
+        ) : (
+          <>
+            <h1 className="font-playfair text-4xl text-center mb-2 font-light tracking-tight">New password</h1>
+            <p className="text-center text-text2 text-sm mb-10 font-sans">Choose a new password for your account.</p>
+
+            {error && (
+              <Motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="mb-8 p-4 bg-red-50 border border-red-100 text-xs text-error font-medium"
+              >
+                {error}
+              </Motion.div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="relative">
+                <input
+                  type="password" required value={password} placeholder="New password"
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full bg-transparent border-b border-border-light py-3 font-playfair text-2xl focus:border-text focus:outline-none transition-colors placeholder:text-text3"
+                />
+              </div>
+              <div className="relative">
+                <input
+                  type="password" required value={confirm} placeholder="Confirm password"
+                  onChange={e => setConfirm(e.target.value)}
+                  className="w-full bg-transparent border-b border-border-light py-3 font-playfair text-2xl focus:border-text focus:outline-none transition-colors placeholder:text-text3"
+                />
+              </div>
+              <div className="pt-6">
+                <button
+                  type="submit" disabled={loading}
+                  className="w-full bg-text text-white py-5 rounded-full text-sm font-semibold tracking-wide hover:bg-black transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  {loading ? <div className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full mx-auto" /> : 'Set new password'}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
       </Motion.div>
     </div>
   )
@@ -1455,7 +1616,7 @@ function MainApp({ profile: initialProfile, onProfileUpdate, user }) {
                 <button
                   key={item.key}
                   type="button"
-                  onClick={() => { setInboxInitialTab(null); setActiveScreen(item.key); }}
+                  onClick={() => { setInboxInitialTab(null); setActiveScreen(item.key); track.tabViewed(item.key); if (item.key === 'inbox') track.inboxOpened(); }}
                   aria-current={isActive ? 'page' : undefined}
                   className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-2 text-[11px] font-medium transition-colors ${
                     isActive ? 'text-text bg-white border border-border-light shadow-sm' : 'text-text3 hover:text-text'
@@ -1482,6 +1643,7 @@ function App() {
   const [docId, setDocId] = useState(null)
   const [profile, setProfile] = useState(null)
   const [magicLinkVerified, setMagicLinkVerified] = useState(false)
+  const [resetCredentials, setResetCredentials] = useState(null)
 
   // Capture referral code and verify magic link token from URL on first load
   useEffect(() => {
@@ -1498,6 +1660,13 @@ function App() {
 
     if (refCode) {
       sessionStorage.setItem('sc_referral_code', refCode);
+    }
+
+    const userId = params.get('userId');
+    const secret = params.get('secret');
+    if (userId && secret) {
+      window.history.replaceState({}, '', currentPath);
+      setResetCredentials({ userId, secret });
     }
 
     const token = params.get('token');
@@ -1540,6 +1709,7 @@ function App() {
       authenticatedUser = await account.get()
       setUser(authenticatedUser)
       identifyUser(authenticatedUser.$id, { email: authenticatedUser.email })
+      // Enrich identity with profile traits once loaded below
     } catch {
       logoutUser()
       setUser(null)
@@ -1559,6 +1729,14 @@ function App() {
         const existingProfile = result.rows[0]
         if (existingProfile.is_onboarding_complete && existingProfile.is_indexed) {
           setProfile(existingProfile)
+          identifyUser(authenticatedUser.$id, {
+            email: authenticatedUser.email,
+            college: existingProfile.college,
+            career_field: existingProfile.career_field,
+            primary_intent: existingProfile.primary_intent,
+            year_of_study: existingProfile.year_of_study,
+            is_onboarding_complete: true,
+          })
           setStep('discovery')
         } else if (existingProfile.is_onboarding_complete) {
           setDocId(existingProfile.$id)
@@ -1598,18 +1776,27 @@ function App() {
 
   return (
     <div className="selection:bg-accent selection:text-text">
-      {step === 'checking' && (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text" />
-        </div>
-      )}
-      {step === 'onboarding' && <NewOnboarding user={user} onAuth={handleAuth} onComplete={handleOnboardingComplete} magicLinkVerified={magicLinkVerified} />}
-      {step === 'discovery' && (
-        <MainApp
-          profile={profile}
-          user={user}
-          onProfileUpdate={(p) => setProfile(p)}
+      {resetCredentials ? (
+        <ResetPasswordScreen
+          credentials={resetCredentials}
+          onComplete={() => setResetCredentials(null)}
         />
+      ) : (
+        <>
+          {step === 'checking' && (
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text" />
+            </div>
+          )}
+          {step === 'onboarding' && <NewOnboarding user={user} onAuth={handleAuth} onComplete={handleOnboardingComplete} magicLinkVerified={magicLinkVerified} />}
+          {step === 'discovery' && (
+            <MainApp
+              profile={profile}
+              user={user}
+              onProfileUpdate={(p) => setProfile(p)}
+            />
+          )}
+        </>
       )}
     </div>
   )

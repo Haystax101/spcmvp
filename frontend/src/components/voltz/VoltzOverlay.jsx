@@ -286,7 +286,7 @@ export default function VoltzOverlay({
                     )}
 
                     {key === "change-password" && (
-                      <ChangePasswordScreen onBack={goBack} />
+                      <ChangePasswordScreen onBack={goBack} email={profile?.email} />
                     )}
 
                     {key === "checkout" && checkoutContext && (
