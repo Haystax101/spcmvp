@@ -1069,7 +1069,7 @@ const InputBar = ({ value, onChange, onSend, onOpenSheet }) => {
             aria-label="Send"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M7 13V3M3 7l4-4 4 4" stroke="#6B6B6B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 13V3M3 7l4-4 4 4" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         </div>
@@ -2903,7 +2903,7 @@ const StyleBlock = () => (
 .sc-input-right { position:relative; width:36px; height:32px; flex-shrink:0; }
 .sc-send-btn { width:32px; height:32px; border-radius:50%; background:#F2F0EC; border:1px solid #DDD9D2; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0; pointer-events:none; transition:opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease; position:absolute; right:0; top:50%; transform:translateY(-50%); }
 .sc-send-btn.visible { opacity:1; pointer-events:auto; }
-.sc-send-btn.neutral.active { background:#ECE9E3; border-color:#CFC8BC; }
+.sc-send-btn.neutral.active { background:#007AFF; border-color:#007AFF; color:#fff; }
 .sc-send-btn svg { display:block; }
 
 /* Sheet */
