@@ -394,8 +394,8 @@ export default function ProfileView({
   const subLine = [data.college, data.subject, data.year].filter(Boolean).join('  ·  ');
   const initials = data.fullName.split(' ').map(w => w[0]).filter(Boolean).join('').slice(0, 2).toUpperCase();
   
-  const isRomantic = String(data.primaryIntent || '').toLowerCase().includes('romantic') ||
-    !!(data.relationshipStatus || data.sexuality || data.datingAppearance.length ||
+  const isRomantic = !!(String(data.primaryIntent || '').toLowerCase().includes('romantic') ||
+    data.relationshipStatus || data.sexuality || data.datingAppearance.length ||
     data.datingPersonality.length || data.datingHobbies.length);
     
   const intentHeading = data.primaryIntent === 'romantic' ? 'Meet someone' : 'Build';
@@ -470,7 +470,7 @@ export default function ProfileView({
         <div style={{ padding: '12px 12px calc(110px + env(safe-area-inset-bottom, 0px))' }}>
 
           {/* Bio */}
-        {data.bio && (
+        {!!data.bio && (
           <div className="bio-card">
             <div className="bio-ey">About</div>
             <div className="bio-lead">{data.bio}</div>
@@ -495,7 +495,7 @@ export default function ProfileView({
         )}
 
         {/* About me label */}
-        {((isRomantic && visibleHowup.length > 0) || data.music.length > 0 || data.hobbies.length > 0 || data.campus.length > 0 || data.careerField) && (
+        {!!(( isRomantic && visibleHowup.length > 0) || data.music.length > 0 || data.hobbies.length > 0 || data.campus.length > 0) && (
           <div className="slp">About</div>
         )}
 

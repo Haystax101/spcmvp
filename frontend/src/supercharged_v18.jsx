@@ -16,6 +16,7 @@ import {
   Role,
 } from "./lib/appwrite";
 import ProfileView from "./components/ProfileView";
+import SharedProfileView from "./components/SharedProfileView";
 import { readCacheEntry, removeCacheEntry, writeCacheEntry } from "./lib/cache";
 
 // ─── CSS injected once ───────────────────────────────────────────────────────
@@ -1119,11 +1120,23 @@ export default function SuperchargedProfile({ onOpenSettings }) {
           const name = p?.full_name || 'Unknown';
           const inits = ((name).split(' ').map(x=>x[0]).join('').toUpperCase().slice(0,2)) || '??';
           const pct = compatMap[otherId] || 0;
+          // Extract photo_file_ids — may be top-level or nested in free_text_responses.profile_ui
+          let rawPhotoIds = p?.photo_file_ids;
+          if (!rawPhotoIds && p?.free_text_responses) {
+            try {
+              const ftr = typeof p.free_text_responses === 'string' ? JSON.parse(p.free_text_responses) : p.free_text_responses;
+              rawPhotoIds = ftr?.profile_ui?.photo_file_ids;
+            } catch (_) {}
+          }
+          if (typeof rawPhotoIds === 'string') { try { rawPhotoIds = JSON.parse(rawPhotoIds); } catch (_) { rawPhotoIds = null; } }
+          const photoIds = Array.isArray(rawPhotoIds) ? rawPhotoIds.filter(Boolean) : [];
+          const photoId = photoIds[0] || null;
           const item = {
             initials: inits, colour: pickColor(otherId), name,
             meta: [p?.career_field, p?.college].filter(Boolean).join(' · ') || 'Oxford',
             score: `${pct}%`, scoreClass: scoreClass(pct),
             profileId: otherId,
+            photoId,
           };
           const created = new Date(r.$createdAt);
           if (created >= thisMonthStart) groups[0].items.push(item);
@@ -1982,7 +1995,9 @@ export default function SuperchargedProfile({ onOpenSettings }) {
                 <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'#AFAFAF',padding:`${gi===0?4:12}px 4px 6px`,fontFamily:"'DM Sans',system-ui,sans-serif"}}>{g.group}</div>
                 {g.items.map(p => (
                   <div key={p.name} className="conn-item" style={{cursor:'pointer'}} onClick={() => p.profileId && setViewConnProfile(p.profileId)}>
-                    <div className="conn-av" style={{background:p.colour}}>{p.initials}</div>
+                    <div className="conn-av" style={{background:p.colour, overflow:'hidden'}}>
+                      {p.photoId ? <img src={buildPhotoUrl(p.photoId)} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}} onError={e=>{e.target.style.display='none'}} /> : p.initials}
+                    </div>
                     <div className="conn-info">
                       <div className="conn-name">{p.name}</div>
                       <div className="conn-meta">{p.meta}</div>
@@ -2465,9 +2480,8 @@ export default function SuperchargedProfile({ onOpenSettings }) {
       {viewConnProfile && (
         <ProfileView
           profileId={viewConnProfile}
-          currentUserProfileId={currentUserId}
           onClose={() => setViewConnProfile(null)}
-          context="compatibility"
+          context="search"
         />
       )}
     </div>
