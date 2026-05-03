@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion as Motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff } from 'lucide-react';
 import { account, tables, functions, ID, DB_ID, PROFILES_TABLE, DISCOVERY_FUNCTION_ID, AUTH_GATEWAY_FUNCTION_ID, CONNECTION_GATEWAY_FUNCTION_ID, Query } from './lib/appwrite';
+import { track, identifyUser } from './lib/tracking';
 import './NewOnboarding.css';
 
 const OXFORD_COLLEGES = ['All Souls', 'Balliol', 'Brasenose', 'Christ Church', 'Corpus Christi', 'Exeter', 'Green Templeton', 'Harris Manchester', 'Hertford', 'Jesus', 'Keble', 'Kellogg', 'Lady Margaret Hall', 'Linacre', 'Lincoln', 'Magdalen', 'Mansfield', 'Merton', 'New College', 'Nuffield', 'Oriel', 'Pembroke', "Queen's", 'Reuben', "Regent's Park", 'Somerville', "St Anne's", "St Antony's", "St Catherine's", 'St Cross', 'St Edmund Hall', "St Hilda's", "St Hugh's", "St John's", "St Peter's", 'Trinity', 'University', 'Wadham', 'Wolfson', 'Worcester', 'Wycliffe Hall'];
@@ -350,6 +351,8 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const [studySubject, setStudySubject] = useState('');
 
@@ -554,6 +557,8 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
     setError('');
     const idx = stepOrder.indexOf(currentStep);
     if (idx < stepOrder.length - 1) {
+      track.onboardingStepCompleted(currentStep, idx);
+      if (currentStep === '8' && rank1Cat) track.onboardingIntentSelected(rank1Cat);
       setHistory(prev => [...prev, currentStep]);
       setCurrentStep(stepOrder[idx + 1]);
     }
@@ -641,12 +646,15 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
   };
 
   const handleLogin = async () => {
+    track.signinAttempted();
     try {
       setLoading(true);
       setError('');
       await clearCurrentSessionForCredentialAuth();
       await account.createEmailPasswordSession(loginEmail, loginPassword);
       const u = await account.get();
+      track.signinCompleted();
+      identifyUser(u.$id, { email: u.email });
       setLoading(false);
       onAuth(u); // Let App.jsx handle the rest!
     } catch (err) {
@@ -656,12 +664,15 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
   };
 
   const handleSignUp = async () => {
+    track.signupAttempted(email.split('@')[1] || '');
     try {
       setLoading(true);
       setError('');
       await clearCurrentSessionForCredentialAuth();
-      await account.create(ID.unique(), email, password, firstName + ' ' + lastName);
+      const u = await account.create(ID.unique(), email, password, firstName + ' ' + lastName);
       await account.createEmailPasswordSession(email, password);
+      track.signupCompleted();
+      identifyUser(u.$id, { email });
       setLoading(false);
       goNext();
     } catch (err) {
@@ -1009,6 +1020,33 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
               <button className="btn-primary" onClick={handleLogin} disabled={loading || !loginEmail || !loginPassword}>
                 {loading ? 'Logging in...' : 'Log in'}
               </button>
+              <div style={{ textAlign: 'center', marginTop: 16 }}>
+                {forgotSent ? (
+                  <p className="ob-whisper">Reset link sent to <strong>{loginEmail}</strong>. Check your inbox.</p>
+                ) : (
+                  <button
+                    type="button"
+                    className="ob-whisper"
+                    disabled={forgotLoading}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline', opacity: forgotLoading ? 0.5 : 1 }}
+                    onClick={async () => {
+                      if (!loginEmail) { setError('Enter your email above first.'); return; }
+                      setForgotLoading(true);
+                      try {
+                        await account.createRecovery(loginEmail, window.location.href.split('?')[0]);
+                        setForgotSent(true);
+                        setError('');
+                      } catch (e) {
+                        setError(e.message || 'Could not send reset link.');
+                      } finally {
+                        setForgotLoading(false);
+                      }
+                    }}
+                  >
+                    {forgotLoading ? 'Sending…' : 'Forgot password?'}
+                  </button>
+                )}
+              </div>
             </StepWrapper>
           )}
 

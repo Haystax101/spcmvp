@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { tables, functions, DB_ID, PROFILES_TABLE, CONNECTION_GATEWAY_FUNCTION_ID, Query } from '../lib/appwrite';
 import { extractPhotoFileIds, buildPhotoUrl, PHOTO_SIZES } from '../lib/photos';
+import { track } from '../lib/tracking';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ function parseRow(row) {
   const datingPersonality = parseList(row.dating_personality);
   const datingHobbies = parseList(row.dating_hobbies);
 
+  const roles = (ui.roles && typeof ui.roles === 'object') ? ui.roles : {};
+
   return {
     fullName: [row.first_name, row.last_name].filter(Boolean).join(' ') || row.full_name || 'Oxford Member',
     college: row.college || '',
@@ -51,6 +54,7 @@ function parseRow(row) {
     music,
     hobbies,
     campus,
+    roles,
     photoIds,
   };
 }
@@ -81,6 +85,7 @@ function parseEnriched(p) {
     music: parseList(p.music),
     hobbies: parseList(p.hobbies || p.hobby),
     campus: parseList(p.campus || p.societies),
+    roles: p.roles || {},
     photoIds,
   };
 }
@@ -247,6 +252,8 @@ const PROFILE_VIEW_CSS = `
 .music-tag-primary{background:#9FE1CB;color:#085041;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600}
 .music-tag-secondary{background:rgba(31,158,117,0.1);border:1px solid rgba(31,158,117,0.22);color:#0F6E56;border-radius:999px;padding:5px 11px;font-size:12px}
 
+.soc-name{font-size:14px;font-weight:500;color:#1A1A1A;line-height:1.2}
+.soc-role{font-size:11px;font-weight:500;color:#534AB7;margin-top:2px;opacity:0.8}
 .pc-hobbies{background:#FAEEDA}.pc-hobbies .p-ico{background:#FAC775}.pc-hobbies .p-ico svg{stroke:#633806}.pc-hobbies .p-label{color:#854F0B}.pc-hobbies .p-preview-name{color:#633806}.pc-hobbies .p-preview-rest{color:#854F0B}.pc-hobbies .p-chev svg{stroke:#854F0B}
 .pc-hobbies .p-header{background:#FAEEDA}
 .pc-hobbies .p-body{background:#FAEEDA}
@@ -313,6 +320,7 @@ export default function ProfileView({
       (extractPhotoFileIds(rawProfile).length > 0)
     )) {
       setData(parseEnriched(rawProfile));
+      track.profileViewed(profileId || connectionId, context);
       return;
     }
 
@@ -355,6 +363,7 @@ export default function ProfileView({
           return res.rows?.[0] || null;
         });
         setData(row ? parseRow(row) : (rawProfile ? parseEnriched(rawProfile) : null));
+        track.profileViewed(profileId || connectionId, context);
       } finally {
         setLoading(false);
       }
@@ -458,7 +467,7 @@ export default function ProfileView({
         </div>
 
         {/* Content Sections */}
-        <div style={{ padding: '12px 12px calc(40px + env(safe-area-inset-bottom, 0px))' }}>
+        <div style={{ padding: '12px 12px calc(110px + env(safe-area-inset-bottom, 0px))' }}>
 
           {/* Bio */}
         {!!data.bio && (
@@ -639,13 +648,15 @@ export default function ProfileView({
               <div className="socs-expanded">
                 {data.campus.map(soc => {
                   return (
-                    <div key={soc} className="soc-item">
-                      <div className="soc-dot"/>
-                      <div>
-                        <div className="soc-name">{soc}</div>
-                        {/* We don't have roles data easily available in ProfileView unless we parse it out of rawProfile, so we'll just show the society name */}
+                      <div key={soc} className="soc-item">
+                        <div className="soc-dot"/>
+                        <div>
+                          <div className="soc-name">{soc}</div>
+                          {data.roles && data.roles[soc] && (
+                            <div className="soc-role">{data.roles[soc]}</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
                   );
                 })}
               </div>

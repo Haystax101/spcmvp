@@ -14,7 +14,7 @@ const getStrength = (pw) => {
   return { label: "Strong",  color: "#4CAF50", width: "100%" };
 };
 
-export default function ChangePasswordScreen({ onBack }) {
+export default function ChangePasswordScreen({ onBack, email }) {
   const [currentPw,  setCurrentPw]  = useState("");
   const [newPw,      setNewPw]      = useState("");
   const [confirmPw,  setConfirmPw]  = useState("");
@@ -27,6 +27,8 @@ export default function ChangePasswordScreen({ onBack }) {
   const [errorMatch,   setErrorMatch]   = useState("");
   const [loading,      setLoading]      = useState(false);
   const [success,      setSuccess]      = useState(false);
+  const [resetSent,    setResetSent]    = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const strength = getStrength(newPw);
 
@@ -214,6 +216,40 @@ export default function ChangePasswordScreen({ onBack }) {
             <div style={{ fontFamily: SANS, fontSize: 12, color: C.secondary, textAlign: "center", marginTop: 10 }}>
               Use 8+ characters with a number and uppercase letter.
             </div>
+
+            {email && (
+              <div style={{ textAlign: "center", marginTop: 20 }}>
+                {resetSent ? (
+                  <div style={{ fontFamily: SANS, fontSize: 12, color: C.greenText }}>
+                    Reset link sent to {email}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={resetLoading}
+                    onClick={async () => {
+                      setResetLoading(true);
+                      try {
+                        await account.createRecovery(email, window.location.href.split('?')[0]);
+                        setResetSent(true);
+                      } catch (e) {
+                        captureError(e, { context: 'forgot_password_from_settings' });
+                      } finally {
+                        setResetLoading(false);
+                      }
+                    }}
+                    style={{
+                      background: "transparent", border: "none", padding: 0,
+                      fontFamily: SANS, fontSize: 12, color: C.secondary,
+                      textDecoration: "underline", cursor: "pointer",
+                      opacity: resetLoading ? 0.5 : 1,
+                    }}
+                  >
+                    {resetLoading ? "Sending…" : "Forgot current password? Send reset link"}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
