@@ -765,6 +765,8 @@ function mapPendingCard(connection, initiator, score) {
         ? ['#3DAA82', '#5B8CF5', '#E8A94A']
         : ['#5B8CF5', '#9B7CF6'],
     initiated_at: connection.initiated_at,
+    user_id: initiator?.user_id || null,
+    profile_id: initiator?.$id || null,
   };
 }
 
@@ -799,6 +801,8 @@ function mapConversationCard(connection, counterpart, latestMessage, unreadCount
     last_read_at: lastReadAt || null,
     compatibility_score_snapshot: Number(connection.compatibility_score_snapshot || 0) || null,
     compatibility_snapshot: parseCompatibilitySnapshot(connection.compatibility_snapshot_json),
+    user_id: counterpart?.user_id || null,
+    profile_id: counterpart?.$id || null,
   };
 }
 
@@ -2081,6 +2085,8 @@ async function actionGetHomeFeed({ tables, body, currentProfile, log }) {
         })),
         compat_dims: snapshot.breakdown,
         initiated_at: connection.initiated_at,
+        user_id: initiator.user_id || null,
+        profile_id: initiator.$id || null,
       };
     } catch (cardErr) {
       // Don't let a single malformed connection crash the whole feed
@@ -2153,6 +2159,14 @@ async function actionGetHomeFeed({ tables, body, currentProfile, log }) {
   const currentVoltz = Number(currentProfile.current_voltz || 0);
   const voltzTrends = computeGrowthTrend(voltzHistory.rows || [], 'awarded_at', 'amount', ['1w', '1m', '3m'], currentVoltz);
   const connTrends = computeGrowthTrend(allAccepted, 'accepted_at', null, ['1w', '1m', '3m'], active_count);
+
+  // Write stats back to the profile row so the client can read them instantly on next load
+  tables.updateRow({
+    databaseId: DB_ID,
+    tableId: PROFILES_TABLE,
+    rowId: currentProfile.$id,
+    data: { home_stats_json: JSON.stringify({ active_count, avg_compat, response_rate }) },
+  }).catch(() => {});
 
   return {
     success: true,

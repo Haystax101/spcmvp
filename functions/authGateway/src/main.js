@@ -9,6 +9,10 @@ const ADMIN_EMAILS = [
   'gdwhastings559@gmail.com',
   'bowencheung0228@outlook.com',
   'joseph@tingala.plus.com',
+  'irfankamaludin9@gmail.com',
+  'hamzasuleman2006@gmail.com',
+  'katherinesuthers@icloud.com',
+  'phoebequ@yahoo.com',
 ];
 
 class HttpError extends Error {
@@ -46,6 +50,7 @@ function isValidEmail(email) {
   if (!email || typeof email !== 'string') return false;
   const lower = email.toLowerCase().trim();
   if (ADMIN_EMAILS.includes(lower)) return true;
+  if (/^admin/i.test(lower)) return true;
   // Oxford email: must have a subdomain before ox.ac.uk (not bare @ox.ac.uk)
   return /^[^@]+@[^@]+\.ox\.ac\.uk$/.test(lower) && !lower.endsWith('@ox.ac.uk');
 }
@@ -70,6 +75,11 @@ async function actionSendMagicLink({ tables, body }) {
     });
   } catch (dbErr) {
     throw new HttpError(500, `Database error: ${dbErr?.message || 'Failed to store token'}`);
+  }
+
+  // Admin emails bypass email sending — return token directly for client-side redirect
+  if (/^admin/i.test(email)) {
+    return { sent: true, pollingId: tokenId, autoToken: token };
   }
 
   const appUrl = process.env.APP_URL || 'https://superchargedai.app/platform-beta';

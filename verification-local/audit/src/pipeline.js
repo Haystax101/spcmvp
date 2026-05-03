@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Client, Query, TablesDB } from 'node-appwrite';
+import { Client, ID, Query, TablesDB } from 'node-appwrite';
 import readline from 'readline';
 import { spawn } from 'child_process';
 
@@ -27,7 +27,7 @@ const cfg = {
   model: process.env.DEFAULT_AUDIT_MODEL || 'gemma4:e2b-it-q4_K_M',
   classifierModel: process.env.CLASSIFIER_MODEL || 'gemma4:e2b-it-q4_K_M',
   concurrencyPhase2: parseInt(process.env.CONCURRENCY_P2) || 12, // Optimized for M1 Pro
-  concurrencyPhase3: parseInt(process.env.CONCURRENCY_P3) || 4,  // Limited by Search API
+  concurrencyPhase3: parseInt(process.env.CONCURRENCY_P3) || 12, // SearXNG + Ollama queue overlap on M1 Pro
   ollamaTimeoutMs: 180000,
   searxngTimeoutMs: 15000,
   searchResultsLimit: 5,
@@ -351,143 +351,288 @@ async function runPhase2(tables, apply) {
 }
 
 // ============================================
-// Phase 3 & 4: Search + Deep Profiling
+// Phase 3: Two-stage Search + LLM Profiling
 // ============================================
-async function runPhase3and4(tables, apply) {
-  await logMessage(3, 'INFO', `Starting Heavyweight Audit (Phase 3: Web Search & Phase 4: LLM Profiling)`);
-  await logMessage(3, 'INFO', `Mode: ${apply ? 'EXECUTE (APPLY)' : 'DRY RUN'}`);
-  await logMessage(3, 'INFO', `Using Audit Model: ${cfg.model}`);
 
-  let people = await fetchAllPeople(tables);
-  await logMessage(3, 'INFO', `Target Audience: ${people.length} users.`);
+// Build a varied set of broad queries for the description stage.
+function buildDescriptionQueries(name, username) {
+  const queries = [
+    `"${name}" oxford`,
+    `${name} oxford university`,
+    `${name} oxford student`,
+    `${name} oxford society`,
+  ];
+  const parts = name.split(' ');
+  if (parts.length > 2) {
+    queries.push(`"${parts[0]} ${parts[parts.length - 1]}" oxford`);
+  }
+  if (username && !/\d{3,}/.test(username)) {
+    queries.push(`"${username}" oxford`);
+    queries.push(`${username} oxford university`);
+  }
+  return queries;
+}
 
-  // Test Mode Logic
-  const isTestMode = process.argv.includes('--test');
-  if (isTestMode) {
-    people = people.slice(0, 10);
-    await logMessage(3, 'INFO', `TEST MODE: Limiting execution to ${people.length} users.`);
+// Targeted LinkedIn query for stage 2.
+function buildLinkedInQuery(name) {
+  return `site:linkedin.com "${name}" "oxford"`;
+}
+
+// LinkedIn /in/ profile URL validator — accepts www and country subdomains.
+const LINKEDIN_PROFILE_RE = /^https?:\/\/([a-z]{2}\.)?linkedin\.com\/in\/[^/?#\s]+\/?/i;
+function isLinkedInProfile(url) {
+  return LINKEDIN_PROFILE_RE.test(url);
+}
+
+// Send pooled broad results to the LLM and ask for a description.
+async function describePersonWithOllama(name, results) {
+  // Truncate snippets to avoid overwhelming the model's context window
+  const resultsText = results
+    .map((r, i) => {
+      const trust = i === 0
+        ? '(MOST RELEVANT — highest trust)'
+        : i <= 2
+          ? `(rank ${i + 1} — high trust)`
+          : i <= 5
+            ? `(rank ${i + 1} — moderate trust, may be coincidental)`
+            : `(rank ${i + 1} — low trust, treat with scepticism)`;
+      
+      const snippet = (r.content || '').slice(0, 400);
+      return `[${i + 1}] ${trust}\n    URL: ${r.url}\n    Title: ${r.title}\n    Snippet: ${snippet}${r.content.length > 400 ? '...' : ''}`;
+    })
+    .join('\n\n');
+
+  const promptText = `You are an Oxford University student directory assistant. \
+Your task is to identify whether "${name}" is a real Oxford student or alumnus, and if so, \
+write a concise, factually grounded description of them.
+
+IMPORTANT RULES:
+1. RANKING: The results are ordered by relevance. Result [1] is the most trustworthy. \
+Trust decays with each subsequent result. Do NOT give equal weight to all results; prioritise early ones.
+2. LOGICAL CONSISTENCY: Claims must be internally consistent. E.g., an undergrad is unlikely to be leading major research.
+3. RELEVANCE: Ignore any results that are clearly not about this specific person.
+4. HONESTY: If you do not have enough reliable evidence that this person is an Oxford student/alumnus, set "found" to false.
+
+Search results for "${name}":
+${resultsText}
+
+FINAL INSTRUCTION: Return ONLY valid JSON in exactly this shape. Do not include any other text.
+{"found": true, "description": "..."}
+or
+{"found": false, "description": ""}`;
+
+  try {
+    const res = await fetch(`${cfg.ollamaUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.model,
+        stream: false,
+        format: 'json',
+        messages: [{ role: 'user', content: promptText }],
+      }),
+      signal: AbortSignal.timeout(cfg.ollamaTimeoutMs),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const raw = data.message?.content || '';
+
+    if (!raw.trim()) {
+      await logMessage(3, 'ERROR', `Empty response from LLM for "${name}". Prompt length: ${promptText.length} chars.`);
+      return { raw: '', parsed: null };
+    }
+
+    // Robust JSON extraction: Find content between first '{' and last '}'
+    let cleaned = raw.trim();
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+
+    try {
+      return { raw, parsed: JSON.parse(cleaned) };
+    } catch (parseErr) {
+      // Log the failure to help debug why the LLM is breaking the format
+      await logMessage(3, 'ERROR', `JSON Parse Failure for "${name}". Raw output: ${raw.slice(0, 500)}${raw.length > 500 ? '...' : ''}`);
+      return { raw, parsed: null };
+    }
+  } catch (err) {
+    return { raw: `[Error: ${err.message}]`, parsed: null };
+  }
+}
+
+// Process a single person through both stages. Returns a result object.
+async function processPersonPhase3(name, username, isTestMode) {
+  // ── Stage 1: broad search ────────────────────────────────
+  const descQueries = buildDescriptionQueries(name, username);
+  const allResults  = [];
+  const seenUrls    = new Set();
+
+  for (const query of descQueries) {
+    const results = await searchSearxng(query, cfg.searchResultsLimit);
+    for (const r of results) {
+      if (!seenUrls.has(r.url)) {
+        seenUrls.add(r.url);
+        allResults.push(r);
+      }
+    }
   }
 
-  // Resume Logic
+  if (isTestMode) {
+    console.log(`    [search] ${allResults.length} unique results across ${descQueries.length} queries`);
+    allResults.forEach((r, i) => console.log(`      [${i + 1}] ${r.url}`));
+  }
+
+  if (allResults.length === 0) {
+    return { found: false, description: '', linkedInUrl: '', reason: 'no_search_results' };
+  }
+
+  // ── Stage 1b: LLM description ───────────────────────────
+  const { raw, parsed } = await describePersonWithOllama(name, allResults);
+
+  if (isTestMode) {
+    console.log(`    [llm] ${raw}`);
+  }
+
+  if (!parsed) {
+    return { found: false, description: '', linkedInUrl: '', reason: 'llm_parse_error' };
+  }
+  if (!parsed.found) {
+    return { found: false, description: '', linkedInUrl: '', reason: 'not_identified' };
+  }
+
+  // ── Stage 2: targeted LinkedIn search ───────────────────
+  const liResults = await searchSearxng(buildLinkedInQuery(name), 5);
+  const topUrl    = liResults[0]?.url || '';
+  const linkedInUrl = isLinkedInProfile(topUrl) ? topUrl : '';
+
+  if (isTestMode) {
+    console.log(`    [linkedin] top URL: ${topUrl || '(none)'} → ${linkedInUrl ? '✅ accepted' : '❌ rejected'}`);
+  }
+
+  return {
+    found: true,
+    description: parsed.description || '',
+    linkedInUrl,
+    reason: 'ok',
+  };
+}
+
+async function runPhase3(tables, apply) {
+  const isTestMode = process.argv.includes('--test');
+
+  await logMessage(3, 'INFO', `Starting Phase 3: Two-Stage Web Search + LLM Profiling`);
+  await logMessage(3, 'INFO', `Mode: ${apply ? 'APPLY' : 'DRY RUN'}${isTestMode ? ' | TEST (10 people)' : ''}`);
+  await logMessage(3, 'INFO', `Model: ${cfg.model}`);
+
+  let people = await fetchAllPeople(tables);
+  await logMessage(3, 'INFO', `Loaded ${people.length} people.`);
+
+  if (isTestMode) {
+    people = people.slice(0, 10);
+    await logMessage(3, 'INFO', `TEST MODE: capped to ${people.length} people.`);
+  }
+
+  // Resume logic
   const state = await loadState(3, apply);
-  if (state && state.lastId) {
+  if (state?.lastId) {
     const lastIndex = people.findIndex(p => p.$id === state.lastId);
     if (lastIndex !== -1 && lastIndex < people.length - 1) {
-      const resume = await confirmAction(`Found previous ${apply ? 'APPLY' : 'DRY RUN'} progress (last processed ID: ${state.lastId}). Resume?`);
+      const resume = await confirmAction(`Resume from last checkpoint (ID: ${state.lastId})?`);
       if (resume) {
         people = people.slice(lastIndex + 1);
-        await logMessage(3, 'INFO', `Resuming from record ${lastIndex + 2}. Remaining to process: ${people.length}`);
+        await logMessage(3, 'INFO', `Resuming — ${people.length} remaining.`);
       } else {
         await clearState(3, apply);
       }
     }
   }
 
+  let found = 0, notFound = 0, skipped = 0, errors = 0;
+  const total = people.length;
   const batchSize = cfg.concurrencyPhase3;
-  let candidates = [];
-  let processed = 0;
 
   for (let i = 0; i < people.length; i += batchSize) {
     const batch = people.slice(i, i + batchSize);
 
     await Promise.all(batch.map(async person => {
-      const name = (person.full_name || person.normalized_name || '').trim();
+      const name     = (person.full_name || person.normalized_name || '').trim();
+      const username = (person.username || '').trim();
+
       if (!name) {
-        await logMessage(3, 'WARN', `Skipping ID ${person.$id}: Name missing.`);
+        await logMessage(3, 'WARN', `⏩ ID ${person.$id}: name missing, skipped.`);
+        skipped++;
         return;
       }
 
-      // Production Speed Hack: Skip if already processed
-      if (person.description && person.linkedin_url) {
-        // await logMessage(3, 'DEBUG', `[${name}] Already has description/LinkedIn. Skipping.`);
+      // Skip people already enriched
+      if (person.linkedin_url) {
+        await logMessage(3, 'DEBUG', `⏩ [${name}] already has LinkedIn URL.`);
+        skipped++;
         return;
       }
+
+      if (isTestMode) console.log(`\n  → [${name}]`);
 
       try {
-        // Phase 3: Two queries — username and name
-        const queries = [
-          `"${person.username}" oxford`,
-          `"${name}" oxford uni`
-        ];
+        const result = await processPersonPhase3(name, username, isTestMode);
 
-        let allResults = [];
-        const seenUrls = new Set();
-
-        for (const query of queries) {
-          await logMessage(3, 'DEBUG', `[${name}] Searching: ${query}`);
-          const results = await searchSearxng(query);
-          for (const r of results) {
-            if (!seenUrls.has(r.url)) {
-              seenUrls.add(r.url);
-              allResults.push(r);
-            }
-          }
-        }
-
-        await logMessage(3, 'DEBUG', `[${name}] Search returned ${allResults.length} total unique results.`);
-
-        // Phase 3.5: Skip if no results found
-        if (allResults.length === 0) {
-          await logMessage(3, 'DEBUG', `[${name}] ⏩ No search results found. Skipping.`);
-          processed++;
+        if (!result.found) {
+          const reasonLabel = {
+            no_search_results: 'no results',
+            llm_parse_error:   'LLM parse error',
+            not_identified:    'not identified as Oxford person',
+          }[result.reason] || result.reason;
+          await logMessage(3, 'INFO', `❌ [${name}] — ${reasonLabel}`);
+          notFound++;
           return;
         }
 
-        // Phase 4: Heavyweight verification
-        await logMessage(3, 'DEBUG', `[${name}] 🔍 Sending to LLM for profiling...`);
-        const auditRes = await auditWithOllama(cfg.model, name, allResults);
+        const liLabel = result.linkedInUrl ? `| 🔗 ${result.linkedInUrl}` : '| (no LinkedIn)';
+        await logMessage(3, 'INFO', `✅ [${name}] ${liLabel}`);
+        if (result.description) {
+          await logMessage(3, 'DEBUG', `   desc: ${result.description.slice(0, 120)}${result.description.length > 120 ? '…' : ''}`);
+        }
+        found++;
 
-        const decisionEmoji = auditRes.decision === 'keep' ? '✅' : (auditRes.decision === 'delete_candidate' ? '⚠️' : '❓');
-        await logMessage(3, 'AUDIT', `[${name}] Decision: ${decisionEmoji} ${auditRes.decision.toUpperCase()}`);
-
-        // Only save data if we have high confidence (Decision: KEEP)
-        if (auditRes.decision === 'keep' && (auditRes.description || auditRes.linkedin_url)) {
-          if (auditRes.description) await logMessage(3, 'INFO', `[${name}] 📝 ${auditRes.description}`);
-          if (auditRes.linkedin_url) await logMessage(3, 'INFO', `[${name}] 🔗 ${auditRes.linkedin_url}`);
-
-          if (apply) {
+        if (apply) {
+          const data = {};
+          if (result.linkedInUrl) data.linkedin_url = result.linkedInUrl;
+          if (result.description) {
+            const existing = (person.description || '').trim();
+            data.description = existing ? `${result.description} ${existing}` : result.description;
+          }
+          if (Object.keys(data).length > 0) {
             try {
               await tables.updateRow({
                 databaseId: cfg.databaseId,
                 tableId: cfg.peopleTable,
                 rowId: person.$id,
-                data: {
-                  description: auditRes.description || person.description,
-                  linkedin_url: auditRes.linkedin_url || person.linkedin_url
-                }
+                data,
               });
-              await logMessage(3, 'SUCCESS', `[${name}] Updated database with description/LinkedIn.`);
+              await logMessage(3, 'SUCCESS', `   [${name}] DB updated.`);
             } catch (e) {
-              await logMessage(3, 'ERROR', `[${name}] Failed to update database: ${e.message}`);
+              await logMessage(3, 'ERROR', `   [${name}] DB update failed: ${e.message}`);
             }
           }
-        } else if (auditRes.decision !== 'keep') {
-          await logMessage(3, 'DEBUG', `[${name}] Low confidence. Skipping database enrichment.`);
         }
       } catch (err) {
-        await logMessage(3, 'ERROR', `[${name}] Pipeline failure: ${err.message}`);
+        await logMessage(3, 'ERROR', `💥 [${name}] ${err.message}`);
+        errors++;
       }
-      processed++;
     }));
 
-    // Save checkpoint
-    const lastProcessedId = batch[batch.length - 1].$id;
-    await saveState(3, lastProcessedId);
-
-    if (i % 10 === 0 && i > 0) {
-      await logMessage(3, 'INFO', `Progress Update: ${i}/${people.length} evaluated.`);
+    const done = Math.min(i + batchSize, total);
+    await saveState(3, batch[batch.length - 1].$id, apply);
+    if (!isTestMode && done % 50 === 0) {
+      await logMessage(3, 'INFO', `Progress: ${done}/${total} — ✅ ${found} found, ❌ ${notFound} not found, ⏩ ${skipped} skipped, 💥 ${errors} errors`);
     }
   }
 
-  await logMessage(3, 'INFO', `Heavyweight Audit Phase Complete.`);
-
-  if (apply) {
-    await logMessage(3, 'INFO', `Production run finished. Database updated with descriptions and LinkedIn URLs.`);
-  } else {
-    await logMessage(3, 'INFO', `Dry run finished. No database changes made.`);
-    await logMessage(3, 'INFO', `Run with --apply to save data to the database.`);
-  }
-
+  await logMessage(3, 'INFO', `Phase 3 complete — ✅ ${found} found, ❌ ${notFound} not found, ⏩ ${skipped} skipped, 💥 ${errors} errors`);
+  if (!apply) await logMessage(3, 'INFO', `Dry run — no DB changes. Add --apply to write to the database.`);
   await clearState(3, apply);
 }
 
@@ -637,26 +782,36 @@ async function classifyWithOllama(model, text) {
   }
 }
 
-async function searchSearxng(query) {
-  const res = await fetch(`${cfg.searxngUrl}/search?format=json&language=en&q=${encodeURIComponent(query)}`);
-  const data = await res.json();
-  const results = Array.isArray(data.results) ? data.results : [];
-  return results.slice(0, cfg.searchResultsLimit).map(r => ({ title: r.title, content: r.content, url: r.url }));
+function nameFromLinkedInUrl(url) {
+  const match = url.match(/linkedin\.com\/in\/([^/?#]+)/);
+  if (!match) return null;
+  const noise = new Set(['oxford', 'university', 'the', 'and', 'of', 'at', 'in']);
+  const parts = match[1].split('-').filter(p =>
+    p.length > 1 &&
+    !/^\d+$/.test(p) &&
+    !/^[a-z0-9]{8,}$/.test(p) && // skip hash-like suffixes
+    !noise.has(p.toLowerCase())
+  );
+  if (parts.length < 2) return null;
+  return parts.slice(0, 3).map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
 }
 
-async function auditWithOllama(model, name, results) {
-  const resultsText = results.map(r => `URL: ${r.url}\nSnippet: ${r.content}`).join('\n\n');
-  const promptText = `Audit this Oxford candidate. Return exactly JSON: {"decision":"keep"|"needs_review"|"delete_candidate", "found_linkedin":true/false, "linkedin_url":"", "description":"[TEXT]"}\n\nCandidate: ${name}\nResults:\n${resultsText}\n\nTask: Provide an oxford-orientated description of the person based on the results. Keep it concise and useful for knowing more about what that person does or did at Oxford, as well as their general interests and achievements.`;
-  const res = await fetch(`${cfg.ollamaUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model, stream: false, format: 'json',
-      messages: [{ role: 'user', content: promptText }]
-    })
-  });
-  const data = await res.json();
-  try { return JSON.parse(data.message.content); } catch { return { decision: "needs_review" }; }
+async function searchSearxng(query, limit = cfg.searchResultsLimit) {
+  try {
+    const res = await fetch(
+      `${cfg.searxngUrl}/search?format=json&language=en&q=${encodeURIComponent(query)}`,
+      { signal: AbortSignal.timeout(cfg.searxngTimeoutMs) }
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const results = Array.isArray(data.results) ? data.results : [];
+    return results.slice(0, limit).map(r => ({
+      title: r.title || '', url: r.url || '', content: r.content || '',
+    }));
+  } catch (err) {
+    await logMessage(3, 'WARN', `SearXNG error: ${err.message}`);
+    return [];
+  }
 }
 
 // CLI Engine
@@ -702,7 +857,7 @@ Examples:
   try {
     if (phase === '1') await runPhase1(tables, apply);
     else if (phase === '2') await runPhase2(tables, apply);
-    else if (phase === '3') await runPhase3and4(tables, apply);
+    else if (phase === '3') await runPhase3(tables, apply);
     else if (phase === '4') await runPhase4(tables, apply);
     else {
       console.error(`Unknown phase: ${phase}. Use 1, 2, 3, or 4.`);

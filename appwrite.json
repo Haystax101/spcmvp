@@ -742,6 +742,14 @@
                     "format": ""
                 },
                 {
+                    "key": "home_stats_json",
+                    "type": "string",
+                    "size": 1000,
+                    "required": false,
+                    "array": false,
+                    "default": null
+                },
+                {
                     "key": "stripe_customer_id",
                     "type": "varchar",
                     "required": false,

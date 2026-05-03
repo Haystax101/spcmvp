@@ -1005,6 +1005,45 @@ function buildMatchReason(match, translated, originalQuery) {
   return `Matched on ${reasons.slice(0, 2).join(' and ')}.`;
 }
 
+async function generateMatchReason(ai, source, target) {
+  const arr = (v) => (Array.isArray(v) && v.length ? v.slice(0, 4).join(', ') : null);
+  const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const fmt = (p) => [
+    str(p.career_field)          && `career: ${p.career_field}`,
+    str(p.career_subfield)       && `subfield: ${p.career_subfield}`,
+    str(p.study_subject)         && `studies: ${p.study_subject}`,
+    str(p.college)               && `college: ${p.college}`,
+    str(p.year_of_study)         && `year: ${p.year_of_study}`,
+    str(p.primary_intent)        && `looking to: ${p.primary_intent}`,
+    str(p.relationship_intent)   && `connection type: ${p.relationship_intent}`,
+    arr(p.goals)                 && `goals: ${arr(p.goals)}`,
+    arr(p.desired_connections)   && `wants to meet: ${arr(p.desired_connections)}`,
+    arr(p.social_circles)        && `circles: ${arr(p.social_circles)}`,
+    arr(p.societies)             && `societies: ${arr(p.societies)}`,
+    str(p.building_description)  && `building: ${p.building_description}`,
+    str(p.intellectual_venue)    && `intellectual venue: ${p.intellectual_venue}`,
+    str(p.intellectual_identity) && `sees self as: ${p.intellectual_identity}`,
+    str(p.intellectual_ambition) && `ambition: ${p.intellectual_ambition}`,
+    str(p.project_stage)         && `project stage: ${p.project_stage}`,
+    str(p.hobby)                 && `hobbies: ${p.hobby}`,
+    str(p.honest_thing)          && `honest: ${p.honest_thing}`,
+  ].filter(Boolean).join(' | ');
+
+  const prompt = `Write one sentence explaining why YOU would want to connect with THEM. Use "you"/"your" when referring to Person A (the reader) and "they"/"their" when referring to Person B. Be specific — reference actual shared interests, goals, or complementary context. Do not say "both passionate about" or "Oxford". Max 20 words. Output only the sentence.
+
+You (Person A): ${fmt(source)}
+Them (Person B): ${fmt(target)}`;
+
+  const result = await ai.models.generateContent({
+    model: 'gemini-3.1-flash-lite-preview',
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: { temperature: 0.7, maxOutputTokens: 60, thinkingConfig: { thinkingLevel: 'minimal' } },
+  });
+
+  const text = (result?.text || '').trim();
+  return text.length > 5 ? text : null;
+}
+
 function boostAndSpreadScore(rawScore, minRaw = 0.60, maxRaw = 0.85, minTarget = 0.65, maxTarget = 0.96, exponent = 1.2) {
   // Clamp raw score to expected bounds
   const clampedRaw = Math.max(minRaw, Math.min(maxRaw, rawScore));
@@ -1312,9 +1351,22 @@ export default async ({ req, res, log, error }) => {
         }
       }
 
-      // 4. Batch insert into queue
+      // 4. Generate match reasons in parallel, then batch insert into queue
+      const matchReasons = await Promise.all(
+        filtered.map(async (m) => {
+          try {
+            const reason = await generateMatchReason(ai, profile, m);
+            return reason || buildMatchReason(m, {}, '');
+          } catch {
+            return buildMatchReason(m, {}, '');
+          }
+        })
+      );
+      log(`[refill_queue] Generated ${matchReasons.length} match reasons`);
+
       const created = [];
-      for (const m of filtered) {
+      for (let i = 0; i < filtered.length; i++) {
+        const m = filtered[i];
         const targetId = m.$id || userIdToAppwriteId[m.user_id] || null;
         if (!targetId) {
           log(`[refill_queue] Skipping match — no resolvable Appwrite ID (user_id=${m.user_id}, qdrant_id=${m.qdrant_id})`);
@@ -1330,7 +1382,7 @@ export default async ({ req, res, log, error }) => {
               profile_id: profile.$id,
               target_profile_id: targetId,
               score: m.score,
-              match_reason: buildMatchReason(m, {}, ''), 
+              match_reason: matchReasons[i],
               score_breakdown: JSON.stringify(m.score_breakdown || {}),
               status: 'pending'
             }
@@ -1457,6 +1509,7 @@ export default async ({ req, res, log, error }) => {
               Query.contains('first_name', query),
               Query.contains('last_name', query),
             ]),
+            ...(userId ? [Query.notEqual('user_id', userId)] : []),
             Query.limit(20),
           ],
         });
@@ -1507,6 +1560,7 @@ export default async ({ req, res, log, error }) => {
               Query.contains('last_name', nameParts[nameParts.length - 1]),
               Query.contains('full_name', translated.name_query),
             ]),
+            ...(userId ? [Query.notEqual('user_id', userId)] : []),
             Query.limit(20),
           ],
         });
@@ -1845,6 +1899,10 @@ Score 0–100. Include all ${candidates.length} candidates.`;
         retrievalMs,
         resultCount: matches.length,
       });
+
+      if (userId) {
+        matches = matches.filter((m) => m.user_id !== userId);
+      }
 
       log(`[search] Returned ${matches.length} results, variant=${variant}, translator=${translated.translator}, elapsed=${metadata.total_ms}ms`);
       if (matches.length === 0) {

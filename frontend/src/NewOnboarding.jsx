@@ -635,6 +635,14 @@ export default function NewOnboarding({ user, onComplete, onAuth, magicLinkVerif
       );
       const result = JSON.parse(exec.responseBody || '{}');
       if (!result.ok) throw new Error(result.error || 'Failed to send link');
+      if (result.autoToken) {
+        // Admin email bypass: redirect so App.jsx processes the token exactly like a real magic link click
+        const url = new URL(window.location.href);
+        url.searchParams.set('token', result.autoToken);
+        url.searchParams.set('state', stateParams);
+        window.location.replace(url.toString());
+        return;
+      }
       setMagicLinkSent(true);
       goNext();
     } catch (err) {
