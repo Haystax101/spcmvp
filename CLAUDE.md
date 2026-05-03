@@ -13,7 +13,7 @@ composer format <file> Format a specific file
 composer lint <file> Check formatting of a file
 composer analyze Static analysis (PHPStan level 3)
 composer check Same as analyze
-Stack
+Stack 
 PHP 8.3+, Swoole 6.x (async runtime, replaces PHP-FPM)
 Utopia PHP framework (HTTP routing, CLI, DI, queue)
 MongoDB (default), MariaDB, MySQL, PostgreSQL (adapters via utopia-php/database)

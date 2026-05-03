@@ -28,7 +28,7 @@ const COMPOSE_CSS = `
 .csc-input-field textarea { flex:1; border:none; outline:none; background:transparent; font-family:'DM Sans',sans-serif; font-weight:400; font-size:16px; color:#1A1A1A; padding:8px 0; min-width:0; resize:none; max-height:120px; overflow-y:auto; line-height:1.4; }
 .csc-input-field textarea::placeholder { color:#AFAFAF; }
 .csc-send-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; flex-shrink:0; transition:opacity 0.15s ease, background 0.15s ease; background:#007AFF; }
-.csc-send-btn.active { opacity:1; pointer-events:auto; }
+.csc-send-btn.active { opacity:1; pointer-events:auto; background:#007AFF !important; }
 .csc-send-btn.inactive { opacity:0; pointer-events:none; }
 .csc-ai-sheet-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.3); z-index:50; }
 .csc-ai-sheet { position:absolute; left:0; right:0; bottom:0; background:#FFFEFD; border-radius:22px 22px 0 0; padding:0 20px 32px; z-index:51; }
@@ -206,7 +206,6 @@ export default function ComposeScreen({ person, onClose, onSend }) {
           <button
             className={`csc-send-btn ${canSend ? 'active' : 'inactive'}`}
             onClick={handleSend}
-            disabled={!canSend}
           >
             <ArrowUp size={16} color="#fff" strokeWidth={2.5} />
           </button>
